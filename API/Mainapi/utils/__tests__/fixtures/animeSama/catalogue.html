@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="fr"><body>
+<script>
+/* Season cards, called from each work's index.php:
+panneauAnime("nom", "saison1/vostfr"); panneauScan("nom", "scan/vf"); */
+function panneauAnime(nom, url) { oePanneau(nom, url, false); }
+</script>
+<script>
+/*panneauAnime("nom", "url"); -> as many as needed*/
+panneauAnime("Saga 1 East Blue [Episode 1 à 61]", "saison1/vostfr");
+panneauAnime("Saga 2 Alabasta [Episode 62 à 143]", "saison2/vostfr")
+panneauAnime("Films", "film/vostfr");
+panneauAnime("One Piece Heroines", "saison2hs/vostfr");
+panneauAnime("Kai - Saga 1 (East Blue)", "kai/vostfr");
+//panneauAnime("Hidden season", "saison3/vostfr");
+<!--panneauAnime("Hidden too", "saison4/vostfr");-->
+panneauScan("Scans", "scan/vf");
+</script>
+</body></html>

@@ -1,0 +1,137 @@
+// Sokoul on Google TV: the screens of :app, with Media3 instead of libVLC. Installs beside the old app, which it never touches.
+plugins {
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.kotlin.compose)
+}
+
+val shared = layout.buildDirectory.dir("sharedSrc")
+val syncShared = tasks.register<Sync>("syncShared") {
+    from("../app/src/main/kotlin")
+    into(shared)
+    exclude(
+        "**/* - Copie.kt", "**/* - copy.kt",
+        "com/sokoul/pc/Main.kt", "com/sokoul/pc/Platform.kt", "com/sokoul/pc/ui/VideoFill.kt", "com/sokoul/pc/ui/NativeWindow.kt",
+        // Android has no com.sun.net.httpserver: the MCP server is for the PC.
+        "com/sokoul/pc/control/McpServer.kt",
+        "com/sokoul/desktop/player/DesktopPlayer.kt",
+        "com/sokoul/desktop/player/LocalMediaRelay.kt",
+        // The PC's debug driver uses AWT. Development tools are in app/src/dev and never reach this build.
+        "com/sokoul/pc/dev/DebugDriver.kt",
+    )
+}
+
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    exclude("**/* - Copie.kt", "**/* - copy.kt")
+}
+
+// SQLite's native library for Android, taken from the sqlite-jdbc jar and shipped as a native library of the APK. Left as
+// a Java resource, sqlite-jdbc unpacks it into the app's data at run time and loads it from there, which Android forbids
+// to apps targeting API 29 and later.
+val sqliteNatives = layout.buildDirectory.dir("sqliteNatives")
+val extractSqliteNatives = tasks.register<Copy>("extractSqliteNatives") {
+    val jar = configurations.detachedConfiguration(dependencies.create(libs.sqlite.jdbc.get())).apply { isTransitive = false }
+    from({ zipTree(jar.singleFile) }) {
+        include("org/sqlite/native/Linux-Android/arm/libsqlitejdbc.so", "org/sqlite/native/Linux-Android/aarch64/libsqlitejdbc.so")
+        eachFile { path = (if (path.contains("/aarch64/")) "arm64-v8a/" else "armeabi-v7a/") + name }
+        includeEmptyDirs = false
+    }
+    into(sqliteNatives)
+}
+
+android {
+    namespace = "com.sokoul.tv"
+    compileSdk = 35
+    defaultConfig {
+        applicationId = "com.sokoul.tv"
+        minSdk = 26
+        // SQLite's native library ships in the APK and loads from the app's native folder (TvApp), so a recent target is
+        // possible. At 28, Android's compatibility checks for an old target held a lock the app waited on 1,343 times in a
+        // few seconds of scrolling (trace on the TV, 2026-11-08).
+        targetSdk = 35
+        versionCode = 1
+        versionName = "1.0"
+        ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a") }
+    }
+    System.getenv("SOKOUL_DEBUG_KEYSTORE")?.let { path ->
+        signingConfigs.getByName("debug").storeFile = file(path)
+    }
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            proguardFiles("proguard-rules.pro")
+            // Installed by hand on the user's own TV.
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+    sourceSets["main"].apply {
+        java.srcDir(shared)
+        java.exclude("**/* - Copie.kt", "**/* - copy.kt")
+        // The keys class generated from the local configuration, never in the repo.
+        java.srcDir(layout.buildDirectory.dir("../app/generated/keys"))
+        resources.srcDir("../app/src/main/resources")
+        assets.srcDir("../app/src/main/resources")
+        res.exclude("**/* - Copie.*", "**/* - copy.*")
+        resources.exclude("**/* - Copie.*", "**/* - copy.*")
+        assets.exclude("**/* - Copie.*", "**/* - copy.*")
+        jniLibs.srcDir(sqliteNatives)
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+        // NewPipe's extractor uses java.time and java.nio beyond what Android 8 has.
+        isCoreLibraryDesugaringEnabled = true
+    }
+    kotlinOptions { jvmTarget = "17" }
+    packaging {
+        resources {
+            excludes += setOf("jni/**", "META-INF/*.kotlin_module", "META-INF/AL2.0", "META-INF/LGPL2.1", "META-INF/versions/**", "org/sqlite/native/Windows/**", "org/sqlite/native/Mac/**", "org/sqlite/native/FreeBSD/**", "org/sqlite/native/Linux/**", "org/sqlite/native/Linux-Musl/**", "org/sqlite/native/Linux-Android/**")
+        }
+        // Unpacked at install into the app's native folder, where sqlite-jdbc loads it by its full path (TvApp).
+        jniLibs { useLegacyPackaging = true }
+    }
+    lint { checkReleaseBuilds = false }
+}
+
+// Compose compiler reports, on demand only (-PcomposeReports): which composables can be skipped, which classes are stable.
+if (project.hasProperty("composeReports")) {
+    composeCompiler {
+        reportsDestination = layout.buildDirectory.dir("compose_reports")
+        metricsDestination = layout.buildDirectory.dir("compose_reports")
+    }
+}
+
+tasks.named("preBuild") { dependsOn(syncShared, ":app:generateDesktopKeys", extractSqliteNatives) }
+tasks.named("preBuild") { dependsOn(":extractor:extractAndroidNatives") }
+android.sourceSets["main"].jniLibs.srcDir(project(":extractor").layout.buildDirectory.dir("generated/quickjsAndroid"))
+
+dependencies {
+    implementation(project(":extractor"))
+    testImplementation(libs.junit)
+    implementation(project(":core")) { exclude(group = "xmlpull") }
+    implementation(platform("androidx.compose:compose-bom:2024.12.01"))
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.foundation:foundation")
+    implementation("androidx.compose.animation:animation")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-extended")
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.okhttp)
+    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.sqlite.jdbc)
+    implementation(libs.tvprovider)
+    implementation(libs.kxml2) { exclude(group = "xmlpull") }
+    // Android ships org.json itself.
+    implementation(libs.socketio.client) { exclude(group = "org.json", module = "json") }
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.exoplayer.hls)
+    implementation(libs.media3.exoplayer.dash)
+    implementation(libs.media3.datasource.okhttp)
+    implementation(libs.media3.ui)
+    implementation(libs.media3.ffmpeg)
+    implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.26.5")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.1.4")
+}

@@ -1,0 +1,697 @@
+package com.sokoul.desktop.data
+
+import java.io.File
+import java.sql.Connection
+import java.sql.DriverManager
+import java.sql.ResultSet
+
+/**
+ * Base SQLite du PC (sqlite-jdbc). Tables reprises du schéma Room de l'app Android, limitées à ce que le PC utilise.
+ * Accès synchronisé : une seule connexion, appelée depuis Dispatchers.IO.
+ */
+class DesktopDb(file: File) : AutoCloseable {
+    private val conn: Connection = DriverManager.getConnection("jdbc:sqlite:${file.absolutePath}").apply {
+        createStatement().use { it.execute("PRAGMA busy_timeout=5000"); it.execute("PRAGMA journal_mode=WAL"); it.execute("PRAGMA foreign_keys=ON") }
+    }
+    /** Provider catalogue reads use a separate WAL reader so a long EPG write cannot freeze browsing. */
+    private val providerReadLock = Any()
+    private val providerReadConnectionLazy = lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        DriverManager.getConnection("jdbc:sqlite:${file.absolutePath}").apply {
+            createStatement().use { it.execute("PRAGMA busy_timeout=5000"); it.execute("PRAGMA query_only=ON") }
+        }
+    }
+    private val providerReadConnection by providerReadConnectionLazy
+
+    init { migrate() }
+
+    private fun migrate() = exec(
+        """CREATE TABLE IF NOT EXISTS playlists(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, type TEXT NOT NULL,
+            url TEXT NOT NULL, username TEXT, password TEXT, epg_url TEXT, user_agent TEXT, synced_at INTEGER NOT NULL DEFAULT 0)""",
+        """CREATE TABLE IF NOT EXISTS categories(playlist_id INTEGER NOT NULL, id TEXT NOT NULL, name TEXT NOT NULL, position INTEGER NOT NULL,
+            hidden INTEGER NOT NULL DEFAULT 0, locked INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(playlist_id, id))""",
+        """CREATE TABLE IF NOT EXISTS channels(playlist_id INTEGER NOT NULL, id TEXT NOT NULL, number INTEGER NOT NULL, name TEXT NOT NULL,
+            logo TEXT, category_id TEXT NOT NULL, epg_key TEXT, name_key TEXT NOT NULL, url TEXT, user_agent TEXT, referrer TEXT,
+            position INTEGER NOT NULL, PRIMARY KEY(playlist_id, id))""",
+        "CREATE INDEX IF NOT EXISTS channels_cat ON channels(playlist_id, category_id, position)",
+        """CREATE TABLE IF NOT EXISTS programs(playlist_id INTEGER NOT NULL, channel_key TEXT NOT NULL, start INTEGER NOT NULL,
+            stop INTEGER NOT NULL, title TEXT NOT NULL, description TEXT, PRIMARY KEY(playlist_id, channel_key, start))""",
+        "CREATE INDEX IF NOT EXISTS programs_time ON programs(playlist_id, stop)",
+        """CREATE TABLE IF NOT EXISTS favorites(playlist_id INTEGER NOT NULL, type TEXT NOT NULL, id TEXT NOT NULL, added_at INTEGER NOT NULL,
+            PRIMARY KEY(playlist_id, type, id))""",
+        """CREATE TABLE IF NOT EXISTS progress(playlist_id INTEGER NOT NULL, type TEXT NOT NULL, id TEXT NOT NULL, title TEXT NOT NULL,
+            position_ms INTEGER NOT NULL, duration_ms INTEGER NOT NULL, updated_at INTEGER NOT NULL, finished INTEGER NOT NULL,
+            PRIMARY KEY(playlist_id, type, id))""",
+        "CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+        """CREATE TABLE IF NOT EXISTS movies(playlist_id INTEGER NOT NULL, id TEXT NOT NULL, name TEXT NOT NULL,
+            year INTEGER, poster TEXT, stream_url TEXT, rating REAL, category_id TEXT, extension TEXT, added INTEGER, tmdb_id TEXT,
+            position INTEGER NOT NULL, PRIMARY KEY(playlist_id, id))""",
+        """CREATE TABLE IF NOT EXISTS series(playlist_id INTEGER NOT NULL, id TEXT NOT NULL, name TEXT NOT NULL,
+            year INTEGER, poster TEXT, backdrop TEXT, plot TEXT, rating REAL, category_id TEXT, last_modified INTEGER,
+            tmdb_id TEXT, position INTEGER NOT NULL, PRIMARY KEY(playlist_id, id))""",
+        """CREATE TABLE IF NOT EXISTS provider_categories(playlist_id INTEGER NOT NULL, kind TEXT NOT NULL, id TEXT NOT NULL, name TEXT NOT NULL, position INTEGER NOT NULL, PRIMARY KEY(playlist_id,kind,id))""",
+        "CREATE INDEX IF NOT EXISTS movies_category_page ON movies(playlist_id,category_id,position)",
+        "CREATE INDEX IF NOT EXISTS series_category_page ON series(playlist_id,category_id,position)",
+        "CREATE INDEX IF NOT EXISTS movies_playlist_page ON movies(playlist_id,position)",
+        "CREATE INDEX IF NOT EXISTS series_playlist_page ON series(playlist_id,position)",
+        "CREATE INDEX IF NOT EXISTS movies_search ON movies(playlist_id, name)",
+        "CREATE INDEX IF NOT EXISTS series_search ON series(playlist_id, name)",
+        "CREATE TABLE IF NOT EXISTS tmdb_cache(key TEXT PRIMARY KEY, json TEXT NOT NULL, fetched_at INTEGER NOT NULL)",
+        // reprise des films et épisodes TMDB (lus via Real-Debrid ou l'IPTV) : rangée « Reprendre » de l'accueil
+        """CREATE TABLE IF NOT EXISTS resume(key TEXT PRIMARY KEY, kind TEXT NOT NULL, tmdb_id INTEGER NOT NULL, season INTEGER,
+            episode INTEGER, title TEXT NOT NULL, subtitle TEXT, image TEXT, position_ms INTEGER NOT NULL, duration_ms INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL, finished INTEGER NOT NULL)""",
+        // enregistrements du direct (programmés, en cours, terminés, échecs)
+        """CREATE TABLE IF NOT EXISTS recordings(id INTEGER PRIMARY KEY AUTOINCREMENT, playlist_id INTEGER NOT NULL, channel_id TEXT NOT NULL,
+            channel_name TEXT NOT NULL, channel_logo TEXT, title TEXT NOT NULL, start_at INTEGER NOT NULL, end_at INTEGER NOT NULL,
+            status TEXT NOT NULL, path TEXT, bytes INTEGER NOT NULL DEFAULT 0, error TEXT, created_at INTEGER NOT NULL)""",
+    )
+
+    init {
+        runCatching { exec("ALTER TABLE movies ADD COLUMN stream_url TEXT") }
+        // The programme's picture, added after the first release: an older base gets the column, empty until the next sync.
+        runCatching { exec("ALTER TABLE programs ADD COLUMN icon TEXT") }
+        // Profiles: each resume row belongs to one. The first profile is "", so rows written before profiles stay its own.
+        runCatching { exec("ALTER TABLE resume ADD COLUMN profile TEXT NOT NULL DEFAULT ''") }
+        runCatching { exec("CREATE INDEX IF NOT EXISTS resume_profile ON resume(profile, updated_at)") }
+        runCatching { exec("ALTER TABLE channels ADD COLUMN catchup_type TEXT") }
+        runCatching { exec("ALTER TABLE channels ADD COLUMN catchup_source TEXT") }
+        runCatching { exec("ALTER TABLE channels ADD COLUMN catchup_days INTEGER NOT NULL DEFAULT 0") }
+    }
+
+    /** The profile whose resume points and history are read and written. "" is the first profile. */
+    @Volatile var profile: String = ""
+
+    /** The stored key of a resume point: the first profile keeps the plain key, the others get theirs prefixed. */
+    private fun scoped(key: String) = if (profile.isEmpty()) key else "$profile|$key"
+
+    private fun programOf(r: java.sql.ResultSet) =
+        Program(r.getString("channel_key"), r.getLong("start"), r.getLong("stop"), r.getString("title"), tidyDescription(r.getString("description")), r.getString("icon"))
+
+    @Synchronized
+    private fun exec(vararg sql: String) = conn.createStatement().use { st -> sql.forEach { st.execute(it) } }
+
+    @Synchronized
+    fun <T> tx(block: () -> T): T {
+        conn.autoCommit = false
+        try {
+            val r = block(); conn.commit(); return r
+        } catch (e: Throwable) {
+            conn.rollback(); throw e
+        } finally {
+            conn.autoCommit = true
+        }
+    }
+
+    // --- playlists ---------------------------------------------------------------------------------------
+
+    @Synchronized
+    fun playlists(): List<Playlist> = query("SELECT * FROM playlists ORDER BY id") { it.toPlaylist() }
+
+    @Synchronized
+    fun upsertPlaylist(p: Playlist): Long {
+        val existing = playlists().firstOrNull { sameSource(it, p) }
+        return if (existing != null) {
+            update(
+                "UPDATE playlists SET name=?, type=?, url=?, username=?, password=?, epg_url=?, user_agent=? WHERE id=?",
+                p.name, p.type.name, p.url, p.username, p.password ?: existing.password, p.epgUrl, p.userAgent, existing.id,
+            )
+            existing.id
+        } else {
+            conn.prepareStatement(
+                "INSERT INTO playlists(name, type, url, username, password, epg_url, user_agent) VALUES(?,?,?,?,?,?,?)",
+                java.sql.Statement.RETURN_GENERATED_KEYS,
+            ).use { st ->
+                bind(st, p.name, p.type.name, p.url, p.username, p.password, p.epgUrl, p.userAgent)
+                st.executeUpdate()
+                st.generatedKeys.use { k -> k.next(); k.getLong(1) }
+            }
+        }
+    }
+
+    @Synchronized
+    fun markSynced(pid: Long, at: Long) = update("UPDATE playlists SET synced_at=? WHERE id=?", at, pid)
+
+    @Synchronized
+    fun deletePlaylist(pid: Long) = tx {
+        listOf("channels", "categories", "programs", "favorites", "progress", "movies", "series", "provider_categories").forEach { update("DELETE FROM $it WHERE playlist_id=?", pid) }
+        update("DELETE FROM playlists WHERE id=?", pid)
+    }
+
+    // --- catégories et chaînes -------------------------------------------------------------------------
+
+    @Synchronized
+    fun categories(pid: Long): List<Category> =
+        query("SELECT * FROM categories WHERE playlist_id=? ORDER BY position", pid) {
+            Category(it.getLong("playlist_id"), it.getString("id"), it.getString("name"), it.getInt("position"), it.getInt("hidden") != 0, it.getInt("locked") != 0)
+        }
+
+    /** Remplace catégories et chaînes d'une playlist ; garde les drapeaux masqué / verrouillé déjà posés. */
+    @Synchronized
+    fun replaceLive(pid: Long, cats: List<Category>, channels: List<Channel>) = tx {
+        val flags = categories(pid).associateBy { it.id }
+        update("DELETE FROM categories WHERE playlist_id=?", pid)
+        update("DELETE FROM channels WHERE playlist_id=?", pid)
+        conn.prepareStatement("INSERT OR REPLACE INTO categories VALUES(?,?,?,?,?,?)").use { st ->
+            cats.forEach { c ->
+                val f = flags[c.id]
+                bind(st, pid, c.id, c.name, c.position, if (f?.hidden ?: c.hidden) 1 else 0, if (f?.locked ?: c.locked) 1 else 0)
+                st.addBatch()
+            }
+            st.executeBatch()
+        }
+        conn.prepareStatement("INSERT OR REPLACE INTO channels(playlist_id,id,number,name,logo,category_id,epg_key,name_key,url,user_agent,referrer,position,catchup_type,catchup_source,catchup_days) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").use { st ->
+            channels.forEachIndexed { i, c ->
+                bind(st, pid, c.id, c.number, c.name, c.logo, c.categoryId, c.epgKey, c.nameKey, c.url, c.userAgent, c.referrer, c.position,
+                    c.catchupType, c.catchupSource, c.catchupDays.coerceAtLeast(0))
+                st.addBatch()
+                if (i % 2000 == 1999) st.executeBatch()
+            }
+            st.executeBatch()
+        }
+    }
+
+    @Synchronized
+    fun setCategoryFlags(pid: Long, id: String, hidden: Boolean, locked: Boolean) =
+        update("UPDATE categories SET hidden=?, locked=? WHERE playlist_id=? AND id=?", if (hidden) 1 else 0, if (locked) 1 else 0, pid, id)
+
+    @Synchronized
+    fun channels(pid: Long, categoryId: String?): List<Channel> = when (categoryId) {
+        null, SpecialGroup.ALL -> query(
+            "SELECT c.* FROM channels c JOIN categories g ON g.playlist_id=c.playlist_id AND g.id=c.category_id " +
+                "WHERE c.playlist_id=? AND g.hidden=0 AND g.locked=0 ORDER BY g.position, c.position", pid,
+        ) { it.toChannel() }
+        SpecialGroup.FAVORITES -> query(
+            "SELECT c.* FROM channels c JOIN favorites f ON f.playlist_id=c.playlist_id AND f.type='LIVE' AND f.id=c.id " +
+                "WHERE c.playlist_id=? ORDER BY f.added_at", pid,
+        ) { it.toChannel() }
+        else -> query("SELECT * FROM channels WHERE playlist_id=? AND category_id=? ORDER BY position", pid, categoryId) { it.toChannel() }
+    }
+
+    /** The channels sharing a normalized name, in visible groups. */
+    @Synchronized
+    fun channelsByNameKey(pid: Long, key: String): List<Channel> = query(
+        "SELECT c.* FROM channels c JOIN categories g ON g.playlist_id=c.playlist_id AND g.id=c.category_id " +
+            "WHERE c.playlist_id=? AND c.name_key=? AND g.hidden=0 AND g.locked=0 ORDER BY c.position", pid, key,
+    ) { it.toChannel() }
+
+    @Synchronized
+    fun channelsByIds(pid: Long, ids: List<String>): List<Channel> {
+        if (ids.isEmpty()) return emptyList()
+        return query("SELECT * FROM channels WHERE playlist_id=? AND id IN (${ids.joinToString(",") { "?" }})", pid, *ids.toTypedArray()) { it.toChannel() }
+    }
+
+    @Synchronized
+    fun channelsByEpgKey(pid: Long, key: String): List<Channel> = query(
+        "SELECT * FROM channels WHERE playlist_id=? AND epg_key=? ORDER BY position", pid, key,
+    ) { it.toChannel() }
+
+    /** Toutes les chaînes, groupes masqués et verrouillés compris (guide, recherche du rapprochement). */
+    @Synchronized
+    fun allChannels(pid: Long): List<Channel> = query("SELECT * FROM channels WHERE playlist_id=? ORDER BY position", pid) { it.toChannel() }
+
+    /** Recherche par nom dans les groupes visibles (insensible aux accents grâce à la clé normalisée). */
+    @Synchronized
+    fun searchChannels(pid: Long, key: String, limit: Int = 200): List<Channel> = query(
+        "SELECT c.* FROM channels c JOIN categories g ON g.playlist_id=c.playlist_id AND g.id=c.category_id " +
+            "WHERE c.playlist_id=? AND g.hidden=0 AND g.locked=0 AND (c.name_key LIKE ? OR lower(c.name) LIKE ?) ORDER BY g.position, c.position LIMIT ?",
+        pid, "%$key%", "%$key%", limit,
+    ) { it.toChannel() }
+
+    /** Bounded TV search pages; numeric input also matches the displayed provider number. */
+    @Synchronized
+    fun searchTvChannels(pid: Long, key: String, offset: Int, limit: Int): List<Channel> = query(
+        "SELECT c.* FROM channels c JOIN categories g ON g.playlist_id=c.playlist_id AND g.id=c.category_id " +
+            "WHERE c.playlist_id=? AND g.hidden=0 AND g.locked=0 AND (c.name_key LIKE ? OR lower(c.name) LIKE ? OR c.number=?) " +
+            // Relevance first (number, exact name, name prefix) so "france 2" is not buried under "France 24".
+            "ORDER BY CASE WHEN c.number=? THEN 0 WHEN c.name_key=? THEN 1 WHEN c.name_key LIKE ? THEN 2 ELSE 3 END, " +
+            "g.position, c.position, c.id LIMIT ? OFFSET ?",
+        pid, "%$key%", "%$key%", key.toIntOrNull() ?: -1, key.toIntOrNull() ?: -1, key, "$key%", limit, offset,
+    ) { it.toChannel() }
+
+    @Synchronized
+    fun searchTvPrograms(pid: Long, text: String, from: Long, until: Long, offset: Int, limit: Int, namePrefix: String? = null): List<Pair<Program, Channel>> {
+        if (namePrefix != null) {
+            val local = searchTvPrograms(pid, text, from, until, offset, limit, namePrefix, regionOnly = true)
+            if (local.isNotEmpty() || offset > 0) return local
+        }
+        return searchTvPrograms(pid, text, from, until, offset, limit, null, regionOnly = false)
+    }
+
+    @Synchronized
+    private fun searchTvPrograms(pid: Long, text: String, from: Long, until: Long, offset: Int, limit: Int, namePrefix: String?, regionOnly: Boolean): List<Pair<Program, Channel>> {
+        val region = if (regionOnly && namePrefix != null) " AND c.name LIKE ?" else ""
+        val regionArgs: Array<Any?> = if (region.isEmpty()) emptyArray() else arrayOf("$namePrefix%")
+        // COALESCE(epg_key, name_key) has no index: matching it per programme scanned every channel for each row
+        // (15 s on a PC for "on now" with ~28k channels). Read the visible keys once, walk the time window in
+        // start order, and resolve the channels of the page in one pass.
+        val visible = HashSet<String>()
+        query(
+            "SELECT DISTINCT COALESCE(c.epg_key,c.name_key) FROM channels c JOIN categories g ON g.playlist_id=c.playlist_id AND g.id=c.category_id " +
+                "WHERE c.playlist_id=? AND g.hidden=0 AND g.locked=0$region", pid, *regionArgs,
+        ) { it.getString(1) }.filterNotNullTo(visible)
+        if (visible.isEmpty()) return emptyList()
+        val like = "%${text.trim().lowercase()}%"
+        val rows = ArrayList<Program>(limit)
+        var skipped = 0
+        var cursor = 0
+        while (rows.size < limit) {
+            val batch = query(
+                // Day-long rows are provider placeholders ("no programme information"), not programmes.
+                "SELECT p.* FROM programs p WHERE p.playlist_id=? AND p.stop>? AND p.start<? AND lower(p.title) LIKE ? " +
+                    "AND p.stop-p.start<=? ORDER BY p.start,p.channel_key LIMIT ? OFFSET ?",
+                pid, from, until, like, MAX_PROGRAM_MS, PROGRAM_SCAN_BATCH, cursor,
+            ) { programOf(it) }
+            if (batch.isEmpty()) break
+            cursor += batch.size
+            for (p in batch) {
+                if (p.channelKey !in visible) continue
+                if (skipped < offset) { skipped++; continue }
+                rows += p
+                if (rows.size == limit) break
+            }
+        }
+        if (rows.isEmpty()) return emptyList()
+        val keys = rows.map { it.channelKey }.distinct()
+        val byKey = query(
+            "SELECT c.* FROM channels c JOIN categories g ON g.playlist_id=c.playlist_id AND g.id=c.category_id " +
+                "WHERE c.playlist_id=? AND COALESCE(c.epg_key,c.name_key) IN (${keys.joinToString(",") { "?" }}) AND g.hidden=0 AND g.locked=0$region " +
+                "ORDER BY g.position,c.position", pid, *keys.toTypedArray(), *regionArgs,
+        ) { it.toChannel() }.groupBy { it.epgKey ?: it.nameKey }
+        return rows.flatMap { p -> byKey[p.channelKey].orEmpty().take(32).map { p to it } }
+    }
+
+    /**
+     * Recherche dans le guide (« Au programme » de la tablette) : programmes pas encore finis dont le titre contient
+     * [text], chacun avec la première chaîne visible qui le diffuse (programmes sans chaîne visible écartés).
+     */
+    @Synchronized
+    fun searchPrograms(pid: Long, text: String, now: Long, limit: Int = 30): List<Pair<Program, Channel>> {
+        val progs = query(
+            "SELECT * FROM programs WHERE playlist_id=? AND stop>? AND lower(title) LIKE ? ORDER BY start LIMIT ?",
+            pid, now, "%${text.trim().lowercase()}%", limit * 4,
+        ) { programOf(it) }
+        val keys = progs.mapTo(LinkedHashSet()) { it.channelKey }
+        if (keys.isEmpty()) return emptyList()
+        val byKey = query(
+            "SELECT c.* FROM channels c JOIN categories g ON g.playlist_id=c.playlist_id AND g.id=c.category_id " +
+                "WHERE c.playlist_id=? AND g.hidden=0 AND g.locked=0 AND c.epg_key IN (${keys.joinToString(",") { "?" }}) ORDER BY g.position, c.position",
+            pid, *keys.toTypedArray(),
+        ) { it.toChannel() }.groupBy { it.epgKey }.mapValues { it.value.first() }
+        return progs.mapNotNull { p -> byKey[p.channelKey]?.let { p to it } }.take(limit)
+    }
+
+    @Synchronized
+    fun channelCount(pid: Long): Int = query("SELECT COUNT(*) FROM channels WHERE playlist_id=?", pid) { it.getInt(1) }.first()
+
+    @Synchronized
+    fun replaceVod(pid: Long, movies: List<Movie>, series: List<Series>) = tx {
+        update("DELETE FROM movies WHERE playlist_id=?", pid)
+        update("DELETE FROM series WHERE playlist_id=?", pid)
+        // colonnes nommées : sur une base plus ancienne, stream_url a été ajoutée en dernier (ALTER TABLE)
+        conn.prepareStatement("INSERT INTO movies(playlist_id, id, name, year, poster, stream_url, rating, category_id, extension, added, tmdb_id, position) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)").use { st ->
+            movies.forEachIndexed { i, movie ->
+                bind(st, pid, movie.id, movie.name, movie.year, movie.poster, movie.streamUrl, movie.rating, movie.categoryId, movie.extension, movie.added, movie.tmdbId, i)
+                st.addBatch()
+                if (i % 500 == 499) st.executeBatch()
+            }
+            st.executeBatch()
+        }
+        conn.prepareStatement("INSERT INTO series(playlist_id, id, name, year, poster, backdrop, plot, rating, category_id, last_modified, tmdb_id, position) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)").use { st ->
+            series.forEachIndexed { i, item ->
+                bind(st, pid, item.id, item.name, item.year, item.poster, item.backdrop, item.plot, item.rating, item.categoryId, item.lastModified, item.tmdbId, i)
+                st.addBatch()
+                if (i % 500 == 499) st.executeBatch()
+            }
+            st.executeBatch()
+        }
+    }
+
+    @Synchronized
+    fun movies(pid: Long, search: String? = null, limit: Int = 500, categoryId: String? = null, offset: Int = 0): List<Movie> {
+        val (where, args) = providerFilter(pid, categoryId, search)
+        return query("SELECT * FROM movies WHERE $where ORDER BY position LIMIT ? OFFSET ?", *args, limit.coerceIn(1, 500), offset.coerceAtLeast(0)) {
+            val year = (it.getObject("year") as? Number)?.toInt()
+            val rating = (it.getObject("rating") as? Number)?.toDouble()
+            val added = (it.getObject("added") as? Number)?.toLong()
+            Movie(it.getLong("playlist_id"), it.getString("id"), it.getString("name"), year, it.getString("poster"), rating,
+                it.getString("category_id"), it.getString("extension"), added, it.getString("tmdb_id"), it.getString("stream_url"))
+        }
+    }
+
+    /** A dedicated read connection keeps the VOD catalogue responsive during serialized guide imports. */
+    fun providerMoviesPage(pid: Long, search: String? = null, limit: Int = 37, categoryId: String? = null, offset: Int = 0): List<Movie> =
+        synchronized(providerReadLock) {
+            val (where, args) = providerFilter(pid, categoryId, search)
+            query(providerReadConnection, "SELECT * FROM movies WHERE $where ORDER BY position LIMIT ? OFFSET ?", *args, limit.coerceIn(1, 500), offset.coerceAtLeast(0)) {
+                val year = (it.getObject("year") as? Number)?.toInt()
+                val rating = (it.getObject("rating") as? Number)?.toDouble()
+                val added = (it.getObject("added") as? Number)?.toLong()
+                Movie(it.getLong("playlist_id"), it.getString("id"), it.getString("name"), year, it.getString("poster"), rating,
+                    it.getString("category_id"), it.getString("extension"), added, it.getString("tmdb_id"), it.getString("stream_url"))
+            }
+        }
+
+    @Synchronized
+    fun series(pid: Long, search: String? = null, limit: Int = 500, categoryId: String? = null, offset: Int = 0): List<Series> {
+        val (where, args) = providerFilter(pid, categoryId, search)
+        return query("SELECT * FROM series WHERE $where ORDER BY position LIMIT ? OFFSET ?", *args, limit.coerceIn(1, 500), offset.coerceAtLeast(0)) {
+            val year = (it.getObject("year") as? Number)?.toInt()
+            val rating = (it.getObject("rating") as? Number)?.toDouble()
+            val modified = (it.getObject("last_modified") as? Number)?.toLong()
+            Series(it.getLong("playlist_id"), it.getString("id"), it.getString("name"), year, it.getString("poster"), it.getString("backdrop"),
+                it.getString("plot"), rating, it.getString("category_id"), modified, it.getString("tmdb_id"))
+        }
+    }
+
+    fun providerSeriesPage(pid: Long, search: String? = null, limit: Int = 37, categoryId: String? = null, offset: Int = 0): List<Series> =
+        synchronized(providerReadLock) {
+            val (where, args) = providerFilter(pid, categoryId, search)
+            query(providerReadConnection, "SELECT * FROM series WHERE $where ORDER BY position LIMIT ? OFFSET ?", *args, limit.coerceIn(1, 500), offset.coerceAtLeast(0)) {
+                val year = (it.getObject("year") as? Number)?.toInt()
+                val rating = (it.getObject("rating") as? Number)?.toDouble()
+                val modified = (it.getObject("last_modified") as? Number)?.toLong()
+                Series(it.getLong("playlist_id"), it.getString("id"), it.getString("name"), year, it.getString("poster"), it.getString("backdrop"),
+                    it.getString("plot"), rating, it.getString("category_id"), modified, it.getString("tmdb_id"))
+            }
+        }
+
+    fun providerPageCount(pid: Long, kind: ProviderKind, categoryId: String? = null, search: String? = null): Int =
+        synchronized(providerReadLock) {
+            val (where, args) = providerFilter(pid, categoryId, search)
+            val table = if (kind == ProviderKind.Movies) "movies" else "series"
+            query(providerReadConnection, "SELECT COUNT(*) FROM $table WHERE $where", *args) { it.getInt(1) }.first()
+        }
+
+    @Synchronized
+    fun movieCount(pid: Long): Int = query("SELECT COUNT(*) FROM movies WHERE playlist_id=?", pid) { it.getInt(1) }.first()
+
+    @Synchronized
+    fun providerMovie(pid: Long, id: String): Movie? = query("SELECT * FROM movies WHERE playlist_id=? AND id=?", pid, id) {
+        Movie(it.getLong("playlist_id"), it.getString("id"), it.getString("name"), (it.getObject("year") as? Number)?.toInt(),
+            it.getString("poster"), (it.getObject("rating") as? Number)?.toDouble(), it.getString("category_id"),
+            it.getString("extension"), (it.getObject("added") as? Number)?.toLong(), it.getString("tmdb_id"), it.getString("stream_url"))
+    }.firstOrNull()
+
+    @Synchronized
+    fun seriesCount(pid: Long): Int = query("SELECT COUNT(*) FROM series WHERE playlist_id=?", pid) { it.getInt(1) }.first()
+
+    private fun providerFilter(pid: Long, categoryId: String?, search: String?): Pair<String, Array<Any>> {
+        val terms = arrayListOf("playlist_id=?")
+        val args = arrayListOf<Any>(pid)
+        categoryId?.let { terms += "category_id=?"; args += it }
+        search?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }?.let {
+            terms += "instr(lower(name),?)>0"
+            args += it
+        }
+        return terms.joinToString(" AND ") to args.toTypedArray()
+    }
+
+    @Synchronized
+    fun providerCount(pid: Long, kind: ProviderKind, categoryId: String? = null, search: String? = null): Int {
+        val (where, args) = providerFilter(pid, categoryId, search)
+        val table = if (kind == ProviderKind.Movies) "movies" else "series"
+        return query("SELECT COUNT(*) FROM $table WHERE $where", *args) { it.getInt(1) }.first()
+    }
+
+    @Synchronized
+    fun replaceProviderCategories(pid: Long, kind: ProviderKind, categories: List<ProviderCategory>) = tx {
+        update("DELETE FROM provider_categories WHERE playlist_id=? AND kind=?", pid, kind.name)
+        conn.prepareStatement("INSERT OR REPLACE INTO provider_categories VALUES(?,?,?,?,?)").use { statement ->
+            categories.forEachIndexed { index, category ->
+                bind(statement, pid, kind.name, category.id, category.title, index)
+                statement.addBatch()
+            }
+            statement.executeBatch()
+        }
+    }
+
+    @Synchronized
+    fun providerCategories(pid: Long, kind: ProviderKind): List<ProviderCategory> {
+        val table = if (kind == ProviderKind.Movies) "movies" else "series"
+        val counts = query("SELECT category_id,COUNT(*) FROM $table WHERE playlist_id=? GROUP BY category_id", pid) { it.getString(1) to it.getInt(2) }.toMap()
+        val saved = query("SELECT id,name FROM provider_categories WHERE playlist_id=? AND kind=? ORDER BY position", pid, kind.name) {
+            ProviderCategory(it.getString(1), it.getString(2), counts[it.getString(1)] ?: 0)
+        }
+        val known = saved.mapTo(hashSetOf()) { it.id }
+        return saved + counts.entries.filter { it.key != null && it.key !in known }.map { ProviderCategory(it.key, it.key, it.value) }
+    }
+
+    @Synchronized
+    fun applyGuideOffset(pid: Long, settingKey: String, minutes: Int, deltaMs: Long) = tx {
+        // A temporary copy avoids primary-key collisions while shifting adjacent programme rows.
+        exec("DROP TABLE IF EXISTS temp.provider_guide_shift")
+        conn.prepareStatement("CREATE TEMP TABLE provider_guide_shift AS SELECT * FROM programs WHERE playlist_id=?").use { statement ->
+            bind(statement, pid); statement.executeUpdate()
+        }
+        try {
+            update("DELETE FROM programs WHERE playlist_id=?", pid)
+            update("INSERT INTO programs(playlist_id,channel_key,start,stop,title,description,icon) SELECT playlist_id,channel_key,start+?,stop+?,title,description,icon FROM provider_guide_shift", deltaMs, deltaMs)
+            putSetting(settingKey, minutes.toString())
+        } finally { exec("DROP TABLE IF EXISTS temp.provider_guide_shift") }
+    }
+
+    // --- guide ---------------------------------------------------------------------------------------
+
+    @Synchronized
+    fun replacePrograms(pid: Long, programs: Sequence<Program>, keepFrom: Long): Int = tx {
+        val iterator = programs.iterator()
+        var first: Program? = null
+        while (iterator.hasNext() && first == null) {
+            iterator.next().takeIf { it.end >= keepFrom }?.let { first = it }
+        }
+        if (first == null) return@tx 0
+        update("DELETE FROM programs WHERE playlist_id=?", pid)
+        var n = 0
+        // Named columns: on an older base, icon was added last (ALTER TABLE).
+        conn.prepareStatement("INSERT OR REPLACE INTO programs(playlist_id, channel_key, start, stop, title, description, icon) VALUES(?,?,?,?,?,?,?)").use { st ->
+            var p: Program? = first
+            while (p != null) {
+                if (p.end >= keepFrom) {
+                    bind(st, pid, p.channelKey, p.start, p.end, p.title, p.description, p.icon)
+                    st.addBatch()
+                    if (++n % 5000 == 0) st.executeBatch()
+                }
+                p = if (iterator.hasNext()) iterator.next() else null
+            }
+            st.executeBatch()
+        }
+        n
+    }
+
+    @Synchronized
+    fun programs(pid: Long, keys: Collection<String>, from: Long, to: Long): List<Program> {
+        if (keys.isEmpty()) return emptyList()
+        val marks = keys.joinToString(",") { "?" }
+        return query(
+            "SELECT * FROM programs WHERE playlist_id=? AND channel_key IN ($marks) AND stop>? AND start<? ORDER BY start",
+            pid, *keys.toTypedArray(), from, to,
+        ) { programOf(it) }
+    }
+
+    /** Chaînes rapprochées du guide par leur nom : (id de chaîne, identifiant du guide). */
+    @Synchronized
+    fun assignEpgKeys(pid: Long, links: List<Pair<String, String>>) = tx {
+        conn.prepareStatement("UPDATE channels SET epg_key=? WHERE playlist_id=? AND id=?").use { st ->
+            links.forEach { (id, key) -> bind(st, key, pid, id); st.addBatch() }
+            st.executeBatch()
+        }
+    }
+
+    @Synchronized
+    fun programCount(pid: Long): Int = query("SELECT COUNT(*) FROM programs WHERE playlist_id=?", pid) { it.getInt(1) }.first()
+
+    // --- favoris, progression, réglages ----------------------------------------------------------------
+
+    @Synchronized
+    fun favoriteIds(pid: Long, type: String = "LIVE"): Set<String> =
+        query("SELECT id FROM favorites WHERE playlist_id=? AND type=?", pid, type) { it.getString(1) }.toSet()
+
+    @Synchronized
+    fun addFavorite(pid: Long, type: String, id: String, at: Long) =
+        update("INSERT OR IGNORE INTO favorites VALUES(?,?,?,?)", pid, type, id, at)
+
+    @Synchronized
+    fun removeFavorite(pid: Long, type: String, id: String) =
+        update("DELETE FROM favorites WHERE playlist_id=? AND type=? AND id=?", pid, type, id)
+
+    /** Progression : la plus récente l'emporte. */
+    @Synchronized
+    fun mergeProgress(pid: Long, type: String, id: String, title: String, pos: Long, dur: Long, at: Long, finished: Boolean) {
+        val current = query("SELECT updated_at FROM progress WHERE playlist_id=? AND type=? AND id=?", pid, type, id) { it.getLong(1) }.firstOrNull()
+        if (current != null && current >= at) return
+        update("INSERT OR REPLACE INTO progress VALUES(?,?,?,?,?,?,?,?)", pid, type, id, title, pos, dur, at, if (finished) 1 else 0)
+    }
+
+    @Synchronized
+    fun progressCount(pid: Long): Int = query("SELECT COUNT(*) FROM progress WHERE playlist_id=?", pid) { it.getInt(1) }.first()
+
+    /**
+     * Settings kept in memory once read: the screens read them while composing, and a long query of a worker (an IPTV
+     * catalog search) held the database for 100 ms, freezing the interface (trace on the TV, 2026-11-08). All writes go
+     * through [putSetting], which keeps the copy right.
+     */
+    private val settingsCache = java.util.concurrent.ConcurrentHashMap<String, java.util.Optional<String>>()
+
+    // A setting known to be absent is cached too: reading it again under the lock blocked the interface behind a long
+    // IPTV sync, and the TV was killed for not answering (ANR, 2026-11-09).
+    fun setting(key: String): String? = settingsCache[key]?.let { return it.orElse(null) } ?: synchronized(this) {
+        val v = query("SELECT value FROM settings WHERE key=?", key) { it.getString(1) }.firstOrNull()
+        settingsCache[key] = java.util.Optional.ofNullable(v)
+        v
+    }
+
+    @Synchronized
+    fun putSetting(key: String, value: String?) {
+        if (value == null) update("DELETE FROM settings WHERE key=?", key) else update("INSERT OR REPLACE INTO settings VALUES(?,?)", key, value)
+        settingsCache[key] = java.util.Optional.ofNullable(value)
+    }
+
+    // --- cache TMDB, reprise --------------------------------------------------------------------------
+
+    @Synchronized
+    fun tmdbGet(key: String): Pair<String, Long>? =
+        query("SELECT json, fetched_at FROM tmdb_cache WHERE key=?", key) { it.getString(1) to it.getLong(2) }.firstOrNull()
+
+    @Synchronized
+    fun tmdbPut(key: String, json: String, at: Long) { update("INSERT OR REPLACE INTO tmdb_cache VALUES(?,?,?)", key, json, at) }
+
+    /** Removes the cached answers of a kind ([prefix]) older than [before]: big answers must not pile up. */
+    @Synchronized
+    fun purgeCache(prefix: String, before: Long) { update("DELETE FROM tmdb_cache WHERE key LIKE ? AND fetched_at < ?", "$prefix%", before) }
+
+    @Synchronized
+    fun saveResume(r: Resume) {
+        update(
+            "INSERT OR REPLACE INTO resume(key, kind, tmdb_id, season, episode, title, subtitle, image, position_ms, duration_ms, updated_at, finished, profile) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            scoped(r.key), r.kind, r.tmdbId, r.season, r.episode, r.title, r.subtitle, r.image, r.positionMs, r.durationMs, r.updatedAt, r.finished, profile,
+        )
+    }
+
+    @Synchronized
+    fun resume(key: String): Resume? = query("SELECT * FROM resume WHERE key=?", scoped(key)) { it.toResume() }.firstOrNull()
+
+    /** « Reprendre » : lectures commencées et non terminées, la plus récente d'abord ; une seule ligne par série. */
+    @Synchronized
+    fun resumeList(limit: Int = 20): List<Resume> =
+        query("SELECT * FROM resume WHERE profile=? AND finished=0 AND position_ms > 0 ORDER BY updated_at DESC LIMIT ?", profile, limit * 3) { it.toResume() }
+            .distinctBy { "${it.kind}:${it.tmdbId}" }.take(limit)
+
+    // --- enregistrements ----------------------------------------------------------------------------------
+
+    @Synchronized
+    fun recordings(pid: Long): List<Recording> = query("SELECT * FROM recordings WHERE playlist_id=? ORDER BY start_at", pid) { it.toRecording() }
+
+    @Synchronized
+    fun insertRecording(r: Recording): Long {
+        update(
+            "INSERT INTO recordings(playlist_id, channel_id, channel_name, channel_logo, title, start_at, end_at, status, path, bytes, error, created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            r.playlistId, r.channelId, r.channelName, r.channelLogo, r.title, r.startAt, r.endAt, r.status.name, r.path, r.bytes, r.error, r.createdAt,
+        )
+        return query("SELECT last_insert_rowid()") { it.getLong(1) }.first()
+    }
+
+    @Synchronized
+    fun updateRecording(id: Long, status: RecordingStatus, path: String? = null, bytes: Long? = null, error: String? = null) =
+        update("UPDATE recordings SET status=?, path=COALESCE(?, path), bytes=COALESCE(?, bytes), error=? WHERE id=?", status.name, path, bytes, error, id)
+
+    @Synchronized
+    fun deleteRecording(id: Long) = update("DELETE FROM recordings WHERE id=?", id)
+
+    @Synchronized
+    fun updateRecordingEnd(id: Long, end: Long) = update("UPDATE recordings SET end_at=? WHERE id=?", end, id)
+
+    private fun ResultSet.toRecording() = Recording(
+        getLong("id"), getLong("playlist_id"), getString("channel_id"), getString("channel_name"), getString("channel_logo"), getString("title"),
+        getLong("start_at"), getLong("end_at"), RecordingStatus.valueOf(getString("status")), getString("path"), getLong("bytes"), getString("error"), getLong("created_at"),
+    )
+
+    /** Historique : tout ce qui a été regardé (terminé compris), le plus récent d'abord. */
+    @Synchronized
+    fun history(limit: Int = 300): List<Resume> =
+        query("SELECT * FROM resume WHERE profile=? AND (finished=1 OR position_ms > 0) ORDER BY updated_at DESC LIMIT ?", profile, limit) { it.toResume() }
+
+    @Synchronized
+    fun deleteResume(key: String) = update("DELETE FROM resume WHERE key=?", scoped(key))
+
+    @Synchronized
+    fun clearHistory() = update("DELETE FROM resume WHERE profile=?", profile)
+
+    /** Removes everything a deleted profile had watched. */
+    @Synchronized
+    fun forgetProfile(id: String) { if (id.isNotEmpty()) update("DELETE FROM resume WHERE profile=?", id) }
+
+    /** Séries commencées (identifiants TMDB), pour « À venir ». */
+    @Synchronized
+    fun startedSeries(): List<Int> = query("SELECT DISTINCT tmdb_id FROM resume WHERE profile=? AND kind='tv'", profile) { it.getInt(1) }
+
+    /** Films vus jusqu'au bout (identifiants TMDB) : part déjà vue d'une saga. */
+    @Synchronized
+    fun finishedMovies(): Set<Int> =
+        query("SELECT tmdb_id FROM resume WHERE profile=? AND kind='movie' AND finished=1", profile) { it.getInt(1) }.toHashSet()
+
+    /** Dernière lecture d'une œuvre (épisode terminé compris) : point de départ de « Reprendre » sur une série. */
+    @Synchronized
+    fun allOf(kind: String, tmdbId: Int): List<Resume> =
+        query("SELECT * FROM resume WHERE profile=? AND kind=? AND tmdb_id=?", profile, kind, tmdbId) { it.toResume() }
+
+    fun lastOf(kind: String, tmdbId: Int): Resume? =
+        query("SELECT * FROM resume WHERE profile=? AND kind=? AND tmdb_id=? ORDER BY updated_at DESC LIMIT 1", profile, kind, tmdbId) { it.toResume() }.firstOrNull()
+
+    private fun ResultSet.toResume() = Resume(
+        getString("key").substringAfter('|'), getString("kind"), getInt("tmdb_id"), (getObject("season") as? Number)?.toInt(), (getObject("episode") as? Number)?.toInt(),
+        getString("title"), getString("subtitle"), getString("image"), getLong("position_ms"), getLong("duration_ms"), getLong("updated_at"), getInt("finished") == 1,
+    )
+
+    override fun close() {
+        conn.close()
+        if (providerReadConnectionLazy.isInitialized()) providerReadConnection.close()
+    }
+
+    // --- outils -------------------------------------------------------------------------------------
+
+    private fun <T> query(sql: String, vararg args: Any?, map: (ResultSet) -> T): List<T> = query(conn, sql, *args, map = map)
+
+    private fun <T> query(connection: Connection, sql: String, vararg args: Any?, map: (ResultSet) -> T): List<T> =
+        connection.prepareStatement(sql).use { st ->
+            bind(st, *args)
+            st.executeQuery().use { rs -> buildList { while (rs.next()) add(map(rs)) } }
+        }
+
+    private fun update(sql: String, vararg args: Any?): Int = conn.prepareStatement(sql).use { st -> bind(st, *args); st.executeUpdate() }
+
+    private fun bind(st: java.sql.PreparedStatement, vararg args: Any?) {
+        args.forEachIndexed { i, a ->
+            when (a) {
+                null -> st.setObject(i + 1, null)
+                is Int -> st.setInt(i + 1, a)
+                is Long -> st.setLong(i + 1, a)
+                is Boolean -> st.setInt(i + 1, if (a) 1 else 0)
+                else -> st.setString(i + 1, a.toString())
+            }
+        }
+    }
+
+    private fun ResultSet.toPlaylist() = Playlist(
+        getLong("id"), getString("name"), PlaylistType.valueOf(getString("type")), getString("url"), getString("username"),
+        getString("password"), getString("epg_url"), getString("user_agent"), getLong("synced_at"),
+    )
+
+    private fun ResultSet.toChannel() = Channel(
+        getLong("playlist_id"), getString("id"), getInt("number"), getString("name"), getString("logo"), getString("category_id"),
+        getString("epg_key"), getString("name_key"), getString("url"), getString("user_agent"), getString("referrer"), getInt("position"),
+        getString("catchup_type"), getString("catchup_source"), getInt("catchup_days").coerceAtLeast(0),
+    )
+
+    companion object {
+        /** Programmes read per step when walking a guide window in start order. */
+        private const val PROGRAM_SCAN_BATCH = 500
+        /** Longer guide rows are provider placeholders, not programmes. */
+        private const val MAX_PROGRAM_MS = 12 * 3_600_000L
+
+        /** Même playlist : même serveur (sans « / » final) et même identifiant. */
+        fun sameSource(a: Playlist, b: Playlist) =
+            a.type == b.type && a.url.trimEnd('/').equals(b.url.trimEnd('/'), ignoreCase = true) && (a.username ?: "") == (b.username ?: "")
+
+        fun open(): DesktopDb = DesktopDb(File(AppDirs.data, "sokoul.db"))
+    }
+}

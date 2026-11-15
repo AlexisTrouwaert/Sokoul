@@ -1,0 +1,389 @@
+{
+  "version": 1,
+  "verified": "2026-10-25 et 2026-10-26, identifiants relevés sur themoviedb.org (nom de la collection et films)",
+  "sagas": [
+    {
+      "key": "star-wars",
+      "name": "Star Wars",
+      "collectionIds": [
+        10
+      ],
+      "extraMovieIds": [
+        330459,
+        348350
+      ],
+      "chronologicalOrderIds": [
+        1893,
+        1894,
+        1895,
+        348350,
+        330459,
+        11,
+        1891,
+        1892,
+        140607,
+        181808,
+        181812
+      ],
+      "relatedSeriesTmdbIds": [
+        4194,
+        83867,
+        82856,
+        114461
+      ],
+      "nameFr": "Star Wars",
+      "logo": "https://assets.fanart.tv/fanart/star-wars-episode-iv---a-new-hope-5532e5ba08803.png"
+    },
+    {
+      "key": "wizarding-world",
+      "name": "Wizarding World",
+      "collectionIds": [
+        1241,
+        435259
+      ],
+      "extraMovieIds": [],
+      "chronologicalOrderIds": [
+        259316,
+        338952,
+        338953,
+        671,
+        672,
+        673,
+        674,
+        675,
+        767,
+        12444,
+        12445
+      ],
+      "relatedSeriesTmdbIds": [],
+      "nameFr": "Le monde des sorciers",
+      "logo": "https://assets.fanart.tv/fanart/harry-potter-and-the-philosophers-stone-5a1a187c4c51f.png"
+    },
+    {
+      "key": "middle-earth",
+      "name": "Middle-earth",
+      "collectionIds": [
+        119,
+        121938
+      ],
+      "extraMovieIds": [],
+      "chronologicalOrderIds": [
+        49051,
+        57158,
+        122917,
+        120,
+        121,
+        122
+      ],
+      "relatedSeriesTmdbIds": [
+        84773
+      ],
+      "nameFr": "La Terre du Milieu",
+      "logo": "https://image.tmdb.org/t/p/w300/87sl6r7n7Qx0fALtLZFxM3mU3KM.png"
+    },
+    {
+      "key": "fast-furious",
+      "name": "Fast & Furious",
+      "collectionIds": [
+        9485
+      ],
+      "extraMovieIds": [],
+      "chronologicalOrderIds": [
+        9799,
+        584,
+        13804,
+        51497,
+        82992,
+        9615,
+        168259,
+        337339,
+        384018,
+        385128,
+        385687
+      ],
+      "relatedSeriesTmdbIds": [],
+      "nameFr": "Fast & Furious",
+      "logo": "https://assets.fanart.tv/fanart/fast--furious-51aa54243d4b4.png"
+    },
+    {
+      "key": "alien",
+      "name": "Alien",
+      "collectionIds": [
+        8091,
+        135416
+      ],
+      "extraMovieIds": [
+        945961
+      ],
+      "chronologicalOrderIds": [
+        70981,
+        126889,
+        348,
+        945961,
+        679,
+        8077,
+        8078
+      ],
+      "relatedSeriesTmdbIds": [
+        157239
+      ],
+      "nameFr": "Alien",
+      "logo": "https://assets.fanart.tv/fanart/alien-52e7763f6a3a0.png"
+    },
+    {
+      "key": "hunger-games",
+      "name": "The Hunger Games",
+      "collectionIds": [
+        131635
+      ],
+      "extraMovieIds": [
+        695721
+      ],
+      "chronologicalOrderIds": [
+        695721,
+        70160,
+        101299,
+        131631,
+        131634
+      ],
+      "relatedSeriesTmdbIds": [],
+      "nameFr": "Hunger Games",
+      "logo": "https://image.tmdb.org/t/p/w300/jgEGp0adB6fGfILwoPB9lAyc38x.png"
+    },
+    {
+      "key": "jurassic",
+      "name": "Jurassic Park",
+      "collectionIds": [
+        328
+      ],
+      "extraMovieIds": [],
+      "chronologicalOrderIds": [],
+      "relatedSeriesTmdbIds": [
+        93741
+      ],
+      "nameFr": "Jurassic Park",
+      "logo": "https://assets.fanart.tv/fanart/jurassic-park-548f54037279f.png"
+    },
+    {
+      "key": "dune",
+      "name": "Dune",
+      "collectionIds": [
+        726871
+      ],
+      "extraMovieIds": [],
+      "chronologicalOrderIds": [],
+      "relatedSeriesTmdbIds": [
+        90228
+      ],
+      "nameFr": "Dune",
+      "logo": "https://assets.fanart.tv/fanart/dune-5e911d08ab6af.png"
+    },
+    {
+      "key": "marvel",
+      "name": "Marvel Cinematic Universe",
+      "collectionIds": [
+        86311,
+        131292,
+        131295,
+        131296,
+        284433,
+        531241,
+        422834,
+        529892,
+        618529
+      ],
+      "nameFr": "Univers Marvel",
+      "collectionLogos": {
+        "131292": "https://assets.fanart.tv/fanart/iron-man-51acec68f39d3.png",
+        "131295": "https://image.tmdb.org/t/p/w300/aj3CJ20qaYC9upO9i6p1kf4uwKk.png",
+        "131296": "https://image.tmdb.org/t/p/w300/jE6T4AD9ZmMdaAsW2K2CsQamxqb.png"
+      }
+    },
+    {
+      "key": "x-men",
+      "name": "X-Men",
+      "collectionIds": [
+        748
+      ],
+      "nameFr": "X-Men",
+      "logo": "https://assets.fanart.tv/fanart/x-men-5ffb62a47c8de.png",
+      "chronologicalOrderIds": [
+        49538,
+        127585,
+        246655,
+        320288,
+        2080,
+        36657,
+        36658,
+        36668,
+        76170,
+        293660,
+        383498,
+        263115
+      ]
+    },
+    {
+      "key": "mission-impossible",
+      "name": "Mission: Impossible",
+      "collectionIds": [
+        87359
+      ],
+      "nameFr": "Mission : Impossible",
+      "logo": "https://assets.fanart.tv/fanart/mission-impossible-5103f256e2e3a.png"
+    },
+    {
+      "key": "james-bond",
+      "name": "James Bond 007",
+      "collectionIds": [
+        645
+      ],
+      "nameFr": "James Bond 007"
+    },
+    {
+      "key": "pirates",
+      "name": "Pirates of the Caribbean",
+      "collectionIds": [
+        295
+      ],
+      "nameFr": "Pirates des Caraïbes",
+      "logo": "https://assets.fanart.tv/fanart/pirates-of-the-caribbean-on-stranger-tides-521b1d6ba8f83.png"
+    },
+    {
+      "key": "matrix",
+      "name": "The Matrix",
+      "collectionIds": [
+        2344
+      ],
+      "nameFr": "Matrix",
+      "logo": "https://assets.fanart.tv/fanart/the-matrix-5144d4c3f0800.png"
+    },
+    {
+      "key": "indiana-jones",
+      "name": "Indiana Jones",
+      "collectionIds": [
+        84
+      ],
+      "nameFr": "Indiana Jones",
+      "logo": "https://image.tmdb.org/t/p/w300/oYieQ9fCqr5mIOZd0tiKdZ4IdAC.png",
+      "chronologicalOrderIds": [
+        87,
+        85,
+        89,
+        217,
+        335977
+      ]
+    },
+    {
+      "key": "back-to-the-future",
+      "name": "Back to the Future",
+      "collectionIds": [
+        264
+      ],
+      "nameFr": "Retour vers le futur",
+      "logo": "https://assets.fanart.tv/fanart/back-to-the-future-51f57a54b4306.png"
+    },
+    {
+      "key": "terminator",
+      "name": "The Terminator",
+      "collectionIds": [
+        528
+      ],
+      "nameFr": "Terminator",
+      "logo": "https://image.tmdb.org/t/p/w300/ipgDUr7fD8adbqHfCssloIultfN.png"
+    },
+    {
+      "key": "rocky-creed",
+      "name": "Rocky & Creed",
+      "collectionIds": [
+        1575,
+        553717
+      ],
+      "nameFr": "Rocky & Creed",
+      "logo": "https://image.tmdb.org/t/p/w300/4ZMlbEpP1gY7QkW5UdeoVwk814x.png"
+    },
+    {
+      "key": "john-wick",
+      "name": "John Wick",
+      "collectionIds": [
+        404609
+      ],
+      "nameFr": "John Wick",
+      "logo": "https://assets.fanart.tv/fanart/john-wick-5e38d8746361b.png"
+    },
+    {
+      "key": "toy-story",
+      "name": "Toy Story",
+      "collectionIds": [
+        10194
+      ],
+      "nameFr": "Toy Story",
+      "logo": "https://assets.fanart.tv/fanart/toy-story-504b11541178e.png"
+    },
+    {
+      "key": "shrek",
+      "name": "Shrek",
+      "collectionIds": [
+        2150
+      ],
+      "nameFr": "Shrek",
+      "logo": "https://assets.fanart.tv/fanart/shrek-51e1f30b97f34.png"
+    },
+    {
+      "key": "avatar",
+      "name": "Avatar",
+      "collectionIds": [
+        87096
+      ],
+      "nameFr": "Avatar",
+      "logo": "https://assets.fanart.tv/fanart/avatar-503e0262ba196.png"
+    },
+    {
+      "key": "planet-apes",
+      "name": "Planet of the Apes",
+      "collectionIds": [
+        1709,
+        173710
+      ],
+      "nameFr": "La Planète des singes",
+      "logo": "https://image.tmdb.org/t/p/w300/5Jn7FPpVjA8ZxkAmqWMvrZvQJ5b.png",
+      "chronologicalOrderIds": [
+        61791,
+        119450,
+        281338,
+        653346,
+        871,
+        1685,
+        1687,
+        1688,
+        1705
+      ]
+    },
+    {
+      "key": "mad-max",
+      "name": "Mad Max",
+      "collectionIds": [
+        8945
+      ],
+      "nameFr": "Mad Max",
+      "logo": "https://assets.fanart.tv/fanart/mad-max-5d5709168c27a.png"
+    },
+    {
+      "key": "die-hard",
+      "name": "Die Hard",
+      "collectionIds": [
+        1570
+      ],
+      "nameFr": "Die Hard",
+      "logo": "https://assets.fanart.tv/fanart/die-hard-5057d17a09a68.png"
+    },
+    {
+      "key": "bourne",
+      "name": "Jason Bourne",
+      "collectionIds": [
+        31562
+      ],
+      "nameFr": "Jason Bourne",
+      "logo": "https://image.tmdb.org/t/p/w300/cjSEGVvYryWuHA5jjdGy4WSaTWF.png"
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+schema: spec-driven
+
+context: |
+  Sokoul is a Kotlin media centre: Compose Desktop (app/) and Android TV (tv/, which compiles app sources minus the syncShared exclusions).
+  Keep the Apple TV look (docs/design/cartography.md, theme/Theme.kt); never restyle after Movix or Netflix.
+  Code, comments and artifacts in English; French only as the French half of a UI translation (L("en", "fr")).
+  Use English research queries and prefer primary sources worldwide. Record source links and version applicability.
+  Record decisions in design.md and checks, blockers and next actions in tasks.md.
+  Research basis: docs/design/tv-home-ux-report.pdf, digested in docs/design/tv-home.md (status per principle).
+  A screen change is checked by rendering it (:app:renderScreens), not by compiling; TV performance by tools/tv-perf.mjs.
+rules:
+  tasks:
+    - Every task states its check (test class, render, or tool command) and updates docs/design/tv-home.md when a principle changes status.
+
+# Project context (optional)
+# Add only constraints that should guide OpenSpec artifacts and workflows.
+# Include constraints an agent cannot infer by reading the code.
+# Keep general project documentation and discoverable codebase facts out.
+# Example:
+#   context: |
+#     Designs and tasks must cover Windows, macOS, and Linux
+#     Write all artifacts in Spanish
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always state what is out of scope
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
+
+# Per-operation guidance (optional)
+# Add advisory guidance for how apply and archive work should be conducted.
+# This is separate from artifact rules above.
+# Example:
+#   operations:
+#     apply:
+#       guidance:
+#         - Keep test summaries concise
+#     archive:
+#       guidance:
+#         - Summarize the archive outcome before finishing

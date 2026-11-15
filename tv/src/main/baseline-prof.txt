@@ -1,0 +1,2 @@
+HSPLcom/sokoul/**;->**(**)**
+Lcom/sokoul/**;

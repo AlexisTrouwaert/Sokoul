@@ -1,0 +1,44 @@
+# ---- Build outputs and caches (all regenerated) ----
+/build-output/
+build/
+.gradle/
+.kotlin/
+/renders/
+/app/renders/
+node_modules/
+__pycache__/
+.pytest_cache/
+*.pyc
+/purstream-test-cache/
+/.android-user/
+API/Mainapi/cache/
+API/proxiesembed/app_files/services_cache/
+*.log
+
+# ---- Secrets: never in Git ----
+local.properties
+.env
+*.env
+!.env.example
+!*.env.example
+api key.txt
+*.local.md
+*.keystore
+*.jks
+*.p12
+*.pem
+**/generated/keys/
+
+# ---- Third-party binaries fetched by tools/fetch-vlc.ps1 ----
+/app/app-resources/windows/vlc/
+
+# ---- Local tooling state ----
+
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+
+# ---- Never published: Widevine device keys and the DRM proxy that uses them ----
+*.wvd
+/API/proxiesembed/drmproxy/

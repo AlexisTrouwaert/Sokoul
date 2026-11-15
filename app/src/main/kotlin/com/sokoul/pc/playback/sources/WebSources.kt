@@ -1,0 +1,339 @@
+package com.sokoul.pc.playback.sources
+import com.sokoul.pc.playback.session.PlayFailureException
+import com.sokoul.pc.playback.session.PlayRequest
+import com.sokoul.pc.playback.session.PlayVersion
+import com.sokoul.pc.playback.session.Readiness
+import com.sokoul.pc.playback.session.VersionOrigin
+import com.sokoul.pc.playback.ui.label
+import com.sokoul.desktop.player.StreamRequest
+import com.sokoul.desktop.player.StreamSubtitle
+import com.sokoul.iptv.data.debrid.ReleaseName
+import com.sokoul.iptv.domain.AudioLanguage
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.net.URI
+import java.text.Normalizer
+import java.util.concurrent.TimeUnit
+
+/** A playable link a Mainapi source answered, before it becomes a version. */
+data class WebLink(
+    val source: String,
+    val name: String,
+    val url: String,
+    val language: AudioLanguage?,
+    val hls: Boolean,
+    val headers: Map<String, String> = emptyMap(),
+    val subtitles: List<StreamSubtitle> = emptyList(),
+    val mediaType: String? = if (hls) "hls" else null,
+    val localExtraction: Boolean = false,
+)
+
+/**
+ * Reads what the Mainapi source routes answer. Pure and tested.
+ *
+ * Two shapes carry playable links: PurStream's `sources: [{ url, name, format }]`, and the catalogues' language maps
+ * (`players`, `organized`, `episodes[n].languages`...) whose players gained an `m3u8Url` once the server resolved
+ * them. A player that is still an embed page has no link VLC can open, so it is left out.
+ */
+object WebParse {
+    fun links(source: String, payload: JsonElement, episode: Int?, serverBase: String? = null, allowLocal: Boolean = false): List<WebLink> {
+        val root = payload as? JsonObject ?: return emptyList()
+        val found = ArrayList<WebLink>()
+        (root["sources"] as? JsonArray)?.forEach { entry -> link(source, entry, null, serverBase)?.let(found::add) }
+        val episodes = root["episodes"] as? JsonObject
+        val scoped = if (episodes != null && episode != null) listOfNotNull(episodes[episode.toString()]) else listOfNotNull(root["players"], root["organized"], root["current_episode"])
+        (scoped + listOfNotNull(root["player_links"], root["data"])).forEach { walk(source, it, null, found, depth = 0, serverBase = serverBase) }
+        if (allowLocal && (root["extractionStatus"] as? JsonPrimitive)?.contentOrNull == "authorized") {
+            (scoped + listOfNotNull(root["player_links"], root["data"])).forEach { localPlayers(source, it, null, found) }
+        }
+        return found.distinctBy { it.url }
+    }
+
+    private fun walk(source: String, node: JsonElement, language: AudioLanguage?, out: MutableList<WebLink>, depth: Int, serverBase: String?) {
+        if (depth > MAX_DEPTH) return
+        when (node) {
+            is JsonArray -> node.forEach { item ->
+                link(source, item, language, serverBase)?.let(out::add) ?: walk(source, item, language, out, depth + 1, serverBase)
+            }
+            is JsonObject -> node.forEach { (key, value) -> walk(source, value, languageOf(key) ?: language, out, depth + 1, serverBase) }
+            else -> Unit
+        }
+    }
+
+    private fun link(source: String, item: JsonElement, language: AudioLanguage?, serverBase: String?): WebLink? {
+        val obj = item as? JsonObject ?: return null
+        val media = obj["media"] as? JsonObject ?: obj
+        val legacy = listOf("m3u8Url", "m3u8", "stream_url", "url").firstNotNullOfOrNull { k -> text(obj[k]) }
+        val normalized = text(media["url"])
+        val format = (text(media["format"]) ?: text(media["type"]))?.lowercase()
+        val url = legacy?.takeIf { SourceMedia.playable(it, format, serverBase) }
+            ?: normalized?.takeIf { legacy == null && SourceMedia.playable(it, format, serverBase) } ?: return null
+        val metadata = media.takeIf { normalized == null || normalized == url }
+        val name = listOf("name", "player", "title", "label").firstNotNullOfOrNull { k -> text(obj[k]) }
+            ?: listOf("decoded_url", "link", "embed").firstNotNullOfOrNull { k -> hostOf(text(obj[k])) } ?: source
+        return WebLink(source, name, url, language ?: text(obj["language"])?.let(::languageOf) ?: ReleaseName.parse(name).language,
+            SourceMedia.hls(url, format), metadata?.let(SourceMedia::headers).orEmpty(), metadata?.let { SourceMedia.subtitles(it, serverBase) }.orEmpty(), SourceMedia.type(url, format))
+    }
+
+    private fun text(e: JsonElement?): String? = (e as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+
+    /** The player's site ("uqload.cx"), told apart when the server gives no player name. */
+    private fun hostOf(url: String?): String? = url?.let { runCatching { java.net.URI(it).host }.getOrNull() }?.removePrefix("www.")?.takeIf { it.isNotBlank() }
+
+    private fun localPlayers(source: String, node: JsonElement, language: AudioLanguage?, out: MutableList<WebLink>, depth: Int = 0) {
+        if (depth > MAX_DEPTH) return
+        when (node) {
+            is JsonArray -> node.forEach { localPlayers(source, it, language, out, depth + 1) }
+            is JsonObject -> {
+                val embed = listOf("url", "link", "decoded_url").firstNotNullOfOrNull { text(node[it]) }
+                if (embed != null && NativeEmbedResolver.supported(embed) && text(node["m3u8Url"]) == null) {
+                    val name = listOf("name", "player", "label").firstNotNullOfOrNull { text(node[it]) } ?: hostOf(embed) ?: source
+                    out.add(WebLink(source, name, embed, language ?: text(node["language"])?.let(::languageOf), false, localExtraction = true))
+                } else node.forEach { (key, value) -> localPlayers(source, value, languageOf(key) ?: language, out, depth + 1) }
+            }
+            else -> Unit
+        }
+    }
+
+    fun languageOf(key: String): AudioLanguage? {
+        val normalized = Normalizer.normalize(key.trim().lowercase(), Normalizer.Form.NFD)
+            .replace(Regex("\\p{M}+"), "")
+        val tokens = normalized.split(Regex("[^a-z0-9]+")).filter(String::isNotEmpty).toSet()
+        val compact = tokens.joinToString("")
+        val french = tokens.any { it in FRENCH_AUDIO || Regex("vf[0-9]+").matches(it) } || compact in FRENCH_AUDIO_COMPACT
+        val original = tokens.any { it in ORIGINAL_AUDIO }
+        val subtitles = tokens.any { it in FRENCH_SUBTITLES } || (french && tokens.any { it in SUBTITLE_HINTS })
+
+        // Some provider payloads list both audio tracks explicitly instead of labelling the release "MULTI".
+        if (tokens.any { it in MULTI_AUDIO } || (french && original)) return AudioLanguage.MULTI
+        if (subtitles) return AudioLanguage.VOSTFR
+        if (french) return AudioLanguage.VF
+        if (original) return AudioLanguage.VO
+        return null
+    }
+
+    private val FRENCH_AUDIO = setOf("vf", "vff", "vfq", "vfi", "fr", "fra", "fre", "french", "francais", "francaise")
+    private val FRENCH_AUDIO_COMPACT = setOf("truefrench", "frenchdub", "francaisdub", "frfr", "frenchvf", "francaisvf")
+    private val ORIGINAL_AUDIO = setOf("voeng", "va", "vj", "vkr", "vo", "original", "japanese", "japonais", "ja", "jpn", "en", "eng", "english")
+    private val FRENCH_SUBTITLES = setOf("vostfr", "vost", "stfr", "subfr", "sousstitresfrancais")
+    private val MULTI_AUDIO = setOf("multi", "multiaudio", "dual", "dualaudio")
+    private val SUBTITLE_HINTS = setOf("sub", "subs", "subtitle", "subtitles", "subbed", "sous", "sous-titres")
+
+    private const val MAX_DEPTH = 6
+}
+
+/** Media acceptance is based on the URL path, or a signed relay owned by the configured server. */
+internal object SourceMedia {
+    private val relays = setOf("/native-proxy", "/voe-proxy", "/fsvid-proxy", "/vidzy-proxy", "/vidmoly-proxy", "/sibnet-proxy", "/uqload-proxy", "/doodstream-proxy", "/lulustream-proxy", "/veev-proxy", "/vidara-proxy", "/seekstreaming-proxy", "/cinep-proxy", "/kisskh-proxy", "/streamed-proxy")
+    private val extensions = setOf("m3u8", "mp4", "mkv", "webm")
+    private fun uri(raw: String): URI? = runCatching { URI(raw) }.getOrNull()?.takeIf {
+        it.scheme?.lowercase() in setOf("http", "https") && !it.host.isNullOrBlank() && it.userInfo == null && it.fragment == null && raw.none { c -> c.isWhitespace() || c == '\u0000' }
+    }
+    private fun query(uri: URI): Map<String, String> = uri.rawQuery.orEmpty().split('&').mapNotNull {
+        val key = it.substringBefore('=')
+        val value = runCatching { java.net.URLDecoder.decode(it.substringAfter('=', ""), "UTF-8") }.getOrNull() ?: return@mapNotNull null
+        key to value
+    }.toMap()
+    private fun port(uri: URI) = uri.port.takeIf { it >= 0 } ?: if (uri.scheme.equals("https", true)) 443 else 80
+    fun relay(url: String, serverBase: String?): Boolean {
+        val media = uri(url) ?: return false
+        val server = serverBase?.let(::uri) ?: return false
+        if (!media.scheme.equals(server.scheme, true) || !media.host.equals(server.host, true)) return false
+        if (port(media) != port(server) && port(media) != 25569) return false
+        if (media.path !in relays) return false
+        val q = query(media)
+        return q["exp"]?.toLongOrNull()?.let { it > 0 } == true && q["sig"]?.matches(Regex("[A-Za-z0-9_-]{32,128}")) == true
+    }
+    fun playable(url: String, format: String? = null, serverBase: String? = null): Boolean {
+        val media = uri(url) ?: return false
+        if (media.path in relays) return relay(url, serverBase)
+        val path = media.path.orEmpty().lowercase()
+        if (Regex("/(embed|player)(/|$)").containsMatchIn(path)) return false
+        return path.substringAfterLast('.', "") in extensions || (format == "hls" && "/hls/" in path)
+    }
+    fun hls(url: String, format: String?): Boolean = when (format?.lowercase()) {
+        "hls", "m3u8", "application/vnd.apple.mpegurl", "application/x-mpegurl" -> true
+        "mp4", "video/mp4" -> false
+        else -> {
+            val media = uri(url)
+            media?.path.orEmpty().endsWith(".m3u8", true) || media?.let(::query)?.get("url")?.substringBefore('?')?.endsWith(".m3u8", true) == true
+        }
+    }
+    fun type(url: String, format: String?): String? {
+        if (hls(url, format)) return "hls"
+        if (format?.lowercase() in setOf("mp4", "video/mp4")) return "mp4"
+        val media = uri(url)
+        return "mp4".takeIf { media?.path.orEmpty().endsWith(".mp4", true) || media?.let(::query)?.get("url")?.substringBefore('?')?.endsWith(".mp4", true) == true }
+    }
+    fun headers(obj: JsonObject): Map<String, String> = (obj["headers"] as? JsonObject).orEmpty().mapNotNull { (name, value) ->
+        val key = when (name.lowercase()) { "user-agent" -> "User-Agent"; "referer", "referrer" -> "Referer"; else -> return@mapNotNull null }
+        val text = (value as? JsonPrimitive)?.contentOrNull?.takeIf { it.length <= 2048 && it.none { c -> c == '\r' || c == '\n' || c == '\u0000' } } ?: return@mapNotNull null
+        key to text
+    }.toMap()
+    fun subtitles(obj: JsonObject, serverBase: String?): List<StreamSubtitle> = (obj["subtitles"] as? JsonArray).orEmpty().mapNotNull { value ->
+        val sub = value as? JsonObject ?: return@mapNotNull null
+        fun text(key: String) = (sub[key] as? JsonPrimitive)?.contentOrNull
+        val url = text("url") ?: return@mapNotNull null
+        val parsed = uri(url) ?: return@mapNotNull null
+        val format = text("format")?.lowercase() ?: parsed.path.substringAfterLast('.', "").lowercase()
+        if (format !in setOf("vtt", "srt")) return@mapNotNull null
+        if (parsed.path in relays && !relay(url, serverBase)) return@mapNotNull null
+        if (parsed.path !in relays && parsed.path.substringAfterLast('.', "").lowercase() !in setOf("vtt", "srt")) return@mapNotNull null
+        StreamSubtitle(url, text("lang")?.takeIf { it.matches(Regex("[a-zA-Z]{2,3}")) } ?: "und", text("label")?.take(80), format, (sub["default"] as? JsonPrimitive)?.contentOrNull == "true")
+    }.distinctBy { it.url }.take(8)
+}
+
+/** What a source route is asked, for one request. */
+internal data class WebRoute(val source: String, val path: String)
+
+/** The routes that answer playable links, for a film or an episode. Pure and tested. */
+internal object WebRoutes {
+    fun of(request: PlayRequest): List<WebRoute> {
+        val id = request.tmdbId
+        return if (request.kind == "movie") {
+            listOf(
+                WebRoute("PurStream", "/api/purstream/movie/$id/stream"),
+                WebRoute("FStream", "/api/fstream/movie/$id?resolve=1"),
+                WebRoute("Cpasmal", "/api/cpasmal/movie/$id?resolve=1"),
+                WebRoute("Wiflix", "/api/wiflix/movie/$id?resolve=1"),
+                WebRoute("Coflix", "/api/tmdb/movie/$id?resolve=1"),
+                WebRoute("Omega", "/api/omega/movie/$id?resolve=1"),
+                WebRoute("J1F", "/api/j1f/movie/$id?resolve=1"),
+                WebRoute("SwiftFlow", "/api/swiftflow/movie/$id?resolve=1"),
+                WebRoute("KissKH", "/api/kisskh/movie/$id"),
+            )
+        } else {
+            val s = request.season ?: return emptyList()
+            val e = request.episode ?: return emptyList()
+            listOf(
+                WebRoute("PurStream", "/api/purstream/tv/$id/stream?season=$s&episode=$e"),
+                WebRoute("FStream", "/api/fstream/tv/$id/season/$s?episode=$e&resolve=1"),
+                WebRoute("Cpasmal", "/api/cpasmal/tv/$id/$s/$e?resolve=1"),
+                WebRoute("Wiflix", "/api/wiflix/tv/$id/$s?episode=$e&resolve=1"),
+                WebRoute("Coflix", "/api/tmdb/tv/$id?season=$s&episode=$e&resolve=1"),
+                WebRoute("Omega", "/api/omega/tv/$id?season=$s&episode=$e&resolve=1"),
+                WebRoute("J1F", "/api/j1f/tv/$id/season/$s?episode=$e&resolve=1"),
+                WebRoute("SwiftFlow", "/api/swiftflow/tv/$id/season/$s?episode=$e&resolve=1"),
+                WebRoute("VoirDrama", "/api/drama/tv/$id?season=$s&episode=$e&resolve=1"),
+                WebRoute("KissKH", "/api/kisskh/tv/$id?season=$s&episode=$e"),
+            )
+        }
+    }
+}
+
+/**
+ * The versions the Sokoul server (Mainapi) finds for a title: each source route is asked at once, one that fails or is
+ * slow is simply missing, and the others are listed as they come.
+ */
+class WebSources(
+    http: OkHttpClient,
+    private val baseUrl: () -> String?,
+    private val accessKey: () -> String?,
+    private val probe: StreamProbe,
+    private val localResolver: NativeEmbedResolver? = null,
+) {
+    private val client = http.newBuilder().callTimeout(CALL_SECONDS, TimeUnit.SECONDS).build()
+    private val json = Json { ignoreUnknownKeys = true; isLenient = true }
+
+    /** True when a server address is set: without it the sources are not even asked. */
+    fun configured(): Boolean = base() != null
+
+    private fun base(): String? = baseUrl()?.trim()?.trimEnd('/')?.takeIf { it.isNotEmpty() && (it.startsWith("http://") || it.startsWith("https://")) }
+
+    /** One list per source, in the order they answer. */
+    suspend fun find(request: PlayRequest, onSource: suspend (List<PlayVersion>) -> Unit) {
+        val base = base() ?: return
+        val routes = WebRoutes.of(request)
+        coroutineScope {
+            routes.map { route ->
+                async {
+                    val versions = runCatching { withTimeoutOrNull(SOURCE_MS) { ask(base, route, request) } }
+                        .getOrElse { if (it is CancellationException) throw it else null }.orEmpty()
+                    if (versions.isNotEmpty()) onSource(versions)
+                }
+            }.awaitAll()
+        }
+    }
+
+    private suspend fun ask(base: String, route: WebRoute, request: PlayRequest): List<PlayVersion> = withContext(Dispatchers.IO) {
+        val http = Request.Builder().url(base + route.path).header("Accept", "application/json").apply { accessKey()?.let { header("x-access-key", it) } }.build()
+        var retries = 0
+        val body: String
+        while (true) {
+            val response = client.newCall(http).awaitSourceResponse()
+            val pending = response.code == 202 && route.source == "KissKH"
+            val data = response.use { r -> if (r.code != 200 && !pending) return@withContext emptyList(); r.body?.string() }
+            if (pending && retries++ < 8) { delay(1_000L); continue }
+            if (pending || data == null) return@withContext emptyList()
+            body = data
+            break
+        }
+        val payload = runCatching { json.parseToJsonElement(body) }.getOrNull() ?: return@withContext emptyList()
+        WebParse.links(route.source, payload, request.episode, base, localResolver != null).mapIndexed { i, link -> version(link, i, request) }
+    }
+
+    private fun version(link: WebLink, index: Int, request: PlayRequest): PlayVersion {
+        val release = ReleaseName.parse(link.name)
+        val host = runCatching { URI(link.url).host }.getOrNull()
+        val referrer = link.headers["Referer"] ?: REFERRERS[link.source]
+        val userAgent = link.headers["User-Agent"]
+        return PlayVersion(
+            key = "web-${link.source.lowercase()}-$index-${link.url.hashCode().toUInt()}", origin = VersionOrigin.Web,
+            name = "${link.source} · ${link.name}", language = link.language, quality = release.quality, hdr = release.hdr,
+            // A link is not tested before it is chosen: Likely keeps it after what Real-Debrid has ready, before the unknown.
+            readiness = Readiness.Likely, providerHost = host, ripRank = WEB_RIP_RANK,
+            announcedAudio = release.audio,
+            open = { _, _ ->
+                if (link.localExtraction) return@PlayVersion localResolver!!.resolve(link.url, request.title)
+                failureOf(probe.check(link.url, userAgent, referrer), request.kind == "movie")?.let { throw PlayFailureException(it) }
+                StreamRequest(link.url, userAgent, referrer, request.title, live = false, mediaType = link.mediaType, externalSubtitles = link.subtitles)
+            },
+        )
+    }
+
+    private companion object {
+        const val CALL_SECONDS = 25L
+        /** A source slower than this is left out: the others must not wait for it. */
+        const val SOURCE_MS = 20_000L
+        const val WEB_RIP_RANK = 3
+        /** The CDN of PurStream refuses a request without the site as Referer (Movix sends the same header). */
+        val REFERRERS = mapOf("PurStream" to "https://purstream.mx/")
+    }
+}
+
+/** Cancel source HTTP work when a newer title/episode replaces this search. */
+internal suspend fun okhttp3.Call.awaitSourceResponse(): okhttp3.Response = suspendCancellableCoroutine { continuation ->
+    continuation.invokeOnCancellation { cancel() }
+    enqueue(object : okhttp3.Callback {
+        override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
+            if (continuation.isActive) continuation.resumeWith(Result.failure(e))
+        }
+        override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+            if (continuation.isActive) continuation.resume(response) { _, value, _ -> value.close() } else response.close()
+        }
+    })
+}
+
+/** The access key `API\seed-local-key.js` leaves on the PC that runs the server. Absent anywhere else (a TV types it in Settings). */
+object LocalServerKey {
+    fun read(): String? = runCatching {
+        val base = System.getenv("LOCALAPPDATA") ?: return null
+        java.io.File(base, "SokoulApi/access.key").takeIf { it.isFile }?.readText()?.trim()?.takeIf { it.isNotEmpty() }
+    }.getOrNull()
+}
