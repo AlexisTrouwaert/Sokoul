@@ -81,6 +81,12 @@ The same APK runs on Android TV and on phones: the activity detects the form fac
 
 `tools/adb-wifi-install.ps1 -PairAddress <ip>:<pairing-port>` runs these steps. The PC and the device must be on the same
 network.
+On macOS: `tools/adb-wifi-install.sh --pair <ip>:<pairing-port> --connect <ip>:<port>` (or `--connect <ip>` for an older
+Android TV on port 5555).
+
+To build the keys already typed in the PC app into a private APK, export them outside the checkout and point the build at
+them (works on Windows and macOS):
+`python3 tools/export-private-build-keys.py --output <file>`, then build with `SOKOUL_KEYS_FILE=<file>`.
 
 ## Backend (`API/`)
 
