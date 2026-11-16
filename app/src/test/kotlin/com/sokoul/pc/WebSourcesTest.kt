@@ -92,6 +92,29 @@ class WebSourcesTest {
     }
 
     @Test
+    fun `a server reached on loopback also owns relays on this computer's LAN address`() {
+        val signature = "c".repeat(43)
+        val url = "http://192.168.0.240:25569/cinep-proxy?url=https%3A%2F%2Fcdn.example%2Fmaster.m3u8&exp=2000000000&sig=$signature"
+        fun relay(candidate: String, base: String) =
+            WebParse.links("PurStream", Json.parseToJsonElement("""{"sources":[{"url":"$candidate","format":"m3u8"}]}"""), null, base)
+        val media = com.sokoul.pc.playback.sources.SourceMedia
+        val previous = media.ownAddress
+        media.ownAddress = { it.isLoopbackAddress || it.hostAddress == "192.168.0.240" }
+        try {
+            assertEquals(1, relay(url, "http://127.0.0.1:25565").size)
+            assertEquals(1, relay(url, "http://localhost:25565").size)
+            // another computer of the network is not this server
+            assertTrue(relay(url.replace("192.168.0.240", "192.168.0.99"), "http://127.0.0.1:25565").isEmpty())
+            // a name is never resolved to be trusted
+            assertTrue(relay(url.replace("192.168.0.240", "attacker.example"), "http://127.0.0.1:25565").isEmpty())
+            // a server reached by its network address keeps the exact-host rule
+            assertTrue(relay(url, "http://192.168.0.50:25565").isEmpty())
+        } finally {
+            media.ownAddress = previous
+        }
+    }
+
+    @Test
     fun `opaque signed native relay preserves format headers and subtitle metadata`() {
         val signature = "b".repeat(43)
         val url = "http://localhost:25569/native-proxy?id=fixture&exp=2000000000&sig=$signature"

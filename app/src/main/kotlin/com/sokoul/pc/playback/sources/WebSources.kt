@@ -151,10 +151,34 @@ internal object SourceMedia {
         key to value
     }.toMap()
     private fun port(uri: URI) = uri.port.takeIf { it >= 0 } ?: if (uri.scheme.equals("https", true)) 443 else 80
+
+    /** The IP literal of a host, or null for a name: names are never resolved here. "localhost" is the loopback. */
+    private fun literal(host: String): java.net.InetAddress? {
+        val bare = host.removePrefix("[").removeSuffix("]")
+        if (bare.equals("localhost", true)) return java.net.InetAddress.getLoopbackAddress()
+        if (!Regex("""[0-9.]+|[0-9a-fA-F:]*:[0-9a-fA-F:.]*""").matches(bare)) return null
+        return runCatching { java.net.InetAddress.getByName(bare) }.getOrNull()
+    }
+
+    /** True when [address] is one of this computer's own addresses. Replaceable in tests. */
+    internal var ownAddress: (java.net.InetAddress) -> Boolean = { address ->
+        address.isLoopbackAddress || runCatching { java.net.NetworkInterface.getByInetAddress(address) != null }.getOrDefault(false)
+    }
+
+    /**
+     * Same server: the same host, or, when the app reaches the server on this computer (loopback), another address of
+     * this computer. The local backend announces its LAN address for TVs and phones while this PC talks to 127.0.0.1.
+     */
+    private fun sameServer(media: URI, server: URI): Boolean {
+        if (media.host.equals(server.host, true)) return true
+        if (literal(server.host)?.isLoopbackAddress != true) return false
+        return literal(media.host)?.let(ownAddress) == true
+    }
+
     fun relay(url: String, serverBase: String?): Boolean {
         val media = uri(url) ?: return false
         val server = serverBase?.let(::uri) ?: return false
-        if (!media.scheme.equals(server.scheme, true) || !media.host.equals(server.host, true)) return false
+        if (!media.scheme.equals(server.scheme, true) || !sameServer(media, server)) return false
         if (port(media) != port(server) && port(media) != 25569) return false
         if (media.path !in relays) return false
         val q = query(media)
