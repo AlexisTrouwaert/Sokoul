@@ -54,6 +54,8 @@ import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Forward30
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Pause
@@ -160,6 +162,8 @@ fun PlayerScreen(
     prefs: com.sokoul.desktop.data.DesktopPrefs? = null,
     reminders: com.sokoul.pc.live.Reminders? = null,
     onToggleFullscreen: () -> Unit = {},
+    /** Whether the PC window is full screen; null hides the full-screen button (TV, phone, tests). */
+    fullscreen: Boolean? = null,
     nextEpisode: suspend (PlayRequest) -> PlayRequest? = { null },
     episodes: EpisodeSource? = null,
     /** What the page wants to add over the picture; inside the player, so that the remote can reach it. */
@@ -267,6 +271,12 @@ fun PlayerScreen(
     val failure = (phase as? Phase.Failed)?.failure
     val playingNow = phase is Phase.Playing
     val status = player?.status?.collectAsState()?.value
+    // The screen stays awake while a video plays, and may sleep again once it is paused or closed.
+    val awake = playingNow && status != null && !status.paused
+    DisposableEffect(awake) {
+        com.sokoul.pc.Platform.keepAwake(awake)
+        onDispose { com.sokoul.pc.Platform.keepAwake(false) }
+    }
     // libVLC can expose the first decoded frame before the session phase catches up from Opening/Tuning to Playing.
     // Do not cover a visible picture with a stale "0 %" loading message in that small transition window.
     val line = phaseLine(phase, status?.bufferPercent ?: 0, videoReady = status?.video != null)
@@ -719,6 +729,8 @@ fun PlayerScreen(
                     prefs = prefs,
                     format = format,
                     party = party,
+                    fullscreen = fullscreen,
+                    onToggleFullscreen = onToggleFullscreen,
                     onFormat = {
                         format = it
                         prefs?.videoFormat = it
@@ -907,6 +919,8 @@ private fun Overlay(
     format: com.sokoul.desktop.data.VideoFormat = com.sokoul.desktop.data.VideoFormat.FIT,
     onFormat: (com.sokoul.desktop.data.VideoFormat) -> Unit = {},
     party: com.sokoul.pc.party.WatchParty? = null,
+    fullscreen: Boolean? = null,
+    onToggleFullscreen: () -> Unit = {},
 ) {
     val playing = session.phase is Phase.Playing
     // A live drawer covers a whole side of the screen: the title and the controls fade out under it instead of showing
@@ -986,6 +1000,10 @@ private fun Overlay(
                         if (session.isLiveReplay) PillButton(tr(Text.BackToLive), session::backToLive, Modifier.testTag("player-back-to-live"))
                         else if (session.live != null && player != null && status != null && (status.liveDelayMs > 0 || status.paused)) {
                             PillButton(tr(Text.BackToLive), player::backToLive, Modifier.testTag("player-back-to-live"))
+                        }
+                        if (fullscreen != null) {
+                            val label = if (fullscreen) com.sokoul.pc.data.L("Exit full screen", "Quitter le plein écran") else com.sokoul.pc.data.L("Full screen", "Plein écran")
+                            CircleControl(if (fullscreen) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen, false, "player-fullscreen", label.text(), null, onClick = onToggleFullscreen)
                         }
                     }
                 }

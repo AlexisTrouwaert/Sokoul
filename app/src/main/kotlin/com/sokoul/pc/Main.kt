@@ -123,6 +123,7 @@ fun main() {
             }
         }
         ready?.deps?.toggleFullscreen = toggleFullscreen
+        ready?.deps?.isFullscreen = { windowState.placement == androidx.compose.ui.window.WindowPlacement.Fullscreen }
         Window(
             onCloseRequest = {
                 ready?.let {
