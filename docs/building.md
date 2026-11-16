@@ -43,7 +43,13 @@ tools/fetch-vlc.sh       # once: downloads libVLC into app/app-resources/macos/v
 tools/run-desktop.sh     # run from sources; extra arguments go to Gradle
 ```
 
-`Sokoul.command`, at the root, does the same on a Finder double-click. `tools/fetch-vlc.sh` downloads the official
+`Sokoul.command`, at the root, does the same on a Finder double-click.
+
+To install it as a regular Mac app, `tools/install-desktop.sh` builds `Sokoul PC.app` (Java runtime and libVLC inside) and
+copies it to `/Applications` (or `~/Applications`), keeping the previous version in a temporary folder. Run it again after
+pulling changes. Compose refuses to package with Homebrew's JDK, so packaging needs another vendor's JDK 17+ (for
+example `brew install --cask corretto@17`); the script picks it. On macOS, libVLC enters the bundle through Compose's app
+resources (`build-output/app/vlc-app-resources/macos/vlc`) before the bundle is signed. `tools/fetch-vlc.sh` downloads the official
 VideoLAN disk image matching the Mac (`vlc-3.0.21-arm64.dmg` or `-intel64.dmg`), checks its published SHA-256 and keeps
 `lib/` and `plugins/` from `VLC.app/Contents/MacOS`. Without it, the app also uses an installed `/Applications/VLC.app`.
 `SOKOUL_VLC_DIR` can point at another folder with the same layout. The scripts pick a JDK with `/usr/libexec/java_home`
