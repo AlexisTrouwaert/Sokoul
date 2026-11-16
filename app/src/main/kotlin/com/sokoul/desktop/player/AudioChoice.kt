@@ -55,6 +55,13 @@ object AudioChoice {
         tracks.firstOrNull { matches(preferred, it.second) }?.first
             ?: tracks.firstOrNull { matches("en", it.second) }?.first
 
+    /**
+     * Version originale (VOSTFR, VO) : dans un fichier MULTI, la piste qui n'est pas française. Les flux MULTI marquent
+     * souvent la piste française par défaut, que libVLC prend alors. null = pas de piste française, ou rien d'autre.
+     */
+    fun pickOriginal(tracks: List<Pair<Int, String>>): Int? =
+        if (!hasFrench(tracks)) null else tracks.firstOrNull { !matches("fr", it.second) }?.first
+
     /** Sous-titres par défaut : la piste de la langue choisie, sinon aucune (null = laisser tel quel). */
     fun pickSubtitle(tracks: List<Pair<Int, String>>, lang: String): Int? =
         if (lang.isBlank()) null else tracks.firstOrNull { it.first >= 0 && matches(lang, it.second) }?.first
