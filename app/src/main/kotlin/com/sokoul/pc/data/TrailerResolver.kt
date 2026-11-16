@@ -73,8 +73,11 @@ class YtDlp(private val executable: () -> String? = ::locate, private val timeou
 
         fun locate(): String? {
             System.getenv("YTDLP_PATH")?.takeIf { File(it).isFile }?.let { return it }
-            val name = "yt-dlp.exe"
+            val windows = System.getProperty("os.name").orEmpty().startsWith("Windows")
+            val name = if (windows) "yt-dlp.exe" else "yt-dlp"
             System.getenv("PATH")?.split(File.pathSeparator)?.map { File(it, name) }?.firstOrNull { it.isFile }?.let { return it.path }
+            // An app opened from the Finder does not get the shell's PATH: look where Homebrew installs it.
+            if (!windows) return listOf("/opt/homebrew/bin", "/usr/local/bin").map { File(it, name) }.firstOrNull { it.canExecute() }?.path
             // winget's PATH change only reaches processes started after the install.
             val packages = System.getenv("LOCALAPPDATA")?.let { File(it, "Microsoft/WinGet/Packages") } ?: return null
             return packages.listFiles { f -> f.name.startsWith("yt-dlp.yt-dlp") }?.map { File(it, name) }?.firstOrNull { it.isFile }?.path

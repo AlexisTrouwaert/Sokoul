@@ -330,10 +330,16 @@ internal suspend fun okhttp3.Call.awaitSourceResponse(): okhttp3.Response = susp
     })
 }
 
-/** The access key `API\seed-local-key.js` leaves on the PC that runs the server. Absent anywhere else (a TV types it in Settings). */
+/**
+ * The access key `API\seed-local-key.js` leaves on the PC that runs the server. Absent anywhere else (a TV types it in Settings).
+ * Windows: `%LOCALAPPDATA%\SokoulApi`; macOS: `~/Library/Application Support/SokoulApi` (set by `API/start-backend.sh`).
+ */
 object LocalServerKey {
     fun read(): String? = runCatching {
-        val base = System.getenv("LOCALAPPDATA") ?: return null
+        val base = System.getenv("LOCALAPPDATA")
+            ?: System.getProperty("user.home")?.takeIf { System.getProperty("os.name").orEmpty().lowercase().startsWith("mac") }
+                ?.let { "$it/Library/Application Support" }
+            ?: return null
         java.io.File(base, "SokoulApi/access.key").takeIf { it.isFile }?.readText()?.trim()?.takeIf { it.isNotEmpty() }
     }.getOrNull()
 }

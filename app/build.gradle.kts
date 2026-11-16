@@ -76,7 +76,10 @@ dependencies {
 }
 
 // libVLC is supplied explicitly by the build environment and bundled into the distribution.
-val vlcDir = System.getenv("SOKOUL_VLC_DIR")?.let(::File) ?: projectDir.resolve("app-resources/windows/vlc")
+// Windows: tools/fetch-vlc.ps1 fills app-resources/windows/vlc. macOS: tools/fetch-vlc.sh fills app-resources/macos/vlc.
+val isMacHost = System.getProperty("os.name").lowercase().startsWith("mac")
+val vlcDir = System.getenv("SOKOUL_VLC_DIR")?.let(::File)
+    ?: projectDir.resolve(if (isMacHost) "app-resources/macos/vlc" else "app-resources/windows/vlc")
 tasks.withType<JavaExec>().configureEach {
     if (vlcDir.isDirectory) environment("SOKOUL_VLC_DIR", vlcDir.path)
 }

@@ -59,8 +59,12 @@ into such a file without printing them.
 
 ### Backend
 
-Each service reads its own `.env` (copy the `.env.example` next to it). `start-backend.ps1` passes the file through
-`SOKOUL_ENV_FILE`. `SOKOUL_MAINAPI_CONTEXT`, `SOKOUL_PROXY_CONTEXT`, `SOKOUL_WATCHPARTY_CONTEXT` and `SOKOUL_WEB_CONTEXT`
+Run directly (without Docker), each service reads its own `.env` (copy the `.env.example` next to it). In Docker, those
+files are left out of the images: Mainapi and proxiesembed read only `local.env` (`%LOCALAPPDATA%\SokoulApi` on Windows,
+`~/Library/Application Support/SokoulApi` on macOS), which `start-backend.ps1` / `start-backend.sh` pass through
+`SOKOUL_ENV_FILE`. On macOS, `start-backend.sh` also adds the keys of `API/local.env.template` that `local.env` lacks
+(TMDB, debrid, Xtream, optional sources, and personal-setup switches that turn off Discord reports and payments); values
+already in `local.env` are never changed. `SOKOUL_MAINAPI_CONTEXT`, `SOKOUL_PROXY_CONTEXT`, `SOKOUL_WATCHPARTY_CONTEXT` and `SOKOUL_WEB_CONTEXT`
 override the Docker build contexts in `API/docker-compose.yml`.
 
 ## Not in the repository

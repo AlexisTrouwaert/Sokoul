@@ -8,8 +8,8 @@ caches stay in `%TEMP%` so that OneDrive never syncs them. The Windows bootstrap
 
 | For | Needs |
 | --- | --- |
-| PC app | Windows 10/11 x64, JDK 17+, libVLC 3.0.21 (see below) |
-| TV / phone app | Android SDK (`ANDROID_HOME`, default `%LOCALAPPDATA%\Android\Sdk`), platform 35 |
+| PC app | Windows 10/11 x64 or macOS (arm64/x64), JDK 17+, libVLC 3.0.21 (see below) |
+| TV / phone app | Android SDK (`ANDROID_HOME`, default `%LOCALAPPDATA%\Android\Sdk`, or `~/Library/Android/sdk` on macOS), platform 35 |
 | Backend | Docker Desktop (MySQL, Redis), or Node.js 20+ and Python 3.11+ for running services directly |
 | Extension and extractor bundle | Node.js 20+ |
 
@@ -33,6 +33,24 @@ another libVLC folder.
 
 libVLC is not versioned. `tools/fetch-vlc.ps1` downloads the official VideoLAN archive (`vlc-3.0.21-win64.zip`), checks its
 published SHA-256 and keeps `libvlc.dll`, `libvlccore.dll` and `plugins/`.
+
+## PC app (macOS)
+
+Needs a JDK 17+ (`brew install openjdk@17`) and Node.js 20+ (`brew install node`). Apple silicon and Intel are supported.
+
+```bash
+tools/fetch-vlc.sh       # once: downloads libVLC into app/app-resources/macos/vlc (run-desktop.sh does it if missing)
+tools/run-desktop.sh     # run from sources; extra arguments go to Gradle
+```
+
+`Sokoul.command`, at the root, does the same on a Finder double-click. `tools/fetch-vlc.sh` downloads the official
+VideoLAN disk image matching the Mac (`vlc-3.0.21-arm64.dmg` or `-intel64.dmg`), checks its published SHA-256 and keeps
+`lib/` and `plugins/` from `VLC.app/Contents/MacOS`. Without it, the app also uses an installed `/Applications/VLC.app`.
+`SOKOUL_VLC_DIR` can point at another folder with the same layout. The scripts pick a JDK with `/usr/libexec/java_home`
+unless `JAVA_HOME` is set.
+
+On macOS the app keeps its data in `~/.sokoul/SokoulPC`, and the local backend's settings and access key in
+`~/Library/Application Support/SokoulApi`. Trailers need `yt-dlp` (`brew install yt-dlp`).
 
 ## Android TV and phone app
 
@@ -66,6 +84,9 @@ copy Mainapi\.env.example Mainapi\.env           # then fill in the values
 copy proxiesembed\.env.example proxiesembed\.env
 powershell -NoProfile -File start-backend.ps1     # MySQL, Redis, Mainapi, proxiesembed and watch party in Docker
 ```
+
+On macOS: `API/start-backend.sh` (options `--status`, `--stop`, `--with-web`, `--lan-address <ip>`), or a double-click on
+`API/Start Backend.command`. It installs the npm dependencies the Node helpers need on first run.
 
 | Service | Port | Source |
 | --- | --- | --- |

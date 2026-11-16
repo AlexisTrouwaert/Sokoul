@@ -438,23 +438,45 @@ class DesktopPlayer private constructor(private val factory: MediaPlayerFactory)
             else -> c.uppercase()
         }
 
-        /** Dossier de libVLC : ressources de l'app installée, ou `desktop/resources/windows/vlc` en développement. */
+        private val isMac = System.getProperty("os.name").orEmpty().lowercase().startsWith("mac")
+
+        /**
+         * Dossier de libVLC : ressources de l'app installée, ou `app/app-resources/<os>/vlc` en développement.
+         * Windows : `libvlc.dll` et `plugins/` côte à côte. macOS : la disposition de `VLC.app/Contents/MacOS`
+         * (`lib/libvlc.dylib` et `plugins/`), qu'on prend aussi directement dans VLC.app s'il est installé.
+         */
         fun vlcDir(): File? {
+            val home = System.getProperty("user.home")
             val candidates = listOfNotNull(
                 System.getenv("SOKOUL_VLC_DIR")?.takeIf { it.isNotBlank() }?.let(::File),
                 System.getProperty("compose.application.resources.dir")?.let { File(it, "vlc") },
-                File("app/app-resources/windows/vlc"),
-                File("resources/windows/vlc"),
+                File(if (isMac) "app/app-resources/macos/vlc" else "app/app-resources/windows/vlc"),
+                File(if (isMac) "resources/macos/vlc" else "resources/windows/vlc"),
                 File("desktop/resources/windows/vlc"),
-            )
-            return candidates.firstOrNull { File(it, "libvlc.dll").isFile }
+            ) + if (isMac) listOf(File("/Applications/VLC.app/Contents/MacOS"), File(home, "Applications/VLC.app/Contents/MacOS")) else emptyList()
+            return candidates.firstOrNull { libDir(it) != null }
         }
+
+        /** Le dossier qui contient libvlc lui-même (`dir` sous Windows, `dir/lib` sous macOS). */
+        private fun libDir(dir: File): File? =
+            if (isMac) listOf(File(dir, "lib"), dir).firstOrNull { File(it, "libvlc.dylib").isFile }
+            else dir.takeIf { File(it, "libvlc.dll").isFile }
 
         /** Crée le lecteur, ou null si libVLC est introuvable (écran d'explication à la place). */
         fun create(): DesktopPlayer? {
             val dir = vlcDir() ?: return null
-            NativeLibrary.addSearchPath(RuntimeUtil.getLibVlcLibraryName(), dir.absolutePath)
-            NativeLibrary.addSearchPath(RuntimeUtil.getLibVlcCoreLibraryName(), dir.absolutePath)
+            val lib = libDir(dir) ?: return null
+            NativeLibrary.addSearchPath(RuntimeUtil.getLibVlcLibraryName(), lib.absolutePath)
+            NativeLibrary.addSearchPath(RuntimeUtil.getLibVlcCoreLibraryName(), lib.absolutePath)
+            if (isMac) runCatching {
+                // libvlc.dylib n'a pas de rpath : libvlccore doit déjà être chargé pour que dyld résolve @rpath/libvlccore.
+                NativeLibrary.getInstance(RuntimeUtil.getLibVlcCoreLibraryName())
+                // Sous macOS libVLC ne trouve pas seul ses plugins hors de VLC.app : on lui donne le chemin.
+                val plugins = listOf(File(dir, "plugins"), File(lib.parentFile, "plugins")).firstOrNull { it.isDirectory }
+                if (plugins != null && System.getenv("VLC_PLUGIN_PATH").isNullOrBlank()) {
+                    uk.co.caprica.vlcj.binding.lib.LibC.INSTANCE.setenv("VLC_PLUGIN_PATH", plugins.absolutePath, 1)
+                }
+            }
             return runCatching {
                 DesktopPlayer(MediaPlayerFactory(null as NativeDiscovery?, "--no-video-title-show", "--quiet", "--no-snapshot-preview", "--no-osd",
                     // piste française d'abord (versions MULTI) ; jamais de sous-titres imposés : on les choisit dans la barre
