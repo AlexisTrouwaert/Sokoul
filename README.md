@@ -34,6 +34,15 @@ powershell -NoProfile -File tools/build-tv.ps1
 powershell -NoProfile -File API/start-backend.ps1
 ```
 
+On macOS (Apple silicon or Intel, JDK 17+ and Node.js 20+):
+
+```bash
+tools/run-desktop.sh            # PC app; downloads libVLC on first run (or double-click Sokoul.command)
+tools/install-desktop.sh        # builds "Sokoul PC.app" and installs it in Applications
+tools/build-tv.sh               # Android TV / phone APK (needs the Android SDK)
+API/start-backend.sh            # Backend (needs Docker Desktop; or double-click "API/Start Backend.command")
+```
+
 Keys (TMDB, Real-Debrid…) are never in the repository: type them in **Settings > Accounts**, or see
 [docs/configuration.md](docs/configuration.md).
 

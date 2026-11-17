@@ -76,13 +76,19 @@ dependencies {
 }
 
 // libVLC is supplied explicitly by the build environment and bundled into the distribution.
-val vlcDir = System.getenv("SOKOUL_VLC_DIR")?.let(::File) ?: projectDir.resolve("app-resources/windows/vlc")
+// Windows: tools/fetch-vlc.ps1 fills app-resources/windows/vlc. macOS: tools/fetch-vlc.sh fills app-resources/macos/vlc.
+val isMacHost = System.getProperty("os.name").lowercase().startsWith("mac")
+val vlcDir = System.getenv("SOKOUL_VLC_DIR")?.let(::File)
+    ?: projectDir.resolve(if (isMacHost) "app-resources/macos/vlc" else "app-resources/windows/vlc")
 tasks.withType<JavaExec>().configureEach {
     if (vlcDir.isDirectory) environment("SOKOUL_VLC_DIR", vlcDir.path)
 }
 
 // libVLC loads every plugin at startup, so plugins that film playback never uses only slow the launch down.
 val prunedVlc = layout.buildDirectory.dir("vlc-pruned")
+// macOS: libVLC enters the .app through Compose's app resources (<root>/macos/vlc), before the bundle is signed;
+// files added to a finished .app would break its signature.
+val macVlcResources = layout.buildDirectory.dir("vlc-app-resources")
 val pruneVlc by tasks.registering(Sync::class) {
     from(vlcDir) {
         exclude(
@@ -91,14 +97,18 @@ val pruneVlc by tasks.registering(Sync::class) {
             "plugins/meta_engine/**", "plugins/control/**", "plugins/logger/**",
         )
     }
-    into(prunedVlc.map { it.dir("vlc") })
+    into(if (isMacHost) macVlcResources.map { it.dir("macos/vlc") } else prunedVlc.map { it.dir("vlc") })
 }
 val bundleVlcResources by tasks.registering(Sync::class) {
     dependsOn(pruneVlc)
     from(prunedVlc.map { it.dir("vlc") })
     into(layout.buildDirectory.dir("compose/binaries/main/app/Sokoul PC/app/resources/vlc"))
 }
-tasks.matching { it.name == "createDistributable" }.configureEach { finalizedBy(bundleVlcResources) }
+if (isMacHost) {
+    tasks.matching { it.name == "prepareAppResources" }.configureEach { dependsOn(pruneVlc) }
+} else {
+    tasks.matching { it.name == "createDistributable" }.configureEach { finalizedBy(bundleVlcResources) }
+}
 
 compose.desktop {
     application {
@@ -108,10 +118,16 @@ compose.desktop {
             packageName = "Sokoul PC"
             packageVersion = "1.0.0"
             vendor = "Sokoul"
-            // libVLC is bundled into the distribution by bundleVlcResources.
+            // libVLC is bundled into the distribution by bundleVlcResources (Windows) or the app resources (macOS).
             modules("java.instrument", "java.sql", "java.naming", "jdk.crypto.ec", "jdk.unsupported", "jdk.localedata", "jdk.httpserver")
+            if (isMacHost) appResourcesRootDir.set(macVlcResources)
             windows {
                 iconFile.set(project.layout.projectDirectory.file("icon/sokoul.ico"))
+            }
+            macOS {
+                iconFile.set(project.layout.projectDirectory.file("icon/sokoul.icns"))
+                bundleID = "com.sokoul.pc"
+                dockName = "Sokoul"
             }
         }
     }

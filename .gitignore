@@ -29,8 +29,9 @@ api key.txt
 *.pem
 **/generated/keys/
 
-# ---- Third-party binaries fetched by tools/fetch-vlc.ps1 ----
+# ---- Third-party binaries fetched by tools/fetch-vlc.ps1 / tools/fetch-vlc.sh ----
 /app/app-resources/windows/vlc/
+/app/app-resources/macos/vlc/
 
 # ---- Local tooling state ----
 

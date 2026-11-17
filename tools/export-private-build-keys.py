@@ -14,7 +14,12 @@ def main():
     checkout = Path(__file__).resolve().parent.parent
     if output == checkout or checkout in output.parents:
         parser.error("Private keys must be written outside the source checkout.")
-    database = Path(os.environ["APPDATA"]) / "SokoulPC" / "sokoul.db"
+    # Same folders as AppDirs (app) and start-backend (API): %APPDATA% / %LOCALAPPDATA% on Windows, else ~/.sokoul and
+    # ~/Library/Application Support.
+    appdata = Path(os.environ["APPDATA"]) if "APPDATA" in os.environ else Path.home() / ".sokoul"
+    localappdata = (Path(os.environ["LOCALAPPDATA"]) if "LOCALAPPDATA" in os.environ
+                    else Path.home() / "Library" / "Application Support")
+    database = appdata / "SokoulPC" / "sokoul.db"
     allowed = {"tmdb", "realdebrid", "omdb", "fanart", "tvdb", "tvmaze", "watchmode", "tastedive", "motn", "opensubtitles", "subdl"}
     with sqlite3.connect(database.as_uri() + "?mode=ro", uri=True) as connection:
         values = {key.removeprefix("api_key_"): value.strip()
@@ -27,7 +32,7 @@ def main():
         parsed = urlsplit(args.tv_backend)
         if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
             parser.error("Supply a valid Mainapi URL without credentials.")
-        key = Path(os.environ["LOCALAPPDATA"]) / "SokoulApi" / "access.key"
+        key = localappdata / "SokoulApi" / "access.key"
         values["mainapi"] = key.read_text(encoding="utf-8").strip()
         values["mainapi_url"] = args.tv_backend.rstrip("/")
     def escape(value):
