@@ -56,11 +56,16 @@ object AudioChoice {
             ?: tracks.firstOrNull { matches("en", it.second) }?.first
 
     /**
-     * Version originale (VOSTFR, VO) : dans un fichier MULTI, la piste qui n'est pas française. Les flux MULTI marquent
-     * souvent la piste française par défaut, que libVLC prend alors. null = pas de piste française, ou rien d'autre.
+     * Version originale (VOSTFR, VO). D'abord une piste que le fichier nomme elle-même originale (« Inglés [Original] »,
+     * « English (VO) »), le seul indice dans un doublage étranger sans français (espagnol + anglais). Sinon, dans un
+     * MULTI, la piste qui n'est pas française : ces flux marquent souvent la française par défaut, que libVLC prend alors.
+     * null = rien qui désigne l'originale : on garde le choix de libVLC.
      */
     fun pickOriginal(tracks: List<Pair<Int, String>>): Int? =
-        if (!hasFrench(tracks)) null else tracks.firstOrNull { !matches("fr", it.second) }?.first
+        tracks.firstOrNull { originalLabel.containsMatchIn(it.second) && !matches("fr", it.second) }?.first
+            ?: if (!hasFrench(tracks)) null else tracks.firstOrNull { !matches("fr", it.second) }?.first
+
+    private val originalLabel = Regex("""\b(original|originale|VO|VOST)\b""", RegexOption.IGNORE_CASE)
 
     /** Sous-titres par défaut : la piste de la langue choisie, sinon aucune (null = laisser tel quel). */
     fun pickSubtitle(tracks: List<Pair<Int, String>>, lang: String): Int? =
