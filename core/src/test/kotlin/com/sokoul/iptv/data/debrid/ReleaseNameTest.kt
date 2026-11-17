@@ -4,10 +4,22 @@ import com.sokoul.iptv.domain.AudioLanguage
 import com.sokoul.iptv.domain.VideoQuality
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 /** Langue et définition lues dans de vrais noms de versions (spec `release-name-parsing`). */
 class ReleaseNameTest {
+    @Test
+    fun a_foreign_dub_beside_the_original_is_marked() {
+        // Torrentio titles seen for The Handmaid's Tale S04E05 (2026-11-17).
+        assertTrue(ReleaseName.parse("The.Handmaids.Tale.2017.s01.a.s06.1080p.WEB-DL.H.264.Dual.YG⭐\nS04/S04E005_Episode 5.mkv\n👤 43 💾 223.61 MB ⚙️ ThePirateBay\nDual Audio").dub)
+        assertTrue(ReleaseName.parse("El cuento de la criada (2017) [tmdbid-69478]\nSeason 04/El cuento de la criada - S04E05 - Chicago - [WEBRip-1080p] - [spa, eng] - LasCositas.mkv\n👤 1 💾 2.27 GB ⚙️ EXT\n🇬🇧 / 🇪🇸").dub)
+        assertFalse("plain release", ReleaseName.parse("The.Handmaids.Tale.S04E05.1080p.WEB.H264-GGWP").dub)
+        assertFalse("French with the original", ReleaseName.parse("The.Handmaids.Tale.S04E05.MULTi.1080p.WEB.DDP5.1.H264-FRATERNiTY\nMulti Audio / 🇫🇷 / 🇬🇧").dub)
+        assertFalse("one other language may be the original", ReleaseName.parse("Squid.Game.S01E01.1080p.WEB\n🇰🇷").dub)
+    }
+
     @Test fun `DUAL sans francais - langue inconnue (version turque et anglaise)`() {
         // nom réel classé « MULTI 4K » sur le PC : le film démarrait en turc
         val r = ReleaseName.parse("Inception.2010.UHD.Bluray.1080p.DUAL.x264-HDM.mkv")

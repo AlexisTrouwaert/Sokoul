@@ -53,8 +53,8 @@ object VersionRanking {
         expectedMinutes: Int? = null,
     ): List<PlayVersion> {
         val audio = audioOrder(prefs.audio, frenchSystem)
-        // Two other languages or more named ("[spa, eng]", "ITA.ENG", flags): a foreign dub with the original beside it.
-        fun dub(v: PlayVersion) = v.announcedAudio.count { it != "FR" } >= 2
+        // "Dual Audio", or two other languages named ("[spa, eng]", "ITA.ENG", flags): a foreign dub beside the original.
+        fun dub(v: PlayVersion) = v.foreignDub || v.announcedAudio.count { it != "FR" } >= 2
         // Such a file is not proof of the original, even if a past viewing remembered it as VO.
         fun language(v: PlayVersion) = (fact(v)?.language ?: v.language).takeUnless { it == AudioLanguage.VO && dub(v) }
         fun exact(v: PlayVersion) = language(v)?.let(audio::indexOf)?.takeIf { it >= 0 } ?: audio.size

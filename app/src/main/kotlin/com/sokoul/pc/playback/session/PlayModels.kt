@@ -59,6 +59,8 @@ class PlayVersion(
     val anime: Boolean = false,
     /** ISO audio codes explicitly announced by this release, distinct from player-verified tracks. */
     val announcedAudio: List<String> = emptyList(),
+    /** A foreign dub beside the original and no French ("Dual Audio", "spa, eng"): not the original alone. */
+    val foreignDub: Boolean = false,
     /** Undoes what [open] added to an account, when this version got its link but another one is played. */
     val discard: suspend () -> Unit = {},
     val open: suspend (keep: Boolean, onProgress: (Transfer) -> Unit) -> StreamRequest,
