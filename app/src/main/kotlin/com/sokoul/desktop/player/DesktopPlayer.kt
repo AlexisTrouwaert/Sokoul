@@ -379,7 +379,9 @@ class DesktopPlayer private constructor(private val factory: MediaPlayerFactory)
         val audio = player.audio().trackDescriptions().filter { it.id() >= 0 }.map { it.id() to it.description() }
         // les pistes arrivent une à une : la langue est revue à chaque ajout, tant que l'utilisateur n'a rien choisi
         val p = prefs()
-        if (!audioChosenByUser && p.audioLanguage.isNotBlank()) AudioChoice.pick(audio, p.audioLanguage)?.takeIf { it != player.audio().track() }?.let { id ->
+        // langue vide = version originale : la piste non française d'un MULTI, pas celle marquée par défaut (souvent la VF)
+        val wanted = if (p.audioLanguage.isNotBlank()) AudioChoice.pick(audio, p.audioLanguage) else AudioChoice.pickOriginal(audio)
+        if (!audioChosenByUser) wanted?.takeIf { it != player.audio().track() }?.let { id ->
             player.submit { if (!released) { player.audio().setTrack(id); refreshTracks() } }
         }
         // sous-titres par défaut des Réglages : posés une fois, dès qu'une piste de la langue apparaît
