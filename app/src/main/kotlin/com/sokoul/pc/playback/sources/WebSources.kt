@@ -323,6 +323,7 @@ class WebSources(
             // A link is not tested before it is chosen: Likely keeps it after what Real-Debrid has ready, before the unknown.
             readiness = Readiness.Likely, providerHost = host, ripRank = WEB_RIP_RANK,
             announcedAudio = release.audio,
+            foreignDub = release.dub,
             open = { _, _ ->
                 if (link.localExtraction) return@PlayVersion localResolver!!.resolve(link.url, request.title)
                 failureOf(probe.check(link.url, userAgent, referrer), request.kind == "movie")?.let { throw PlayFailureException(it) }

@@ -74,6 +74,8 @@ object SourceRules {
         return when {
             "fr" in known && known.size > 1 -> AudioLanguage.MULTI
             "fr" in known -> AudioLanguage.VF
+            // Spanish and English, Italian and English: a dub beside the original, and which one is original is unknown.
+            known.size > 1 -> null
             else -> AudioLanguage.VO
         }
     }

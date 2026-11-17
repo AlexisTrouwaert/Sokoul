@@ -27,6 +27,11 @@ data class Release(
     val episode: Int? = null,
     /** Langues audio lues dans le nom (codes ISO : « FR », « EN », « IT »…), dans l'ordre trouvé ; vide = non indiqué. */
     val audio: List<String> = emptyList(),
+    /**
+     * Doublage étranger à côté de la VO, sans français : « Dual Audio » (langue locale + anglais) ou deux autres langues
+     * annoncées (« spa, eng », « ITA.ENG »). Une telle version n'est pas la VO seule.
+     */
+    val dub: Boolean = false,
 )
 
 /**
@@ -72,6 +77,8 @@ object ReleaseName {
             season = episodeTag(all)?.first,
             episode = episodeTag(all)?.second,
             audio = audioCodes(audioText, audioTokens),
+            dub = !hasFrenchTag(audioText, audioTokens) &&
+                (Regex("(?i)\\bdual\\b").containsMatchIn(audioText) || audio(audioText).size >= 2),
         )
     }
 

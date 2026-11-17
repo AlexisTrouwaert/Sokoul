@@ -333,6 +333,7 @@ class RealSources(
             community = s.community,
             anime = s.verdict != null,
             announcedAudio = s.release.audio,
+            foreignDub = s.release.dub,
             frenchVariantRank = when (s.release.frenchVariant) { "TRUEFRENCH", "VFF" -> 0; null -> 1; else -> 2 },
             discard = { s.infoHash?.let { transfers.forget(it) } },
             open = { keep, onProgress ->
@@ -404,6 +405,7 @@ class RealSources(
             key = key, origin = VersionOrigin.Iptv, name = name, language = release.language, quality = release.quality, hdr = release.hdr,
             readiness = Readiness.Ready, ripRank = UNKNOWN_RIP_RANK + 1,
             announcedAudio = release.audio,
+            foreignDub = release.dub,
             open = { _, _ ->
                 if (com.sokoul.desktop.data.DesktopRecorder.connectionInUse.get()) throw PlayFailureException(PlayFailure.ConnectionsFull(1, 1))
                 open()

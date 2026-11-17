@@ -770,6 +770,39 @@ class PlaybackTest {
         PlayVersion(key, origin, key, language, quality, sizeBytes = size, readiness = readiness, announcedAudio = if (language == AudioLanguage.MULTI) listOf("FR", "EN") else emptyList()) { _, _ -> StreamRequest(key, null, null, "t", live = false) }
 
     @Test
+    fun wanting_the_original_a_foreign_dub_comes_after_a_plain_release_even_ready() {
+        fun rel(key: String, audio: List<String>, readiness: Readiness) =
+            PlayVersion(key, VersionOrigin.Debrid, key, null, VideoQuality.FHD_1080, readiness = readiness, announcedAudio = audio) { _, _ -> StreamRequest(key, null, null, "t", live = false) }
+        // "El cuento de la criada ... [spa, eng]" (🇬🇧 / 🇪🇸) against "The.Handmaids.Tale.S04E05.1080p.WEB".
+        val all = listOf(rel("spa-eng", listOf("EN", "ES"), Readiness.Ready), rel("plain", emptyList(), Readiness.Likely))
+        assertEquals("plain", VersionRanking.rank(all, PlaybackPrefs(audio = AudioPreference.Vo), frenchSystem = true).first().key)
+        assertEquals("plain", VersionRanking.rank(all, PlaybackPrefs(audio = AudioPreference.Vostfr), frenchSystem = true).first().key)
+        assertEquals("one other language may be the original", "en-only",
+            VersionRanking.rank(listOf(rel("en-only", listOf("EN"), Readiness.Ready), rel("plain", emptyList(), Readiness.Likely)), PlaybackPrefs(audio = AudioPreference.Vo), true).first().key)
+        assertEquals("French wanted: unchanged, ready first", "spa-eng", VersionRanking.rank(all, PlaybackPrefs(audio = AudioPreference.Vf), true).first().key)
+        val dual = PlayVersion("dual", VersionOrigin.Debrid, "S04E005_Episode 5.mkv", null, VideoQuality.FHD_1080, readiness = Readiness.Ready, foreignDub = true) { _, _ -> StreamRequest("dual", null, null, "t", live = false) }
+        assertEquals("a Dual Audio release names no language yet is a dub", "plain",
+            VersionRanking.rank(listOf(dual, rel("plain", emptyList(), Readiness.Likely)), PlaybackPrefs(audio = AudioPreference.Vo), true).first().key)
+        val remembered = { x: PlayVersion -> if (x.key == "spa-eng") com.sokoul.pc.playback.sources.SourceFact(language = AudioLanguage.VO) else null }
+        assertEquals("a dub remembered as VO before the fix stays behind", "plain",
+            VersionRanking.rank(all, PlaybackPrefs(audio = AudioPreference.Vo), true, fact = remembered).first().key)
+    }
+
+    @Test
+    fun a_version_picked_by_hand_that_fails_shows_its_failure_instead_of_going_back() {
+        val engine = FakeEngine(failing = setOf("https://b.test"))
+        val s = session(engine, finder(testVersion("a", "https://a.test"), testVersion("b", "https://b.test", quality = VideoQuality.HD_720)))
+        s.play(request)
+        waitUntil("a plays") { s.phase is Phase.Playing && s.current?.key == "a" }
+        s.choose(s.versions.first { it.key == "b" })
+        waitUntil("b failed") { (s.phase as? Phase.Failed)?.version?.key == "b" }
+        runBlocking { delay(200) }
+        assertEquals("b", (s.phase as Phase.Failed).version?.key)
+        assertEquals("nothing else was started", "https://b.test", engine.played.last().url)
+        s.close()
+    }
+
+    @Test
     fun ready_comes_first_by_default_and_quality_when_waiting_for_the_best() {
         val all = listOf(v("4k", AudioLanguage.VF, VideoQuality.UHD_4K, Readiness.NotCached), v("hd", AudioLanguage.VF, VideoQuality.FHD_1080, Readiness.Ready))
         assertEquals("hd", VersionRanking.rank(all, PlaybackPrefs(), true).first().key)
