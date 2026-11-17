@@ -780,6 +780,9 @@ class PlaybackTest {
         assertEquals("one other language may be the original", "en-only",
             VersionRanking.rank(listOf(rel("en-only", listOf("EN"), Readiness.Ready), rel("plain", emptyList(), Readiness.Likely)), PlaybackPrefs(audio = AudioPreference.Vo), true).first().key)
         assertEquals("French wanted: unchanged, ready first", "spa-eng", VersionRanking.rank(all, PlaybackPrefs(audio = AudioPreference.Vf), true).first().key)
+        val remembered = { x: PlayVersion -> if (x.key == "spa-eng") com.sokoul.pc.playback.sources.SourceFact(language = AudioLanguage.VO) else null }
+        assertEquals("a dub remembered as VO before the fix stays behind", "plain",
+            VersionRanking.rank(all, PlaybackPrefs(audio = AudioPreference.Vo), true, fact = remembered).first().key)
     }
 
     @Test

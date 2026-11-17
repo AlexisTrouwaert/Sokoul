@@ -156,6 +156,7 @@ class SourceRulesTest {
         assertEquals(AudioLanguage.VF, SourceRules.heardLanguage(listOf(1 to "[French]")))
         assertEquals(AudioLanguage.VO, SourceRules.heardLanguage(listOf(1 to "Japonais · Stéréo")))
         assertNull("nothing named", SourceRules.heardLanguage(listOf(1 to "Piste 1")))
+        assertNull("a dub beside the original", SourceRules.heardLanguage(listOf(1 to "Español · 5.1", 2 to "English · 5.1")))
         assertNull("nothing proved", SourceRules.heardLanguage(listOf(1 to "English", 2 to "Piste 2")))
     }
 

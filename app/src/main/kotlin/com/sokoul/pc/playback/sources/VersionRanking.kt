@@ -53,7 +53,10 @@ object VersionRanking {
         expectedMinutes: Int? = null,
     ): List<PlayVersion> {
         val audio = audioOrder(prefs.audio, frenchSystem)
-        fun language(v: PlayVersion) = fact(v)?.language ?: v.language
+        // Two other languages or more named ("[spa, eng]", "ITA.ENG", flags): a foreign dub with the original beside it.
+        fun dub(v: PlayVersion) = v.announcedAudio.count { it != "FR" } >= 2
+        // Such a file is not proof of the original, even if a past viewing remembered it as VO.
+        fun language(v: PlayVersion) = (fact(v)?.language ?: v.language).takeUnless { it == AudioLanguage.VO && dub(v) }
         fun exact(v: PlayVersion) = language(v)?.let(audio::indexOf)?.takeIf { it >= 0 } ?: audio.size
         val heard = { v: PlayVersion ->
             val l = language(v)
@@ -67,7 +70,7 @@ object VersionRanking {
         // most often the original alone, even when it is ready and the plain one is not.
         val foreignDub = { v: PlayVersion ->
             val frenchWanted = prefs.audio == AudioPreference.Vf || (prefs.audio == AudioPreference.System && frenchSystem)
-            if (!frenchWanted && language(v) == null && v.announcedAudio.count { it != "FR" } >= 2) 1 else 0
+            if (!frenchWanted && language(v) == null && dub(v)) 1 else 0
         }
         val now = System.currentTimeMillis()
         // A version that failed for a lasting reason keeps its place in the list, after all the others.
