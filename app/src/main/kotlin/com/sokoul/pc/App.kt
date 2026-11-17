@@ -224,6 +224,8 @@ class AppDeps(
     )
     /** Set by the window: full screen or not. */
     var toggleFullscreen: () -> Unit = {}
+    /** Set by the PC window: whether it is full screen. Null where there is no window to change (TV, phone). */
+    var isFullscreen: (() -> Boolean)? = null
     /** What the anime page shows, for the tools. */
     @Volatile var animeReport: com.sokoul.pc.anime.AnimeReport? = null
     /** What the TV page shows, for the tools. */
@@ -846,6 +848,7 @@ private fun MainInterface(deps: AppDeps, controller: SetupController, onProfiles
                             prefs = deps.prefs,
                             reminders = deps.reminders,
                             onToggleFullscreen = { deps.toggleFullscreen() },
+                            fullscreen = deps.isFullscreen?.invoke(),
                             nextEpisode = { r -> nextEpisodeOf(deps, r) },
                             episodes = remember { episodeSourceOf(deps) },
                             extra = { com.sokoul.pc.anime.PauseChapterCard(deps) { overlays.add(Overlay.Reader(it)) } },

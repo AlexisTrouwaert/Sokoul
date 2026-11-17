@@ -20,6 +20,9 @@ object Platform {
     @Volatile var playerFullscreenHook: ((Boolean) -> Unit)? = null
     fun playerFullscreen(on: Boolean) { playerFullscreenHook?.invoke(on) }
 
+    /** MainActivity already keeps the screen on while a video plays (FLAG_KEEP_SCREEN_ON). */
+    @Suppress("UNUSED_PARAMETER") fun keepAwake(on: Boolean) = Unit
+
     fun setPlayerBackHandler(handler: (() -> Unit)?) { playerBackHandler = handler }
     fun hasPlayerBackHandler(): Boolean = playerBackHandler != null
     @Synchronized fun dispatchPlayerBack(): Boolean {
