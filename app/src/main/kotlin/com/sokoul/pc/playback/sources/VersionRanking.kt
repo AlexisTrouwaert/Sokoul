@@ -62,6 +62,13 @@ object VersionRanking {
             val frenchEvidence = "FR" in v.announcedAudio || fact(v)?.language == AudioLanguage.MULTI
             if (l == AudioLanguage.MULTI && (!frenchWanted || frenchEvidence)) minOf(audio.indexOf(AudioLanguage.VF), audio.indexOf(AudioLanguage.VO), e) else e
         }
+        // Original wanted: a release of unknown language that names two other languages or more ("spa, eng",
+        // "ITA.ENG", flags 🇪🇸 / 🇬🇧) is a foreign dub with the original beside it. It comes after a plain release, which is
+        // most often the original alone, even when it is ready and the plain one is not.
+        val foreignDub = { v: PlayVersion ->
+            val frenchWanted = prefs.audio == AudioPreference.Vf || (prefs.audio == AudioPreference.System && frenchSystem)
+            if (!frenchWanted && language(v) == null && v.announcedAudio.count { it != "FR" } >= 2) 1 else 0
+        }
         val now = System.currentTimeMillis()
         // A version that failed for a lasting reason keeps its place in the list, after all the others.
         // A version of another work or episode (anime) goes after everything, even what failed.
@@ -69,6 +76,7 @@ object VersionRanking {
             .thenBy { if (fact(it)?.let { f -> f.failure != null && f.until > now } == true) 1 else 0 }
             // The wanted language first: a VF above the size or quality limits still comes before a VOSTFR within them.
             .thenBy(heard)
+            .thenBy(foreignDub)
             .thenBy { if (overLimits(it, prefs)) 1 else 0 }
             .thenBy { originRank(it, prefs.origin) }
             // Anime, at the same language: a file that says it is the episode, then one that cannot be read, then a doubtful one.

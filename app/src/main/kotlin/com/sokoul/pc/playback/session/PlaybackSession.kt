@@ -654,7 +654,7 @@ class PlaybackSession(
         // Only an explicit viewer choice contributes a remembered source/hoster.
         if (version.rejected == null) rememberSourceHoster(version)
         rememberPosition()
-        restart(StartChoice(version, keep = true))
+        restart(StartChoice(version, keep = true), byHand = true)
     }
 
     fun nextVersion() {
@@ -797,10 +797,11 @@ class PlaybackSession(
         engine?.status?.value?.timeMs?.takeIf { it > 0 }?.let { positionMs = it }
     }
 
-    private fun restart(first: StartChoice?, resolved: StreamRequest? = null) {
+    /** [byHand]: the viewer picked [first]; if it fails, its failure shows instead of another version starting. */
+    private fun restart(first: StartChoice?, resolved: StreamRequest? = null, byHand: Boolean = false) {
         cancelWork()
         stopEngine()
-        job = scope.launch { run(first, resolved) }
+        job = scope.launch { run(first, resolved, byHand) }
     }
 
     private fun startSearch(target: PlayRequest, refresh: Boolean) {
@@ -862,7 +863,7 @@ class PlaybackSession(
         }
     }
 
-    private suspend fun run(first: StartChoice?, resolved: StreamRequest? = null) {
+    private suspend fun run(first: StartChoice?, resolved: StreamRequest? = null, byHand: Boolean = false) {
         var pick = first
         var ready = resolved
         expected = request?.let { r -> runCatching { expectedMinutes(r) }.getOrNull() }
@@ -892,7 +893,8 @@ class PlaybackSession(
             failures[choice.version.key] = outcome
             memory?.noteFailure(memoryKey(choice.version), outcome)
             if (SourceRules.blamesHost(outcome)) choice.version.providerHost?.let { failedHosts += it }
-            if (outcome is PlayFailure.EngineMissing) {
+            // A version picked by hand that fails is not silently replaced by the automatic choice the viewer left.
+            if (outcome is PlayFailure.EngineMissing || (byHand && choice === first)) {
                 phase = Phase.Failed(outcome, choice.version)
                 return
             }
