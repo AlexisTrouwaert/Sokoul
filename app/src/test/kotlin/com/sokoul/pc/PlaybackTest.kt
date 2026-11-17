@@ -995,6 +995,38 @@ class PlaybackTest {
     }
 
     @Test
+    fun a_pack_already_in_the_account_never_plays_the_episode_selected_last_time() = runBlocking {
+        // The Handmaid's Tale S04E06 played the S04E005 file kept from an earlier viewing (2026-11-17).
+        val pack = """{"id":"T1","filename":"pack","hash":"abc","status":"downloaded","progress":100,"bytes":1000,"speed":0,"seeders":0,""" +
+            """"files":[{"id":5,"path":"/S04/S04E005_Episode 5.mkv","bytes":1000,"selected":1},{"id":6,"path":"/S04/S04E006_Episode 6.mkv","bytes":1000,"selected":0}],"links":["https://real-debrid.com/d/5"]}"""
+        val server = MockWebServer()
+        val requests = mutableListOf<String>()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                val path = request.path.orEmpty()
+                requests += path
+                return when {
+                    path.startsWith("/torrents?limit=100") -> MockResponse().setBody("[]")
+                    path.startsWith("/torrents/addMagnet") -> MockResponse().setResponseCode(403).setBody("""{"error":"magnet already active","error_code":33}""")
+                    path.startsWith("/torrents?limit=5000") -> MockResponse().setBody("[$pack]")
+                    path.startsWith("/torrents/info/T1") -> MockResponse().setBody(pack)
+                    path.startsWith("/unrestrict/link") -> MockResponse().setBody("""{"download":"https://x.download.real-debrid.com/e5.mkv","filename":"e5.mkv","filesize":1}""")
+                    else -> MockResponse().setResponseCode(404)
+                }
+            }
+        }
+        server.start()
+        val episode6 = DebridStream("abc:6", "pack", null, "abc", 6, "S04E006_Episode 6.mkv", Release())
+        val failure = runCatching {
+            DebridTransfers(RealDebridApi(OkHttpClient(), { "token" }, server.url("/").toString().trimEnd('/'), spacingMs = 0))
+                .link(episode6, DebridQuery(1, true, 4, 6), keep = false) { }
+        }.exceptionOrNull()
+        assertTrue("no link to episode 5", failure is PlayFailureException)
+        assertFalse(requests.any { it.startsWith("/unrestrict/link") })
+        server.shutdown()
+    }
+
+    @Test
     fun a_quick_try_leaves_nothing_in_the_account() = runBlocking {
         val server = MockWebServer()
         val rd = FakeRd { torrentJson("downloading", 12) }
