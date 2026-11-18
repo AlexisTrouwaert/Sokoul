@@ -80,6 +80,10 @@ object Platform {
         val name = dialog.file ?: return null
         return File(dialog.directory, name)
     }
+
+    /** The PC types with its keyboard: no speech input. */
+    val hasVoice: Boolean get() = false
+    @Suppress("UNUSED_PARAMETER") fun listen(onText: (String) -> Unit): Boolean = false
 }
 
 /**

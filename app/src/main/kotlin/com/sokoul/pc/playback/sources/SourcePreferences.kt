@@ -24,10 +24,15 @@ object SourcePreferences {
     fun anime(version: PlayVersion) = source(version) == "Anime-Sama" || version.anime
 
     fun rank(ranked: List<PlayVersion>, order: (Boolean) -> SourcePreferenceOrder, prefs: PlaybackPrefs,
-             french: Boolean, caps: DeviceCaps, language: (PlayVersion) -> AudioLanguage?, failed: (PlayVersion) -> Boolean): List<PlayVersion> {
-        fun guard(v: PlayVersion): List<Any?> = listOf(v.origin, v.rejected, failed(v), language(v),
-            VersionRanking.heard(v, prefs, french), VersionRanking.overLimits(v, prefs), v.readiness,
-            SourceRules.pictureRank(v.hdr, caps), v.confidence, v.quality, v.community)
+             french: Boolean, caps: DeviceCaps, fact: (PlayVersion) -> SourceFact?, failed: (PlayVersion) -> Boolean,
+             workLanguage: String? = null): List<PlayVersion> {
+        // Only versions whose audio is judged the same (AudioMatch) are ordered by site and hoster: a foreign dub is
+        // never lifted above a plain release by a site priority.
+        fun guard(v: PlayVersion): List<Any?> {
+            val audio = AudioMatch.verdict(v, prefs.intent, fact(v), workLanguage)
+            return listOf(v.origin, v.rejected, failed(v), audio.heard, audio.original, audio.foreignDub, audio.proof,
+                VersionRanking.overLimits(v, prefs), v.readiness, SourceRules.pictureRank(v.hdr, caps), v.confidence, v.quality, v.community)
+        }
         val result = ArrayList<PlayVersion>()
         var start = 0
         while (start < ranked.size) {

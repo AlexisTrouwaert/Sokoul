@@ -64,7 +64,9 @@ class ControlTest {
             assertTrue(t.name, t.description.length > 10)
             assertEquals("object", (t.inputSchema()["type"] as JsonPrimitive).content)
             t.params.filter { it.required }.forEach { p -> assertTrue(p.name, JsonPrimitive(p.name) in t.inputSchema()["required"]!!.jsonArray) }
-            assertFalse(t.name, Regex("key|token|secret|password|credential").containsMatchIn(t.name + t.description))
+            // The one exception: a TV sets its Sokoul server's access key without typing it, and the key is never returned.
+            if (t.name == "set_sokoul_server") assertTrue(t.description.contains("never returned"))
+            else assertFalse(t.name, Regex("key|token|secret|password|credential").containsMatchIn(t.name + t.description))
             assertFalse("a key cannot be a preference", t.params.any { it.choices.any { c -> Regex("key|token").containsMatchIn(c.lowercase()) } })
         }
         val read = tools.filter { it.risk == ToolRisk.Read }.map { it.name }

@@ -31,12 +31,8 @@ object VersionRanking {
         (v.sizeBytes ?: 0) > prefs.maxSize.bytes || qualityValue(v.quality) > prefs.maxQuality.height
 
     /** How wanted what one hears is, lower first. A MULTI file holds the French and the original track: it is as good as whichever of the two is wanted most. */
-    fun heard(v: PlayVersion, prefs: PlaybackPrefs, frenchSystem: Boolean): Int {
-        val audio = audioOrder(prefs.audio, frenchSystem)
-        val exact = v.language?.let(audio::indexOf)?.takeIf { it >= 0 } ?: audio.size
-        val frenchWanted = prefs.audio == AudioPreference.Vf || (prefs.audio == AudioPreference.System && frenchSystem)
-        return if (v.language == AudioLanguage.MULTI && (!frenchWanted || "FR" in v.announcedAudio)) minOf(audio.indexOf(AudioLanguage.VF), audio.indexOf(AudioLanguage.VO), exact) else exact
-    }
+    fun heard(v: PlayVersion, prefs: PlaybackPrefs, frenchSystem: Boolean, fact: SourceFact? = null, workLanguage: String? = null): Int =
+        AudioMatch.verdict(v, prefs.intent, fact, workLanguage).heard
 
     /**
      * @param caps what this device can show
@@ -47,31 +43,23 @@ object VersionRanking {
         versions: List<PlayVersion>,
         prefs: PlaybackPrefs,
         frenchSystem: Boolean,
-        readyFirst: Boolean = prefs.startMode != StartMode.WaitBest,
+        // The best picture first means what the account already holds does not jump ahead of a better version.
+        readyFirst: Boolean = prefs.startMode != StartMode.WaitBest && !prefs.bestQualityFirst,
         caps: DeviceCaps = DeviceCaps.Pc,
         fact: (PlayVersion) -> SourceFact? = { null },
         expectedMinutes: Int? = null,
+        /** The work's original language, which "original" in the wanted languages stands for. */
+        workLanguage: String? = null,
     ): List<PlayVersion> {
-        val audio = audioOrder(prefs.audio, frenchSystem)
-        // "Dual Audio", or two other languages named ("[spa, eng]", "ITA.ENG", flags): a foreign dub beside the original.
-        fun dub(v: PlayVersion) = v.foreignDub || v.announcedAudio.count { it != "FR" } >= 2
-        // Such a file is not proof of the original, even if a past viewing remembered it as VO.
-        fun language(v: PlayVersion) = (fact(v)?.language ?: v.language).takeUnless { it == AudioLanguage.VO && dub(v) }
-        fun exact(v: PlayVersion) = language(v)?.let(audio::indexOf)?.takeIf { it >= 0 } ?: audio.size
-        val heard = { v: PlayVersion ->
-            val l = language(v)
-            val e = exact(v)
-            val frenchWanted = prefs.audio == AudioPreference.Vf || (prefs.audio == AudioPreference.System && frenchSystem)
-            val frenchEvidence = "FR" in v.announcedAudio || fact(v)?.language == AudioLanguage.MULTI
-            if (l == AudioLanguage.MULTI && (!frenchWanted || frenchEvidence)) minOf(audio.indexOf(AudioLanguage.VF), audio.indexOf(AudioLanguage.VO), e) else e
-        }
-        // Original wanted: a release of unknown language that names two other languages or more ("spa, eng",
-        // "ITA.ENG", flags 🇪🇸 / 🇬🇧) is a foreign dub with the original beside it. It comes after a plain release, which is
-        // most often the original alone, even when it is ready and the plain one is not.
-        val foreignDub = { v: PlayVersion ->
-            val frenchWanted = prefs.audio == AudioPreference.Vf || (prefs.audio == AudioPreference.System && frenchSystem)
-            if (!frenchWanted && language(v) == null && dub(v)) 1 else 0
-        }
+        // One audio judgement for the ranking, the source preferences and the upgrade offer (AudioMatch), in any language.
+        val verdicts = java.util.IdentityHashMap<PlayVersion, AudioVerdict>()
+        fun verdict(v: PlayVersion) = verdicts.getOrPut(v) { AudioMatch.verdict(v, prefs.intent, fact(v), workLanguage) }
+        // At the same wanted language: what a viewing proved, then what the name declares, then what a label implies.
+        fun exact(v: PlayVersion) = verdict(v).proof.ordinal
+        val heard = { v: PlayVersion -> verdict(v).heard }
+        // Original wanted: a foreign dub of unknown language comes after a plain release, which is most often the
+        // original alone, even when it is ready and the plain one is not.
+        val foreignDub = { v: PlayVersion -> verdict(v).dubLast }
         val now = System.currentTimeMillis()
         // A version that failed for a lasting reason keeps its place in the list, after all the others.
         // A version of another work or episode (anime) goes after everything, even what failed.
@@ -88,7 +76,11 @@ object VersionRanking {
         // IPTV is always there but counts on the account's connections: it comes after what Real-Debrid has ready.
         val byReady = compareBy<PlayVersion> { if (it.origin == VersionOrigin.Iptv) IPTV_READY_RANK else readyRank(it.readiness) }
         // Windows wants SDR first. A TV that shows HDR wants the sharpest, then the richest; a format it cannot show goes after SDR.
-        val byPicture = if (caps.hdr10 || caps.dolbyVision) {
+        // The viewer's choice "best quality first": the sharpest first, then the richest picture, whatever the screen.
+        val byPicture = if (prefs.bestQualityFirst) {
+            val rich = caps.copy(hdr10 = true, dolbyVision = true)
+            compareBy<PlayVersion> { qualityRank(SourceRules.usefulQuality(it.quality, caps)) }.thenBy { SourceRules.pictureRank(it.hdr, rich) }
+        } else if (caps.hdr10 || caps.dolbyVision) {
             compareBy<PlayVersion> { if (SourceRules.pictureRank(it.hdr, caps) > 2) 1 else 0 }
                 .thenBy { qualityRank(SourceRules.usefulQuality(it.quality, caps)) }
                 .thenBy { SourceRules.pictureRank(it.hdr, caps) }
@@ -101,7 +93,9 @@ object VersionRanking {
             .thenBy { it.ripRank }
             .thenBy { it.frenchVariantRank }
             .thenByDescending { it.seeders ?: 0 }
-            .thenByDescending { it.sizeBytes ?: 0 }
+            // 0L, not 0: an Int beside the Longs broke the sort (ClassCastException) as soon as a version without a size
+            // (Anime-Sama, the web sources) met one with a size, and the session kept the list without them.
+            .thenByDescending { it.sizeBytes ?: 0L }
             .thenBy { it.key }
         val order = (if (readyFirst) base.then(byReady).then(byPicture) else base.then(byPicture).then(byReady)).then(rest)
         return versions.sortedWith(order)
@@ -194,6 +188,8 @@ object StartPolicy {
         blocked: Set<VersionOrigin>,
         failedHosts: Set<String>,
         size: Int,
+        /** Only versions of the first one's quality race: else the quickest link, often a 1080p, beat the 4K. */
+        sameQuality: Boolean = false,
     ): List<PlayVersion> {
         if (size < 2) return emptyList()
         val first = next(ranked, mode, failed, quickTried, blocked, failedHosts) ?: return emptyList()
@@ -201,7 +197,8 @@ object StartPolicy {
         val open = ranked.filter { it.key !in failed && it.origin !in blocked && it.rejected == null }
         val usable = open.filter { it.providerHost == null || it.providerHost !in failedHosts } + open.filter { it.providerHost != null && it.providerHost in failedHosts }
         val group = usable.filter {
-            it.origin == VersionOrigin.Debrid && it.key !in quickTried && it.readiness != Readiness.Ready && worthATry(it.readiness, quickTried.size)
+            it.origin == VersionOrigin.Debrid && it.key !in quickTried && it.readiness != Readiness.Ready && worthATry(it.readiness, quickTried.size) &&
+                (!sameQuality || it.quality == first.version.quality)
         }.take(size)
         return if (group.size > 1) group else emptyList()
     }

@@ -45,7 +45,8 @@ data class DebridResult(val streams: List<DebridStream>, val problem: String? = 
 
 /**
  * Real-Debrid sur PC : versions trouvées par Torrentio et Comet (format Stremio, jeton ajouté au moment de la requête,
- * jamais journalisé), puis classées par [DesktopRanker]. Résultats gardés 30 min en mémoire.
+ * jamais journalisé). The ranking belongs to `VersionRanking`; samples are left out when the file of a torrent is picked
+ * (`ReleaseName.pickFile`). Results are kept 30 min in memory and 6 h in the database.
  */
 class DesktopDebrid(
     private val db: DesktopDb,
@@ -53,7 +54,11 @@ class DesktopDebrid(
     /** The client of the search services; a test gives one that answers for them. */
     private val http: okhttp3.OkHttpClient = catalog.http,
 ) {
-    private val cache = ConcurrentHashMap<Pair<DebridQuery, Boolean>, Pair<Long, List<DebridStream>>>()
+    /** Every advertised language is searched: the audio preference only ranks, so it is not part of the key. */
+    private val cache = ConcurrentHashMap<DebridQuery, Pair<Long, List<DebridStream>>>()
+
+    /** Forgets the searches kept in memory; "Clear the catalogue cache" empties the database copy at the same time. */
+    fun clearCache() = cache.clear()
 
     fun token(): String? = ProviderConfig.key(db, "realdebrid")
 
@@ -61,6 +66,15 @@ class DesktopDebrid(
 
     /** "off" leaves Torrentio to its configured address only, as before. */
     private fun fastTorrentio() = db.setting(FAST_TORRENTIO) != "off"
+
+    /** The built-in search services in use ("TORRENTIO,COMET"); both when nothing is set, as before the setting. */
+    fun services(): Set<SourceAddon> = db.setting(SERVICES)?.let(DebridAddons::parse) ?: SourceAddon.entries.toSet()
+
+    /** Services added by hand (Stremio addresses, one per line); they receive the same paths as the built-in ones. */
+    fun customServices(): String = db.setting(CUSTOM_SERVICES).orEmpty()
+
+    /** Until when a service that answered "too many requests" (HTTP 429) is left alone, by service. */
+    private val coolDown = ConcurrentHashMap<String, Long>()
 
     suspend fun user(): RdUser? = withContext(Dispatchers.IO) {
         val t = token() ?: return@withContext null
@@ -85,7 +99,7 @@ class DesktopDebrid(
      * [lookup] tells, while the services are already being asked, what the anime identity adds: the Kitsu search, the
      * community's releases and the rules. Nothing is sent before it is known, so that no version is started unjudged.
      */
-    fun search(q: DebridQuery, info: TmdbInfo?, refresh: Boolean, french: Boolean, lookup: (suspend () -> AnimeLookup?)? = null): Flow<DebridResult> = channelFlow {
+    fun search(q: DebridQuery, info: TmdbInfo?, refresh: Boolean, lookup: (suspend () -> AnimeLookup?)? = null): Flow<DebridResult> = channelFlow {
         note("search")
         runCatching { db.purgeCache(CACHE_PREFIX, System.currentTimeMillis() - SAVED_MS) }
         val planned = async { runCatching { lookup?.invoke() }.getOrElse { if (it is CancellationException) throw it else null } }
@@ -94,7 +108,7 @@ class DesktopDebrid(
             send(DebridResult(emptyList(), "Real-Debrid n'est pas configuré", done = true))
             return@channelFlow
         }
-        val known = cache[q to french]?.takeIf { !refresh && System.currentTimeMillis() - it.first < TTL_MS }
+        val known = cache[q]?.takeIf { !refresh && System.currentTimeMillis() - it.first < TTL_MS }
         if (known != null) {
             send(DebridResult(known.second, done = true))
             return@channelFlow
@@ -131,7 +145,10 @@ class DesktopDebrid(
             } else {
                 // Same title is not the same work (One Piece 2023 for the anime of 1999), and a pack's file must be the
                 // episode asked for (the TV played episode 319 for episode 1): both are dropped before anyone can play them.
-                distinct.filterNot { if (q.series) DebridStreams.otherYear(it.title, titles, info?.year, q.season)
+                // An audiobook or a soundtrack is never played; nor a box set made before a new film came out.
+                distinct.filterNot { DebridStreams.notVideo(it.title) || (it.filename?.let(DebridStreams::notVideo) == true) }
+                    .filterNot { !q.series && DebridStreams.packBeforeFilm(it.title, titles, info?.year) }
+                    .filterNot { if (q.series) DebridStreams.otherYear(it.title, titles, info?.year, q.season)
                     else DebridStreams.wrongMovie(it.title, titles, info?.year) ||
                         (it.filename?.let { file -> DebridStreams.wrongMovie(file, titles, info?.year) } == true) }
                     .filterNot { q.series && DebridStreams.wrongEpisode(DebridStreams.fileOf(it), q.season, q.episode, q.absolute) }
@@ -142,7 +159,10 @@ class DesktopDebrid(
             return tagged
         }
         // Preference belongs to ranking; discovery must retain every advertised language.
-        val bases = DebridAddons.urls(setOf(SourceAddon.TORRENTIO, SourceAddon.COMET), "", token, false)
+        // The services searched are a setting; a disabled one gets no call at all, its quick and Kitsu requests included.
+        val services = services()
+        val torrentio = SourceAddon.TORRENTIO in services
+        val bases = DebridAddons.urls(services, customServices(), token, false)
         fun ask(url: String, label: String) = launch {
             val found = fetch(url, refresh)
             note(label + " " + (found?.size ?: "failed"))
@@ -155,10 +175,10 @@ class DesktopDebrid(
             if (snapshot != null) send(DebridResult(snapshot))
         }
         // Torrentio without the token first: the same versions in under a second (the configured one takes 20 s).
-        val fast = fastTorrentio()
+        val fast = torrentio && fastTorrentio()
         val plain = DebridAddons.torrentioPlain(false)
         val jobs = (listOfNotNull(if (fast) ask("$plain/" + q.streamPath(imdb), "torrentio fast imdb") else null) +
-            listOf(ask("${DebridAddons.torrentioPlain(true)}/" + q.streamPath(imdb), "torrentio french imdb")) +
+            listOfNotNull(if (torrentio) ask("${DebridAddons.torrentioPlain(true)}/" + q.streamPath(imdb), "torrentio french imdb") else null) +
             bases.map { base -> ask("$base/" + q.streamPath(imdb), host(base) + " imdb") }).toMutableList()
         val identity = launch {
             val found = planned.await()
@@ -175,7 +195,7 @@ class DesktopDebrid(
             // Comet's manifest takes Kitsu ids, but on 2026-11-08 it answered "kitsu:12:1" with other series (Blue Box,
             // Arcane, The Walking Dead): only Torrentio is asked by Kitsu id.
             val kitsu = found?.query?.kitsuPath()?.takeIf { found.search != null }
-            if (kitsu != null) {
+            if (kitsu != null && torrentio) {
                 val kitsuBases = (if (fast) listOf(plain) else bases.filter { it.startsWith(DebridAddons.TORRENTIO) }) + DebridAddons.torrentioPlain(true)
                 kitsuBases.forEach { base -> lock.withLock { jobs += ask("$base/$kitsu", (if (fast) "torrentio fast" else host(base)) + " kitsu") } }
             }
@@ -183,7 +203,7 @@ class DesktopDebrid(
         identity.join()
         lock.withLock { jobs.toList() }.joinAll()
         val all = lock.withLock { withContext(Dispatchers.Default) { kept() } }
-        if (all.isNotEmpty()) cache[q to french] = System.currentTimeMillis() to all
+        if (all.isNotEmpty()) cache[q] = System.currentTimeMillis() to all
         send(DebridResult(all, if (all.isEmpty()) "Aucune version trouvée sur Real-Debrid" else null, done = true))
     }
 
@@ -270,10 +290,21 @@ class DesktopDebrid(
         // An answer of the last hours is used again: a second start of the same episode lists its versions at once.
         if (!refresh) runCatching { db.tmdbGet(key) }.getOrNull()?.takeIf { System.currentTimeMillis() - it.second < SAVED_MS }?.let { return@withContext DebridStreams.parse(it.first) }
         val client = if (address.startsWith(DebridAddons.torrentioPlain(true) + "/") || address.startsWith(DebridAddons.torrentioPlain(false) + "/stream")) fastHttp else http
+        // A service that asked to be left alone is not asked again before the time it gave; the others go on.
+        val service = cacheKey(address).removePrefix(CACHE_PREFIX).substringBefore(':')
+        val now = System.currentTimeMillis()
+        if ((coolDown[service] ?: 0) > now) {
+            note("$service waiting ${((coolDown[service] ?: now) - now) / 1000} s after 429")
+            return@withContext null
+        }
         try {
             withTimeoutOrNull(timeoutMs(address)) {
                 // await: the timeout really cancels the HTTP call (a blocking execute() would ignore it)
                 client.newCall(Request.Builder().url(address).header("User-Agent", "SokoulTV/2.0").build()).await().use { r ->
+                    if (r.code == 429 || r.code == 503) {
+                        coolDown[service] = System.currentTimeMillis() + retryAfterMs(r.header("Retry-After"))
+                        note("$service answered ${r.code}")
+                    }
                     if (!r.isSuccessful) return@use null
                     val text = r.body?.string().orEmpty()
                     DebridStreams.parse(text).also { found -> if (found.isNotEmpty()) runCatching { db.tmdbPut(key, text, System.currentTimeMillis()) } }
@@ -316,6 +347,21 @@ class DesktopDebrid(
             return CACHE_PREFIX + service + ":" + language + ":" + address.substringAfter("/stream/")
         }
         const val FAST_TORRENTIO = "pc.start.fastTorrentio"
+        /** Built-in search services in use, "TORRENTIO,COMET". */
+        const val SERVICES = "pc.debrid.services"
+        /** Stremio addresses added by hand, one per line. */
+        const val CUSTOM_SERVICES = "pc.debrid.custom"
+        private const val RETRY_DEFAULT_MS = 60_000L
+        private const val RETRY_MAX_MS = 15 * 60_000L
+
+        /** Retry-After as seconds or as an HTTP date; one minute when absent or unreadable, a quarter of an hour at most. */
+        fun retryAfterMs(header: String?, now: Long = System.currentTimeMillis()): Long {
+            val value = header?.trim().orEmpty()
+            val ms = value.toLongOrNull()?.times(1000)
+                ?: runCatching { java.time.ZonedDateTime.parse(value, java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME).toInstant().toEpochMilli() - now }.getOrNull()
+                ?: RETRY_DEFAULT_MS
+            return ms.coerceIn(0, RETRY_MAX_MS)
+        }
         private fun host(base: String) = if (base.startsWith(DebridAddons.TORRENTIO)) "torrentio" else if (base.startsWith(DebridAddons.COMET)) "comet" else "addon"
         // Measured from the TV on 2026-11-08 for One Piece S1E1: Torrentio 20 s, Comet 32 s (Real-Debrid checks every
         // torrent of a long anime). At 15 s both were cut and nothing was ever found.
@@ -326,12 +372,4 @@ class DesktopDebrid(
         fun iso(s: String): Long = runCatching { java.time.OffsetDateTime.parse(s).toInstant().toEpochMilli() }
             .recoverCatching { java.time.Instant.parse(s).toEpochMilli() }.getOrDefault(0)
     }
-}
-
-/** Les échantillons (sous 50 Mio et sous le dixième de la plus grosse version) sont écartés ; le classement est dans `VersionRanking`. */
-object DesktopRanker {
-    private const val MIN_VIDEO_BYTES = 50L * 1024 * 1024
-
-    fun tooSmall(bytes: Long?, largest: Long?): Boolean =
-        bytes != null && bytes < MIN_VIDEO_BYTES && (largest == null || bytes < largest / 10)
 }

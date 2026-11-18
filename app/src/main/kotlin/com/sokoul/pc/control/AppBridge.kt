@@ -125,6 +125,8 @@ class AppBridge(private val deps: AppDeps) {
             put("versions", session.versions.size)
             put("searching", session.searching)
             put("failures", session.failures.size)
+            // The active version lacks every wanted language: the first wanted one and the track heard.
+            session.languageNotice?.let { n -> putJsonObject("languageNotice") { put("wanted", n.wanted); put("heard", n.heard) } }
             put("skips", session.skips.joinToString { (if (it.opening) "op " else "ed ") + it.start.toInt() + "-" + it.end.toInt() + "/" + it.episodeLength.toInt() })
             session.upgrade?.let { u ->
                 putJsonObject("upgrade") {
@@ -247,8 +249,11 @@ class AppBridge(private val deps: AppDeps) {
     private fun preferences() = buildJsonObject {
         val p = deps.prefs
         put("start", p.startMode.name)
-        put("audio", p.audioPreference.name)
-        put("subtitles", p.subtitlePreference.name)
+        val intent = p.audioIntent
+        // Wanted audio languages in order ("it,original"), what happens when none is there, and the subtitle mode.
+        put("audio", intent.encode())
+        put("audioFallback", intent.fallback.name)
+        put("subtitles", intent.subtitles)
         put("maxQuality", p.maxQuality.name)
         put("maxSize", p.maxSize.name)
         put("buffer", p.buffer.name)
@@ -286,7 +291,8 @@ class AppBridge(private val deps: AppDeps) {
         AppTool("get_state", "What the app shows and does right now.", ToolRisk.Read) { state() },
         AppTool("search_titles", "Search films and series by name.", ToolRisk.Read, listOf(ToolParam("query", "Words to search for"))) { a ->
             buildJsonArray {
-                deps.catalog.search(a.text("query")).take(MAX_LISTED).forEach { i ->
+                // What the search screen shows (three pages), so the tool sees what the viewer sees.
+                deps.catalog.searchMore(a.text("query")).take(3 * MAX_LISTED).forEach { i ->
                     add(
                         buildJsonObject {
                             put("kind", i.kind())
@@ -650,8 +656,8 @@ class AppBridge(private val deps: AppDeps) {
         AppTool(
             "set_preference", "Change a playback preference.", ToolRisk.Setting,
             listOf(
-                ToolParam("name", "The preference", choices = listOf("start", "audio", "subtitles", "maxQuality", "maxSize", "buffer", "origin")),
-                ToolParam("value", "The value's name, as get_state shows it"),
+                ToolParam("name", "The preference", choices = listOf("start", "audio", "audioFallback", "subtitles", "maxQuality", "maxSize", "buffer", "origin")),
+                ToolParam("value", "The value as get_state shows it; audio is ISO 639-1 codes in order, \"original\" for the work's language (\"it,original\"); subtitles is off, auto or a code"),
             ),
         ) { a ->
             setPreference(deps.prefs, a.text("name"), a.text("value"))
@@ -697,8 +703,9 @@ class AppBridge(private val deps: AppDeps) {
     private fun setPreference(p: DesktopPrefs, name: String, value: String) {
         when (name) {
             "start" -> p.startMode = choice<StartMode>(value)
-            "audio" -> p.audioPreference = choice<AudioPreference>(value)
-            "subtitles" -> p.subtitlePreference = choice<SubtitlePreference>(value)
+            "audio" -> p.audioIntent = p.audioIntent.copy(languages = com.sokoul.desktop.data.AudioIntent.decode(value) ?: throw ToolProblem("Give ISO 639-1 codes or original, comma separated"))
+            "audioFallback" -> p.audioIntent = p.audioIntent.copy(fallback = choice<com.sokoul.desktop.data.AudioFallback>(value))
+            "subtitles" -> p.audioIntent = p.audioIntent.copy(subtitles = value.trim().lowercase().takeIf { it == "off" || it == "auto" || Regex("[a-z]{2}").matches(it) } ?: throw ToolProblem("Give off, auto or an ISO 639-1 code"))
             "maxQuality" -> p.maxQuality = choice<MaxQuality>(value)
             "maxSize" -> p.maxSize = choice<MaxSize>(value)
             "buffer" -> p.buffer = choice<BufferProfile>(value)

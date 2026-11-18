@@ -115,4 +115,9 @@ object Platform {
     fun isBackButton(e: androidx.compose.ui.input.pointer.PointerEvent) = false
 
     fun pickComicFile(): File? = null
+
+    /** Set by the activity: opens the system's speech recogniser and gives back what was said. */
+    @Volatile var voiceHook: (((String) -> Unit) -> Boolean)? = null
+    val hasVoice: Boolean get() = voiceHook != null
+    fun listen(onText: (String) -> Unit): Boolean = voiceHook?.invoke(onText) ?: false
 }

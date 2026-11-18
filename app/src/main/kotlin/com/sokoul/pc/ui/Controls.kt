@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -63,7 +64,7 @@ fun PillButton(
     }
 }
 
-/** Back arrow in the top-left corner of every page that opens over another. */
+/** Back arrow in the leading corner of every page that opens over another. */
 @Composable
 fun BackButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
     // The remote has its own: on a TV this one would only sit over the page and catch focus. A phone needs it.
@@ -78,7 +79,7 @@ fun BackButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
             .tvFocusable(onFocusChanged = { focused = it }, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(Icons.Filled.KeyboardArrowLeft, "Back", tint = if (focused) Palette.OnFocus else Palette.OnBackground, modifier = Modifier.size(34.dp))
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Back", tint = if (focused) Palette.OnFocus else Palette.OnBackground, modifier = Modifier.size(34.dp))
     }
 }
 

@@ -85,7 +85,7 @@ fun main() {
         ready = Started(db, future, realDeps(db, future) { loaded })
         launch {
             val player = DesktopPlayer.create()
-            player?.prefs = { DesktopPrefs(db).engine(Strings.isFrench()) }
+            player?.prefs = { DesktopPrefs(db).engine() }
             PcLog.event("player ready after ${System.currentTimeMillis() - startedAt}ms loaded=${player != null}")
             loaded = player
             future.complete(player)

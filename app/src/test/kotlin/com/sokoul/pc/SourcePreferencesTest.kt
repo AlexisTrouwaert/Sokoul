@@ -20,7 +20,7 @@ class SourcePreferencesTest {
         val sub = version("FStream", "sibnet.ru", AudioLanguage.VOSTFR)
         val waiting = version("FStream", "vidzy.org", readiness = Readiness.NotCached)
         val order = SourcePreferenceOrder(sources = listOf("FStream", "Omega"))
-        val result = SourcePreferences.rank(listOf(vf, other, sub, waiting), { order }, PlaybackPrefs(), true, DeviceCaps.Pc, { it.language }, { false })
+        val result = SourcePreferences.rank(listOf(vf, other, sub, waiting), { order }, PlaybackPrefs(), true, DeviceCaps.Pc, { null }, { false })
         assertEquals(listOf(other, vf, sub, waiting), result)
         assertEquals(4, result.size)
     }
@@ -29,7 +29,7 @@ class SourcePreferencesTest {
         val first = version("FStream", "vidmoly.to")
         val chosen = version("FStream", "voe.sx")
         val order = SourcePreferenceOrder(remembered = mapOf("FStream" to "voe", "Omega" to "sibnet"))
-        val result = SourcePreferences.rank(listOf(first, chosen), { order }, PlaybackPrefs(), true, DeviceCaps.Pc, { it.language }, { false })
+        val result = SourcePreferences.rank(listOf(first, chosen), { order }, PlaybackPrefs(), true, DeviceCaps.Pc, { null }, { false })
         assertEquals(listOf(chosen, first), result)
         assertEquals(listOf("voe", "vidmoly", "sibnet"), SourcePreferences.normalize(listOf("voe", "voe", "unknown"), listOf("vidmoly", "sibnet", "voe")))
     }

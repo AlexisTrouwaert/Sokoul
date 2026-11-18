@@ -218,8 +218,8 @@ class DesktopPlayer private constructor(private val factory: MediaPlayerFactory)
         val opts = buildList {
             add(":network-caching=${if (req.live) p.buffer.liveMs else p.buffer.vodMs}")
             add(":http-reconnect")
-            // « version originale » : libVLC ne doit pas imposer sa langue par défaut dans un fichier MULTI
-            if (p.audioLanguage.isBlank()) add(":audio-language=any")
+            // The track is chosen by Sokoul's own rule (AudioMatch), for any language: libVLC must not impose its default.
+            add(":audio-language=any")
             // apparence des sous-titres des Réglages (options du média : appliquées dès ce titre)
             addAll(p.subtitleOptions())
             // reprise : libVLC ouvre directement à la position (aussi après une reconnexion)
@@ -380,14 +380,17 @@ class DesktopPlayer private constructor(private val factory: MediaPlayerFactory)
         // les pistes arrivent une à une : la langue est revue à chaque ajout, tant que l'utilisateur n'a rien choisi
         val p = prefs()
         // langue vide = version originale : la piste non française d'un MULTI, pas celle marquée par défaut (souvent la VF)
-        val wanted = if (p.audioLanguage.isNotBlank()) AudioChoice.pick(audio, p.audioLanguage) else AudioChoice.pickOriginal(audio)
+        // One rule with the TV (AudioMatch): wanted languages, then the work's original language, then a track named Original.
+        val wanted = com.sokoul.pc.playback.sources.AudioMatch.pickTrack(audio, p.audioLanguages, current?.originalLanguage)
         if (!audioChosenByUser) wanted?.takeIf { it != player.audio().track() }?.let { id ->
             player.submit { if (!released) { player.audio().setTrack(id); refreshTracks() } }
         }
         // sous-titres par défaut des Réglages : posés une fois, dès qu'une piste de la langue apparaît
         if (!subtitleChosen) {
             val subTracks = player.subpictures().trackDescriptions().map { it.id() to it.description() }
-            AudioChoice.pickSubtitle(subTracks, p.subtitleLanguage)?.let { id ->
+            // Off, a chosen language, or "auto": the interface language when the audio heard is another one.
+            val heard = audio.firstOrNull { it.first == (wanted ?: player.audio().track()) }?.second
+            com.sokoul.pc.playback.sources.AudioMatch.pickSubtitle(subTracks, p.subtitleLanguage, heard, java.util.Locale.getDefault().language)?.let { id ->
                 subtitleChosen = true
                 player.submit { if (!released) { player.subpictures().setTrack(id); refreshTracks() } }
             }

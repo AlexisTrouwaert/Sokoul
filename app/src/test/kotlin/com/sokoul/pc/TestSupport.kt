@@ -46,7 +46,8 @@ fun sampleInfo(id: Int, seasons: Int? = 2) = TmdbInfo(
 class FakeCatalog(
     private val on: Boolean = true,
     private val rows: List<PageRow> = listOf(
-        PageRow.Titles("top-series", L("Top", "Top"), null, null, RowStyle.Top10, RowSource.Fixed((1..6).map { sampleItem(it) })),
+        // With artwork: the title page shows its neighbours' pictures beside it only when they have one.
+        PageRow.Titles("top-series", L("Top", "Top"), null, null, RowStyle.Top10, RowSource.Fixed((1..6).map { sampleItem(it).copy(backdrop = "/backdrop-$it.jpg") })),
     ),
     private val hero: List<HeroItem> = emptyList(),
     private val resumes: List<Resume> = emptyList(),
@@ -86,7 +87,7 @@ class FakeCatalog(
 }
 
 /** Records what the player was asked to do; each URL can be made to fail. */
-class FakeEngine(private val failing: Set<String> = emptySet()) : PlayerEngine {
+class FakeEngine(private val failing: Set<String> = emptySet(), private val tracks: Map<String, List<Pair<Int, String>>> = emptyMap()) : PlayerEngine {
     private val state = MutableStateFlow(PlayerStatus())
     val played = mutableListOf<StreamRequest>()
     val calls = mutableListOf<String>()
@@ -96,8 +97,10 @@ class FakeEngine(private val failing: Set<String> = emptySet()) : PlayerEngine {
         calls += "stop-previous"
         calls += "play:${request.url}"
         played += request
-        state.value = if (request.url in failing) PlayerStatus(error = "failed", session = request.session) else PlayerStatus(playing = true, lengthMs = 10_000_000, timeMs = 1_000, session = request.session)
+        state.value = if (request.url in failing) PlayerStatus(error = "failed", session = request.session) else PlayerStatus(playing = true, lengthMs = 10_000_000, timeMs = 1_000, session = request.session, audio = tracks[request.url].orEmpty())
     }
+
+    override fun endPreview() { calls += "endPreview" }
 
     /** Lets a test say what the player does next. */
     fun report(status: PlayerStatus) {

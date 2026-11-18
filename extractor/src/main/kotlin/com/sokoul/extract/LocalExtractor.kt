@@ -12,13 +12,18 @@ import kotlinx.serialization.json.jsonPrimitive
 /** Extract only embeds already authorized by the configured server; callers enforce account access. */
 class LocalExtractor(client: OkHttpClient, private val bridge: HttpBridge? = null) : AutoCloseable {
     private val cookies = ExtractionCookies()
+    /** Why the last extraction gave nothing ("timeout", "no_stream", "quickjs_unavailable"…), never an address. */
+    @Volatile var lastError: String? = null
+        private set
     private val runtime = ExtractorRuntime(
         http = bridge ?: OkHttpBridge(client.newBuilder().cookieJar(cookies).build()),
         userscript = { canonicalScript() },
         userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+        log = { level, message -> if (level == "error") lastError = message.replace(Regex("https?://\\S+"), "<url>").take(120) },
     )
     suspend fun extract(embedUrl: String): Extraction? = try {
-        runtime.extract(embedUrl).takeIf { it.ok }?.let { result ->
+        lastError = null
+        runtime.extract(embedUrl).also { if (!it.ok) lastError = lastError ?: it.error ?: "no_url" }.takeIf { it.ok }?.let { result ->
             val host = result.url?.toHttpUrlOrNull()?.host ?: return null
             withContext(Dispatchers.IO) { PublicNetwork.dns.lookup(host) }
             val transportHeaders = result.url?.let { (bridge as? PlaybackMetadataBridge)?.playbackHeaders(it) }.orEmpty()
@@ -28,7 +33,7 @@ class LocalExtractor(client: OkHttpClient, private val bridge: HttpBridge? = nul
             }
             result.copy(subtitles = subtitles, headers = result.headers + (if (cookie == null) emptyMap() else mapOf("Cookie" to cookie)) + transportHeaders)
         }
-    } catch (e: CancellationException) { throw e } catch (_: Exception) { null }
+    } catch (e: CancellationException) { throw e } catch (e: Exception) { lastError = e.javaClass.simpleName; null }
     override fun close() = runtime.close()
     companion object {
         internal fun canonicalScript(): String = LocalExtractor::class.java.getResourceAsStream("/sokoul-extract/canonical.js")?.use { it.readBytes().decodeToString() } ?: error("missing_core")

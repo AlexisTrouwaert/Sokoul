@@ -26,7 +26,9 @@ fun phoneDensity(widthPx: Int, heightPx: Int): Density = Density(density = minOf
 fun ScaledRoot(content: @Composable () -> Unit) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val density = if (Form.isPhone) phoneDensity(constraints.maxWidth, constraints.maxHeight) else scaledDensity(constraints.maxWidth)
-        CompositionLocalProvider(LocalDensity provides density) {
+        // Arabic reads right to left: rows, menus and text alignment follow the language.
+        val direction = if (com.sokoul.pc.i18n.InterfaceLanguages.current().rtl) androidx.compose.ui.unit.LayoutDirection.Rtl else androidx.compose.ui.unit.LayoutDirection.Ltr
+        CompositionLocalProvider(LocalDensity provides density, androidx.compose.ui.platform.LocalLayoutDirection provides direction) {
             content()
         }
     }

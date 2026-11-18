@@ -97,6 +97,7 @@ fun SettingsScreen(
     val panes = remember(prefs) { if (prefs == null) listOf(Pane.ACCOUNTS) else Pane.entries.toList() }
     // The category that takes the focus when the page opens is the one shown first.
     val start = remember { Pane.entries.firstOrNull { it.id == initialPane } ?: Pane.ACCOUNTS }
+    androidx.compose.runtime.CompositionLocalProvider(com.sokoul.pc.ui.LocalHoverOnly provides true) {
     Box(Modifier.fillMaxSize().background(com.sokoul.pc.theme.PageGradient).testTag("settings")) {
         Column(Modifier.offset(x = 80.dp, y = 150.dp).width(540.dp)) {
             Label(com.sokoul.pc.i18n.tr(com.sokoul.pc.i18n.Text.MenuSettings), com.sokoul.pc.theme.PanelType.Title.copy(fontSize = 56.sp), modifier = Modifier.padding(start = com.sokoul.pc.ui.PanelMetrics.RowPad, bottom = 26.dp))
@@ -120,12 +121,13 @@ fun SettingsScreen(
                     Pane.HOME -> prefs?.let { HomePane(it, hooks) }
                     Pane.MENU -> prefs?.let { MenuPane(it, hooks) }
                     Pane.SUBTITLES -> prefs?.let { SubtitlesPane(it) }
-                    Pane.PLAYBACK -> prefs?.let { PlaybackPane(it) }
+                    Pane.PLAYBACK -> prefs?.let { PlaybackPane(it, hooks) }
                     Pane.LANGUAGE -> prefs?.let { LanguagePane(it, hooks) }
                     Pane.ABOUT -> AboutPane(hooks)
                 }
             }
         }
+    }
     }
     LaunchedEffect(Unit) { runCatching { firstRow.requestFocus() } }
 }
@@ -140,7 +142,8 @@ private fun CategoryRow(p: Pane, current: Boolean, requester: FocusRequester, on
         requester = requester,
         restFill = if (current) com.sokoul.pc.theme.Glass.RowCurrent else Color.Transparent,
         titleStyle = com.sokoul.pc.theme.PanelType.Option.copy(fontWeight = if (current) FontWeight.SemiBold else FontWeight.Medium),
-        onFocused = { if (it) onSelect() },
+        // The keyboard shows a category as it reaches it; the mouse only by a click, so that crossing the list changes nothing.
+        onFocused = { if (it && !com.sokoul.pc.ui.FocusSource.lastWasMouse) onSelect() },
         leading = { tint -> Icon(p.icon, null, tint = tint, modifier = Modifier.size(32.dp)) },
         onClick = onSelect,
     )

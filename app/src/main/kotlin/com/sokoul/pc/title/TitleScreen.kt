@@ -1,5 +1,6 @@
 package com.sokoul.pc.title
 
+import com.sokoul.iptv.data.net.cinemaOnly
 import com.sokoul.pc.data.L
 import com.sokoul.pc.ui.glassSurface
 import com.sokoul.pc.ui.panelEnter
@@ -39,6 +40,8 @@ import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.NotificationsNone
@@ -91,7 +94,7 @@ import com.sokoul.iptv.data.net.TmdbInfo
 import com.sokoul.iptv.data.net.TmdbItem
 import com.sokoul.iptv.data.net.TmdbPerson
 import com.sokoul.pc.AppDeps
-import androidx.compose.animation.Crossfade
+import com.sokoul.desktop.ui.ImageLoader
 import androidx.compose.material.icons.filled.Theaters
 import com.sokoul.pc.collections.SagaLandscapeTile
 import com.sokoul.pc.data.SagaTile
@@ -147,6 +150,23 @@ private const val TEXT_DELAY_MILLIS = 1500L
 private const val LINK_TRIES = 4
 private const val LINK_RETRY_MS = 15_000L
 
+/**
+ * The Play button's words for a film still only in cinemas ("In cinemas" · "Not yet at home"), or one not out yet
+ * ("Coming soon" · its cinema date); null for anything that can be watched. Play still searches either way.
+ */
+internal fun cinemaLabels(kind: String, info: com.sokoul.iptv.data.net.TmdbInfo?): Pair<String, String>? {
+    if (kind != "movie" || info?.cinemaOnly() != true) return null
+    val out = info.releaseDate?.take(10)
+    val outOn = out?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+    if (outOn != null && outOn.isAfter(LocalDate.now())) {
+        val date = formatDate(out)
+        return L("Coming soon", "Prochainement").text() to L("In cinemas on $date", "Au cinéma le $date").text()
+    }
+    val home = formatDate(info.homeRelease)
+    return L("In cinemas", "Au cinéma").text() to
+        (if (home != null) L("At home on $home", "En vidéo le $home").text() else L("Not yet at home", "Pas encore en vidéo").text())
+}
+
 fun formatDate(iso: String?): String? = iso?.let {
     runCatching { LocalDate.parse(it).format(DateTimeFormatter.ofPattern("d MMM yyyy")) }.getOrNull()
 }
@@ -172,7 +192,19 @@ fun TitleScreen(
 ) {
     var index by remember { mutableIntStateOf(startIndex.coerceIn(items.indices)) }
     val item = items[index]
-    val info by produceState<TmdbInfo?>(null, item.id) { value = deps.catalog.details(item.kind(), item.id) }
+    // Details of the titles around, read ahead: stepping to one then shows its final artwork at once, instead of its
+    // list image replaced by the textless one a moment later (two loads and two fades, the GPU's cost on the TV).
+    val known = remember(items) { java.util.concurrent.ConcurrentHashMap<Int, TmdbInfo>() }
+    val info by produceState(known[item.id], item.id) { value = deps.catalog.details(item.kind(), item.id)?.also { known[item.id] = it } }
+    val cardWidthPx = with(androidx.compose.ui.platform.LocalDensity.current) { CardWidth.roundToPx() }
+    LaunchedEffect(index) {
+        listOf(index + 1, index - 1, index + 2).mapNotNull(items::getOrNull).forEach { near ->
+            launch {
+                val details = known[near.id] ?: runCatching { deps.catalog.details(near.kind(), near.id) }.getOrNull()?.also { known[near.id] = it }
+                (details?.backdrop ?: near.backdrop)?.let { runCatching { ImageLoader.load(it, cardWidthPx) } }
+            }
+        }
+    }
     val saga by produceState<SagaTile?>(null, item.id, info) { value = deps.catalog.sagaOfTitle(item.kind(), item.id, info) }
     val extras by produceState(com.sokoul.pc.data.TitleExtras(), item.id, info) { value = deps.catalog.titleExtras(item.kind(), item.id, info) }
     var full by remember { mutableStateOf(false) }
@@ -337,7 +369,7 @@ fun TitleScreen(
                 origin = origin,
                 enter = enter.value,
                 expand = expand,
-                slide = slide.value,
+                slide = { slide.value },
                 scrollPx = { scroll.value },
                 blockColor = blockColor,
                 videoOn = trailer.playing && rememberHasFrames(deps.player),
@@ -433,7 +465,11 @@ internal fun HeroLayer(
     origin: CardOrigin?,
     enter: Float,
     expand: Float,
-    slide: Float,
+    /**
+     * Read when drawing, like [scrollPx]: read while composing, the slide to the next title recomposed the whole page
+     * (text, buttons, rows) at every frame of its 380 ms, the jank felt when changing film on the TV (2026-11-18).
+     */
+    slide: () -> Float,
     /** Read when drawing: read while composing, it recomposed and measured the whole page at every frame of a scroll. */
     scrollPx: () -> Int,
     blockColor: Color,
@@ -444,6 +480,7 @@ internal fun HeroLayer(
     fadeTo: Color = Color(0xF2000000),
 ) {
     val density = androidx.compose.ui.platform.LocalDensity.current
+    val rtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
     fun Float.toDpValue(): Dp = with(density) { this@toDpValue.toDp() }
     val screenW = 1920.dp
     val screenH = 1080.dp
@@ -462,13 +499,12 @@ internal fun HeroLayer(
     val corner = lerp(36.dp, 0.dp, expand)
     val imageAlpha = ((enter - 0.45f) / 0.55f).coerceIn(0f, 1f)
     val shape = RoundedCornerShape(corner)
-    val offsetPx = slide
     val neighborAlpha = (1f - expand) * imageAlpha
 
     Box(Modifier.fillMaxSize().graphicsLayer {
         val px = scrollPx()
         alpha = (1f - px / 700f).coerceIn(0f, 1f)
-        translationX = offsetPx
+        translationX = slide()
         translationY = -px.toFloat()
     }) {
         neighbors.first?.let { n ->
@@ -487,6 +523,13 @@ internal fun HeroLayer(
                     .testTag("neighbor-right"),
             )
         }
+        // The card says how to move: left and right to the next titles, down to open the page. Nothing told it, and
+        // the card was taken for a stuck page on the TV (2026-11-18). The glyphs fade with the neighbours.
+        if (neighborAlpha > 0.01f) {
+            val glyph = Modifier.size(40.dp).graphicsLayer { alpha = neighborAlpha * 0.85f }
+            if (neighbors.first != null) Icon(Icons.Filled.ChevronLeft, null, glyph.offset(x = x - 40.dp, y = y + h / 2 - 20.dp), tint = Palette.OnBackground)
+            if (neighbors.second != null) Icon(Icons.Filled.ChevronRight, null, glyph.offset(x = x + cardW, y = y + h / 2 - 20.dp), tint = Palette.OnBackground)
+        }
         Box(
             // Colour, image and shades rendered once into a layer and drawn in one pass, unless a trailer plays in it.
             Modifier.offset(x = x, y = y).size(w, h)
@@ -498,7 +541,9 @@ internal fun HeroLayer(
                 .background(blockColor)
                 .pointerInput(Unit) { detectTapGestures { onTap() } },
         ) {
-            Crossfade(
+            // No crossfade: Art already fades a new image in, and a crossfade drew two full-size images through the
+            // card's offscreen layer at every frame of each change of title (21 ms of GPU per frame on the TV, 2026-11-18).
+            Art(
                 backdrop,
                 Modifier.fillMaxSize().graphicsLayer {
                     alpha = imageAlpha
@@ -506,10 +551,14 @@ internal fun HeroLayer(
                     scaleX = zoom
                     scaleY = zoom
                 },
-            ) { image -> Art(image, Modifier.fillMaxSize(), placeholder = Color.Transparent) }
+                placeholder = Color.Transparent,
+            )
             val engine = deps.player
             if (videoOn && engine != null) VideoFill(engine, Modifier.fillMaxSize())
-            Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to Color(0xD9000000), 0.62f to Color.Transparent)))
+            Box(Modifier.fillMaxSize().background(
+                if (rtl) Brush.horizontalGradient(0.38f to Color.Transparent, 1f to Color(0xD9000000))
+                else Brush.horizontalGradient(0f to Color(0xD9000000), 0.62f to Color.Transparent),
+            ))
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.5f to Color.Transparent, 0.82f to fadeTo.copy(alpha = 0.72f), 0.96f to fadeTo)))
         }
     }
@@ -550,7 +599,9 @@ private fun HeroText(
         value = found?.let { NextEp(it.season, it.episode, it.runtimeMin, it.airDate) }
     }
     val playKind = HeroLogic.playKind(kind == "tv", last != null, last?.finished == true, next, java.time.LocalDate.now())
-    val label = when (playKind) {
+    // A film still only in cinemas: Play still searches, but says what to expect.
+    val cinema = if (resume == null) cinemaLabels(kind, info) else null
+    val label = cinema?.first ?: when (playKind) {
         PlayKind.Resume -> if (resume?.season != null && resume.episode != null) "${tr(Text.Resume)} ${tr(Text.EpisodeShort, resume.season!!, resume.episode!!)}" else tr(Text.Resume)
         PlayKind.Next -> L("Next episode", "Épisode suivant").text()
         PlayKind.New -> L("New episode", "Nouvel épisode").text()
@@ -560,6 +611,7 @@ private fun HeroText(
     val remaining = resume?.takeIf { it.durationMs > 0 }?.let { (((it.durationMs - it.positionMs) / 60_000L).toInt()).coerceAtLeast(1) }
     val progress = resume?.takeIf { it.durationMs > 0 }?.let { it.positionMs.toFloat() / it.durationMs }
     val sub = when {
+        cinema != null -> cinema.second
         remaining != null -> L("${durationLabel(remaining)} left", "Reste ${durationLabel(remaining)}").text()
         (playKind == PlayKind.Next || playKind == PlayKind.New) && next != null ->
             listOfNotNull("S${next!!.season} E${next!!.episode}", next!!.runtimeMin?.takeIf { it > 0 }?.let { durationLabel(it) }).joinToString(" · ")

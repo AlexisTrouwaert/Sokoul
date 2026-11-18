@@ -98,6 +98,24 @@ object DebridStreams {
             otherWork(file, titles)
     }
 
+    /**
+     * An audiobook, an e-book or a soundtrack: never a video. Seen for a film still in cinemas (2026-11-18), where
+     * "The Hunger Games Trilogy + Prequel (Audiobook)" was the first version and was tried before anything else.
+     */
+    fun notVideo(name: String): Boolean = rxNotVideo.containsMatchIn(name)
+
+    /**
+     * A box set of a franchise for a film of this year or the last: it was put together before the film came out, so
+     * it does not hold it ("The Hunger Games Quadrilogy" for the 2026 prequel). An older film's box set is kept: its
+     * file is chosen by name in the pack.
+     */
+    fun packBeforeFilm(name: String, titles: List<String>, year: Int?, thisYear: Int = java.time.Year.now().value): Boolean {
+        if (year == null || year < thisYear - 1) return false
+        val word = rxBoxSet.find(name)?.value?.lowercase() ?: return false
+        // "The Twilight Saga…": the word belongs to the film's own title.
+        return titles.none { it.lowercase().contains(word) }
+    }
+
     /** Exact title head, allowing release tags after the title but never another sequel's subtitle. */
     fun movieTitleMatches(name: String, titles: List<String>): Boolean {
         val n = norm(name.substringAfterLast('/').substringAfterLast('\\').replace(rxVideoExt, ""))
@@ -123,6 +141,8 @@ object DebridStreams {
     private val rxVideoExt = Regex("(?i)\\.(mkv|mp4|avi|ts|m2ts|m4v|mov|webm)$")
     private val rxChecksum = Regex("\\[[0-9A-Fa-f]{8}\\]")
     private val rxYear = Regex("(?<!\\d)(19|20)\\d{2}(?!\\d)")
+    private val rxNotVideo = Regex("(?i)(?<![a-z])(audio ?book|livre audio|h[öo]rbuch|ebook|e-book|epub|m4b|soundtrack|ost|flac|mp3)(?![a-z])")
+    private val rxBoxSet = Regex("(?i)(?<![a-z])(duology|trilogy|trilogie|quadrilogy|quadrilogie|pentalogy|hexalogy|anthology|collection|saga|integrale|intégrale|box ?set|coffret)(?![a-z])")
     private val rxInBrackets = Regex("\\((\\d{2,4})\\)")
     private val rxHash = Regex("[0-9a-f]{40}")
     private val rxHashInUrl = Regex("[/=]([0-9a-fA-F]{40})(?=[/?]|$)")
@@ -256,7 +276,8 @@ object DebridStreams {
     fun enrich(first: DebridStream, later: DebridStream): DebridStream {
         val a = first.release
         val b = later.release
-        val audio = (a.audio + b.audio).distinct()
+        // French first, as ReleaseName reads it, then the others in a fixed order: the arrival order changes nothing.
+        val audio = (a.audio + b.audio).distinct().sortedWith(compareBy<String> { if (it == "FR") 0 else 1 }.thenBy { it })
         val language = when {
             "FR" in audio && audio.any { it != "FR" } -> com.sokoul.iptv.domain.AudioLanguage.MULTI
             a.language == null -> b.language
@@ -264,8 +285,11 @@ object DebridStreams {
             a.language == b.language -> a.language
             setOf(a.language, b.language).containsAll(setOf(com.sokoul.iptv.domain.AudioLanguage.VF, com.sokoul.iptv.domain.AudioLanguage.VO)) ->
                 com.sokoul.iptv.domain.AudioLanguage.MULTI
-            else -> a.language
+            // Two other readings of the same file: the same answer whichever service spoke first.
+            else -> listOfNotNull(a.language, b.language).minOrNull()
         }
+        // A foreign dub only while no French is announced for this file, whichever answer said "Dual" or "FR".
+        val dub = (a.dub || b.dub) && "FR" !in audio
         return first.copy(
             url = first.url ?: later.url,
             filename = first.filename ?: later.filename,
@@ -283,6 +307,7 @@ object DebridStreams {
                 season = a.season ?: b.season,
                 episode = a.episode ?: b.episode,
                 audio = audio,
+                dub = dub,
             ),
             community = first.community || later.community,
         )

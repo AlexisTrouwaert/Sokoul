@@ -1,0 +1,1051 @@
+# Türkçe — english<TAB>translation, keyed by app/src/main/resources/i18n/source.tsv
+"One more episode" is your motto.	"Bir bölüm daha" senin sloganın.
+%1$d h %2$d min	%1$d sa %2$d dk
+%1$d min	%1$d dk
+%1$s Originals	%1$s Orijinalleri
+%d awards	%d ödül
+%d channels	%d kanal
+%d films	%d film
+%d hours	%d saat
+%d min left	%d dk kaldı
+%d Oscar nominations	%d Oscar adaylığı
+%d Oscars	%d Oscar
+%d s left	%d sn kaldı
+%d versions found…	%d sürüm bulundu…
+%s Collection	%s Koleksiyonu
+%s is ready	%s hazır
+%s is unavailable	%s kullanılamıyor
+%s starts soon on %s	%s birazdan %s kanalında başlıyor
+1 award	1 ödül
+1 channel	1 kanal
+1 channel in this group	Bu grupta 1 kanal
+1 film	1 film
+1 Oscar	1 Oscar
+1 Oscar nomination	1 Oscar adaylığı
+1 screen at a time	Aynı anda 1 ekran
+1 screen watching right now	Şu anda 1 ekran izliyor
+30 minutes earlier	30 dakika önce
+30 minutes later	30 dakika sonra
+A film, not this episode	Bir film, bu bölüm değil
+A kids profile cannot start titles rated 16 or 18.	Çocuk profili 16 veya 18 yaş sınırlı içerikleri başlatamaz.
+A Real-Debrid limit was reached. Try again shortly.	Bir Real-Debrid sınırına ulaşıldı. Birazdan yeniden dene.
+A single provider connection is shared between playback and DVR	Oynatma ve kayıt tek bir sağlayıcı bağlantısını paylaşır
+About	Hakkında
+Accent colour	Vurgu rengi
+Account status, formats and guide time offset	Hesap durumu, biçimler ve rehber saat farkı
+Action	Aksiyon
+Action & Adventure	Aksiyon ve macera
+Actions	İşlemler
+Active	Etkin
+Active collection	Etkin koleksiyon
+Adaptations	Uyarlamalar
+Add	Ekle
+Add a language	Dil ekle
+Add channel to favorites	Kanalı favorilere ekle
+Add channels	Kanal ekle
+Add channels from any group. Your provider's groups stay as they are.	Herhangi bir gruptan kanal ekle. Sağlayıcının grupları olduğu gibi kalır.
+Add channels from any provider group. Your provider categories remain unchanged.	Sağlayıcının herhangi bir grubundan kanal ekle. Kategorileri değişmez.
+Add to collection	Koleksiyona ekle
+Add your IPTV account in Settings to see your channels.	Kanallarını görmek için Ayarlar'dan IPTV hesabını ekle.
+Added to downloads. Open Recordings to follow progress.	İndirmelere eklendi. İlerlemeyi görmek için Kayıtlar'ı aç.
+Adrenaline	Adrenalin
+After {1} min	{1} dk sonra
+Airing today	Bugün yayında
+Alert on	Uyarı açık
+All	Tümü
+ALL\nCOLLECTIONS	TÜM\nKOLEKSİYONLAR
+All channels	Tüm kanallar
+All formats	Tüm biçimler
+All groups	Tüm gruplar
+All languages	Tüm diller
+All providers	Tüm sağlayıcılar
+All sports	Tüm sporlar
+All the Feels	Duygu yüklü
+All titles	Tüm içerikler
+All Versions	Tüm sürümler
+All-Time Essentials	Tüm zamanların klasikleri
+Already seen	Zaten izlendi
+Also by {1}	{1} imzalı diğerleri
+Also directed by {1}	{1} yönetmenliğindeki diğerleri
+Also on	Ayrıca şurada
+Also on %s	Ayrıca %s üzerinde
+Always hunting for the next gem.	Hep bir sonraki cevheri arıyorsun.
+An adult profile manages source settings.	Kaynak ayarlarını bir yetişkin profili yönetir.
+An episode before coffee.	Kahveden önce bir bölüm.
+Animation	Animasyon
+Anime	Anime
+Anime only	Yalnızca animede
+Anime source priorities	Anime kaynaklarının öncelikleri
+Anime sources	Anime kaynakları
+Anime-Sama: no resolved stream available	Anime-Sama: kullanılabilir yayın yok
+Anime-Sama: server key requires VIP access	Anime-Sama: sunucu anahtarı VIP erişimi gerektiriyor
+AniProject backend URL	AniProject backend adresi
+Another episode	Başka bir bölüm
+Another work with the same name	Aynı adlı başka bir eser
+Any length	Her süre
+Any status	Her durum
+API keys	API anahtarları
+Application	Uygulama
+Applied the next time a channel is opened. Local live recording currently requires MPEG-TS.	Bir kanal bir sonraki açılışında uygulanır. Yerel canlı kayıt şimdilik MPEG-TS gerektirir.
+Are you still watching?	Hâlâ izliyor musun?
+Arts and music	Sanat ve müzik
+Ask at start	Başlangıçta sor
+Ask me	Bana sor
+at %s	saat %s
+Audience	Seyirci
+Audio	Ses
+Audio language	Ses dili
+Audio languages	Ses dilleri
+Audio not identified	Ses tanımlanamadı
+Audio verified	Ses doğrulandı
+Audio: {1}	Ses: {1}
+Auto scroll off	Otomatik kaydırma kapalı
+Auto scroll {1}	Otomatik kaydırma {1}
+Automatic	Otomatik
+Automatic trailers	Otomatik fragmanlar
+Average IMDb rating	Ortalama IMDb puanı
+AWARDS	ÖDÜLLER
+Awards won	Kazanılan ödüller
+Back	Geri
+Back 10 s	10 sn geri
+Back closes · Menu opens actions · Info shows details	Geri kapatır · Menü işlemleri açar · Bilgi ayrıntıları gösterir
+Back returns to the guide. Your provider credentials stay in the existing protected source profile.	Geri rehbere döner. Sağlayıcı bilgilerin korumalı kaynak profilinde kalır.
+Back to collection	Koleksiyona dön
+Back to guide	Rehbere dön
+Back to live	Canlıya dön
+Back to My TV	TV'me dön
+Back to series	Diziye dön
+Back to the catalogue	Kataloğa dön
+Background	Arka plan
+Because you watched	İzlediğin için
+Because You Watched %1$s	%1$s izlediğin için
+Behaviour	Davranış
+Behind the Scenes	Kamera arkası
+Best rated	En yüksek puanlılar
+Big Emotions	Büyük duygular
+Biggest hit	En büyük başarı
+Black outline	Siyah kenarlık
+Bottom	Altta
+Brightness {1} %	Parlaklık %{1}
+Bring your channels together across provider groups: sport, family, an evening selection…	Farklı gruplardaki kanalları bir araya getir: spor, aile, akşam seçkisi…
+Browse	Göz at
+Browse by Category	Kategoriye göre göz at
+Browse the IPTV catalogue and resume playback	IPTV kataloğuna göz at ve oynatmaya devam et
+Buffer	Arabellek
+Calendar	Takvim
+Cancel	İptal
+Cancelled	İptal edildi
+Cast & Crew	Oyuncular ve ekip
+CATALOG	KATALOG
+Categories	Kategoriler
+Categories could not be refreshed. Stored titles remain available.	Kategoriler yenilenemedi. Kayıtlı içerikler kullanılabilir durumda.
+Channel	Kanal
+Channel preview	Kanal önizlemesi
+Channel up / down	Sonraki / önceki kanal
+Channels	Kanallar
+channels	kanal
+Channels by name or number · Programmes from your guide	Ada veya numaraya göre kanallar · Rehberindeki programlar
+Channels could not be loaded. Try refreshing.	Kanallar yüklenemedi. Yenilemeyi dene.
+Chapter	Bölüm
+Chapter {1}	Bölüm {1}
+Chapters	Bölümler
+Chapters of volume {1}	{1}. cildin bölümleri
+Chapters {1}	Bölümler {1}
+Characters	Karakterler
+Checking PIN…	PIN kontrol ediliyor…
+Checking…	Kontrol ediliyor…
+Chills	Ürpertiler
+China	Çin
+Choose a category, then a title · Back to close	Bir kategori, sonra bir içerik seç · Kapatmak için Geri
+Choose a collection in the group column, then Menu › Use for zapping.	Grup sütunundan bir koleksiyon seç, sonra Menü › Zap için kullan.
+Choose a private 4–8 digit PIN to protect your TV groups.	TV gruplarını korumak için 4–8 haneli özel bir PIN seç.
+Choose a season	Sezon seç
+Choose a unique name, 1–40 characters.	1–40 karakterlik benzersiz bir ad seç.
+Choose an adult profile to browse these external sports sources.	Bu harici spor kaynaklarına göz atmak için bir yetişkin profili seç.
+Choose an export destination. The original recording is kept.	Bir dışa aktarma konumu seç. Orijinal kayıt korunur.
+Choose another group	Başka bir grup seç
+Choose Another Version	Başka bir sürüm seç
+Choose Channels and enter a name or number, or explore Programmes.	Kanallar'ı seçip bir ad veya numara gir ya da Programlar'ı keşfet.
+Choose folder…	Klasör seç…
+Clear	Temizle
+CLEAR	TEMİZLE
+Clear the catalogue cache	Katalog önbelleğini temizle
+Forget source failures	Kaynak hatalarını unut
+Your languages	Dillerin
+Search services	Arama hizmetleri
+If no language matches	Hiçbir dil eşleşmezse
+Play the file's own track	Dosyanın kendi sesini oynat
+Close	Kapat
+Code	Kod
+Collection	Koleksiyon
+COLLECTION	KOLEKSİYON
+Collections	Koleksiyonlar
+Colour	Renk
+Colours the progress of what you watch: the player's bar and the cards of Continue Watching.	İzlediklerinin ilerlemesini renklendirir: oynatıcı çubuğu ve İzlemeye devam et kartları.
+Comedy	Komedi
+Coming up	Sırada
+Compatible · {1}	Uyumlu · {1}
+Configure later	Daha sonra ayarla
+Configure your Sokoul server and access key in Credentials.	Sokoul sunucunu ve anahtarını Kimlik bilgileri'nden ayarla.
+Confirm delete	Silmeyi onayla
+Connecting…	Bağlanıyor…
+Continue	Devam et
+Continue Watching	İzlemeye devam et
+Could not reach the source server.	Kaynak sunucuya ulaşılamadı.
+Could not start the download.	İndirme başlatılamadı.
+Counting…	Sayılıyor…
+Create a collection	Koleksiyon oluştur
+Create and add	Oluştur ve ekle
+CREATED BY	YARATICI
+Created by	Yaratıcı
+Credentials and API keys	Kimlik bilgileri ve API anahtarları
+Credits	Jenerik
+Crime	Suç
+Crime & Thriller	Suç ve gerilim
+Cult Sagas	Kült seriler
+Current group	Geçerli grup
+Cyan	Camgöbeği
+D-pad to type and browse · Back returns to your selection	Yazmak ve gezinmek için yön tuşları · Geri seçimine döner
+Dark box	Koyu kutu
+days in a row, at best	gün üst üste, en fazla
+days in front of the screen	gün ekran başında
+Default folder	Varsayılan klasör
+delayed %d min	%d dk gecikmeli
+Delete	Sil
+Delete collection	Koleksiyonu sil
+Delete “{1}”?	"{1}" silinsin mi?
+DETAILS	AYRINTILAR
+DIRECTED BY	YÖNETMEN
+Directed by	Yönetmen
+Director	Yönetmen
+Directors	Yönetmenler
+Discover	Keşfet
+Dismiss	Kapat
+Done	Bitti
+Double page	Çift sayfa
+Double page, right to left	Çift sayfa, sağdan sola
+Download started.	İndirme başladı.
+downloading %d %%	indiriliyor %%%d
+Drama	Dram
+Drama & Romance	Dram ve romantik
+Edit profiles	Profilleri düzenle
+Edit search	Aramayı düzenle
+ends	bitiş
+Ends at 	Bitiş: 
+ends at %s	bitiş %s
+English	İngilizce
+Enter a name or number	Bir ad veya numara gir
+Enter a public HTTP or HTTPS host link.	Herkese açık bir HTTP veya HTTPS barındırma bağlantısı gir.
+Enter a title	Bir içerik adı gir
+Enter a valid HTTP or HTTPS XMLTV address, or off to clear it.	Geçerli bir HTTP veya HTTPS XMLTV adresi gir ya da silmek için off yaz.
+Enter a valid HTTPS address, or a local HTTP address.	Geçerli bir HTTPS adresi veya yerel bir HTTP adresi gir.
+Enter your adult PIN to manage protected groups.	Korumalı grupları yönetmek için yetişkin PIN'ini gir.
+Enter your IPTV credentials or a TMDB key, or choose Configure later.	IPTV bilgilerini veya bir TMDB anahtarı gir ya da Daha sonra ayarla'yı seç.
+Ep. {1}	Böl. {1}
+EPISODE	BÖLÜM
+Episode {1}	Bölüm {1}
+Episodes	Bölümler
+Episodes could not be loaded.	Bölümler yüklenemedi.
+Episodes {1}	Bölümler {1}
+ERA	DÖNEM
+Erase this profile's watch history	Bu profilin izleme geçmişini sil
+ESSENTIALS	VAZGEÇİLMEZLER
+Every day	Her gün
+Every week	Her hafta
+Everyone plays the title with their own sources; play, pause and jumps stay in step.	Herkes içeriği kendi kaynaklarıyla oynatır; oynatma, duraklatma ve atlamalar senkron kalır.
+Everything	Her şey
+Everywhere	Her yerde
+Excluded sources	Hariç tutulan kaynaklar
+Excluded · {1}	Hariç · {1}
+Exit full screen	Tam ekrandan çık
+Expires {1}	Bitiş tarihi: {1}
+Explore	Keşfet
+Export	Dışa aktar
+Export failed. Check available space, folder access and existing files.	Dışa aktarma başarısız. Boş alanı, klasör erişimini ve mevcut dosyaları kontrol et.
+Exporting recording…	Kayıt dışa aktarılıyor…
+Extend 15 minutes	15 dakika uzat
+Failed	Başarısız
+Failing stream	Sorunlu yayın
+Family	Aile
+Fantasy	Fantastik
+Fast	Hızlı
+Favorite	Favorilere ekle
+Favorites	Favoriler
+Favorites first	Önce favoriler
+Favorites only	Yalnızca favoriler
+Featured	Öne çıkanlar
+Fill (crop)	Doldur (kırp)
+Filler	Dolgu
+Fillers hidden	Dolgu bölümler gizli
+Film	Film
+Film Page	Film sayfası
+Films	Filmler
+Films and series	Filmler ve diziler
+Films and series: you take it all.	Filmler ve diziler: hepsini alırsın.
+Films are your religion.	Sinema senin dinin.
+Films That Twist Your Mind	Beyin yakan filmler
+Films, OVAs and more	Filmler, OVA'lar ve dahası
+Find something to watch	İzleyecek bir şey bul
+Finding a source…	Kaynak aranıyor…
+Finished	Tamamlananlar
+First page	İlk sayfa
+Fit	Sığdır
+Fit height	Tam sayfa
+Fit width	Tam genişlik
+Follow the system	Sisteme göre
+Font	Yazı tipi
+For the Whole Family	Tüm aile için
+FOR YOU	SENİN İÇİN
+For You	Senin için
+Forward 30 s	30 sn ileri
+fps	fps
+Fragile stream	Kararsız yayın
+Fragile stream. Try %s?	Kararsız yayın. %s denensin mi?
+French	Fransızca
+From the youngest to the oldest, everyone follows.	Küçükten büyüğe herkes takip ediyor.
+From your guide, in your channels' order	Rehberinden, kanallarının sırasıyla
+Full guide duration	Rehberin tüm süresi
+Full programme capture, schedules and saved files	Tam program kaydı, planlamalar ve kayıtlı dosyalar
+Full screen	Tam ekran
+Gallery	Galeri
+Generate a download or playable link with a host service enabled on your Sokoul server.	Sokoul sunucunda etkin bir hizmetle indirme veya oynatma bağlantısı oluştur.
+Generate link	Bağlantı oluştur
+Generated link	Oluşturulan bağlantı
+Generating…	Oluşturuluyor…
+GENRE	TÜR
+Genres	Türler
+Give it a short name	Kısa bir ad ver
+Go on after the anime	Animeden sonra devam et
+Green	Yeşil
+Groups	Gruplar
+Guaranteed Chills	Garantili ürperti
+Guide	Rehber
+Guide adjustment	Rehber ayarı
+Guide refresh failed. The stored guide is preserved.	Rehber yenilenemedi. Kayıtlı rehber korunuyor.
+Guide times are given in {1}	Rehber saatleri {1} cinsinden
+Guide updated {1}	Rehber güncellendi: {1}
+Hearing impaired	İşitme engelliler için
+Hidden	Gizli
+Hidden categories are removed from browsing and playback. Protected categories require an adult PIN session.	Gizli kategoriler katalogdan ve oynatmadan kaldırılır. Korumalı kategoriler kilidi açık bir yetişkin oturumu gerektirir.
+Hidden from guide	Rehberde gizli
+Hide	Gizle
+Hide fillers	Dolgu bölümleri gizle
+Hide group	Grubu gizle
+Hide, order, parental code	Gizle, sırala, ebeveyn kodu
+Hide, protect and reorder groups	Grupları gizle, koru ve yeniden sırala
+High Tension	Yüksek gerilim
+Highest rated manga	En yüksek puanlı mangalar
+Hold OK	OK'yi basılı tut
+Hold OK on a channel to add it to favorites or a collection.	Favorilere veya bir koleksiyona eklemek için bir kanalda OK'yi basılı tut.
+Home	Ana Sayfa
+Home rows	Ana Sayfa satırları
+Horror	Korku
+Host link	Barındırma bağlantısı
+Host link tools	Barındırma bağlantısı araçları
+Hoster {1}	Barındırıcı {1}
+If you liked this	Bunu beğendiysen
+If You Liked This Saga	Bu seriyi beğendiysen
+In %d min	%d dk içinde
+In account	Hesapta
+In My List	Listemde
+In the Same Universe	Aynı evrende
+Inactive	Etkin değil
+Information	Bilgi
+Internal storage	Dahili depolama
+IPTV	IPTV
+Its length is not this episode's	Süresi bu bölüme uymuyor
+Japan	Japonya
+Join	Katıl
+Just Released	Yeni çıkanlar
+Keep collection	Koleksiyonu koru
+Keep reading	Okumaya devam et
+Keep the tissues close.	Mendilleri yakında tut.
+Keep this channel and time	Aynı kanal ve saat
+Keep Watching	İzlemeye devam et
+Kids profile: off	Çocuk profili: kapalı
+Kids profile: on	Çocuk profili: açık
+Korea	Kore
+Language	Dil
+LANGUAGES	DİLLER
+Languages	Diller
+Large	Büyük
+Last year	Geçen yıl
+Later	Yakında
+Laughs, smiles and nothing else.	Kahkaha, gülümseme, başka bir şey değil.
+Leave the watch party	İzleme partisinden ayrıl
+Left to right	Soldan sağa
+LESS	DAHA AZ
+Library	Arşiv
+Light Hearted	Gönül eğlendiren
+Light novels	Light novel'lar
+Link entered	Girilen bağlantı
+LIVE	CANLI
+Live	Canlı
+Live action	Canlı çekim
+Live and upcoming events	Canlı ve yaklaşan etkinlikler
+Live preview	Canlı önizleme
+Live stream format	Canlı yayın biçimi
+Live TV	Canlı TV
+loading %d %%	yükleniyor %%%d
+Loading channels…	Kanallar yükleniyor…
+Loading groups…	Gruplar yükleniyor…
+Loading provider information…	Sağlayıcı bilgileri yükleniyor…
+Loading sports…	Spor yükleniyor…
+Loading titles…	İçerikler yükleniyor…
+Loading your guide…	Rehberin yükleniyor…
+Loading…	Yükleniyor…
+Lock now	Şimdi kilitle
+Long strip	Uzun şerit
+Look	Görünüm
+Lost frames	Kayıp kareler
+M3U source	M3U kaynağı
+Made for you	Sana özel
+Maintenance	Bakım
+Manga	Manga
+Manga of the moment	Anın mangaları
+Manga sources	Manga kaynakları
+Manga still coming out	Devam eden mangalar
+Prefer quality up to	Tercih edilen en yüksek kalite
+Prefer size up to	Tercih edilen en büyük boyut
+MB/s	MB/sn
+Measuring the stream	Yayın ölçülüyor
+Menu · edit	Menü · düzenle
+Message	Mesaj
+Metacritic	Metacritic
+Mind Games	Akıl oyunları
+Monday to Friday	Pazartesiden cumaya
+Moods	Ruh halleri
+MOODS	ATMOSFERLER
+More	Daha fazla
+More options	Diğer seçenekler
+Move down	Aşağı taşı
+Move group down	Grubu aşağı taşı
+Move group up	Grubu yukarı taşı
+Move up	Yukarı taşı
+Move with ↑ ↓ · OK saves · Back cancels	↑ ↓ ile taşı · OK kaydeder · Geri iptal eder
+Movie	Film
+Movie and series source priorities	Film ve dizi kaynaklarının öncelikleri
+Movies	Filmler
+Movies, shows, cast and more	Filmler, diziler, oyuncular ve dahası
+Music	Müzik
+Must-See Series	Mutlaka izlenmesi gereken diziler
+Must-sees this week.	Bu haftanın kaçırılmayacakları.
+My channels	Kanallarım
+My List	Listem
+My reminders	Hatırlatıcılarım
+My series	Dizilerim
+My space	Alanım
+My TV	TV'm
+Name	Ad
+Name your collection	Koleksiyonuna bir ad ver
+NEW	YENİ
+New chapters every week or month	Her hafta veya ay yeni bölümler
+New collection	Yeni koleksiyon
+New collection…	Yeni koleksiyon…
+New episode	Yeni bölüm
+New Episodes	Yeni bölümler
+New in cinemas, just arrived.	Sinemalardan yeni geldi.
+Newest	En yeniler
+Next	İleri
+Next channel	Sonraki kanal
+Next chapter	Sonraki bölüm
+Next episode	Sonraki bölüm
+Next episode automatically	Sonraki bölüm otomatik
+Next episode in {1} s	Sonraki bölüm {1} sn içinde
+Next episode: S%dE%d on %s	Sonraki bölüm: S%dB%d, %s
+Next page	Sonraki sayfa
+Next Version	Sonraki sürüm
+No accessible result. Try a shorter name or switch to Programmes.	Erişilebilir sonuç yok. Daha kısa bir ad dene veya Programlar'a geç.
+No accessible titles match. Try another category or page.	Erişilebilir içerik bulunamadı. Başka bir kategori veya sayfa dene.
+No channels here.	Burada kanal yok.
+No channels in this group.	Bu grupta kanal yok.
+No channels in this zapping list. Choose a list in My TV.	Bu zap listesinde kanal yok. TV'm'den bir liste seç.
+No chapter can be read here: its publisher holds it.	Burada okunabilecek bölüm yok: haklar yayıncıda.
+No chapter can be read here: its publisher holds it. Read it on {1}	Burada okunabilecek bölüm yok: haklar yayıncıda. {1} üzerinden oku
+No episodes were returned by this provider.	Bu sağlayıcı hiç bölüm döndürmedi.
+No events are listed right now.	Şu anda duyurulmuş etkinlik yok.
+No groups are available. Add or refresh your IPTV source in Settings.	Kullanılabilir grup yok. IPTV kaynağını Ayarlar'dan ekle veya yenile.
+No guide for this channel	Bu kanal için rehber yok
+No host service is enabled on the server.	Sunucuda etkin bir barındırma hizmeti yok.
+No limit	Sınır yok
+No matching group. Back clears the search.	Eşleşen grup yok. Geri aramayı temizler.
+No matching groups. Back clears the search.	Eşleşen grup yok. Geri aramayı temizler.
+No messages yet.	Henüz mesaj yok.
+No new programmes were received. The stored guide was preserved.	Yeni program alınmadı. Kayıtlı rehber korundu.
+No programme description is available.	Bu program için açıklama yok.
+No provider replay available for this channel	Bu kanal için sağlayıcı tekrarı yok
+No provider source is configured.	Ayarlanmış bir sağlayıcı kaynağı yok.
+No recordings yet. Schedule a programme from its guide entry.	Henüz kayıt yok. Rehberden bir program planla.
+No reminder yet. In the guide, choose a programme to come and press OK.	Henüz hatırlatıcı yok. Rehberde yaklaşan bir program seç ve OK'ye bas.
+No results.	Sonuç yok.
+No screen watching right now	Şu anda izleyen ekran yok
+No server is available for this event yet.	Bu etkinlik için henüz sunucu yok.
+No source configured	Ayarlanmış kaynak yok
+No source is available for this title.	Bu içerik için kaynak yok.
+No subtitles found online.	Çevrimiçi altyazı bulunamadı.
+No upcoming programmes. Choose a future programme in the guide and select Remind me.	Yaklaşan program yok. Rehberden bir tane seç ve Bana hatırlat'ı seç.
+No version matches these filters. Reset them or refresh the sources.	Bu filtrelere uyan sürüm yok. Filtreleri sıfırla veya kaynakları yenile.
+No {1} audio · Playing in {2}	{1} ses yok · {2} oynatılıyor
+Normal	Normal
+Not a single day off.	Tek bir gün bile ara yok.
+Not available	Kullanılamıyor
+Not available on a kids profile ({1})	Çocuk profilinde kullanılamaz ({1})
+Not available to read here	Burada okunamaz
+Not Now	Şimdi değil
+Not set	Ayarlanmadı
+Nothing announced this week.	Bu hafta duyurulan bir şey yok.
+Nothing beats a good film.	İyi bir filmin yerini hiçbir şey tutmaz.
+Nothing found.	Hiçbir şey bulunamadı.
+Nothing in your guide for this period. Try another tab.	Bu dönem için rehberinde bir şey yok. Başka bir sekme dene.
+Nothing is what it seems.	Hiçbir şey göründüğü gibi değil.
+Nothing matches. Widen the filters.	Eşleşen yok. Filtreleri genişlet.
+Nothing watched this year yet.	Bu yıl henüz bir şey izlenmedi.
+Notify me	Bana haber ver
+Now	Şimdi
+Now available	Artık mevcut
+Off	Kapalı
+OK  Apply group   ·   Back  Cancel	OK  Grubu uygula   ·   Geri  İptal
+OK  Watch · Menu  Actions · F  Favorite	OK  İzle · Menü  İşlemler · F  Favori
+OK  Watch · Menu  Favorite	OK  İzle · Menü  Favori
+OK opens in the guide · Back to guide	OK rehberde açar · Rehbere dön
+OK shows or hides a row; the arrows beside it change its place.	OK bir satırı gösterir veya gizler; yanındaki oklar yerini değiştirir.
+OK to change · Back to guide	Değiştirmek için OK · Rehbere dön
+OK to choose · Back to guide	Seçmek için OK · Rehbere dön
+On	Açık
+On now	Şimdi yayında
+On the air right now.	Şu anda yayında.
+One page	Tek sayfa
+One page, right to left	Tek sayfa, sağdan sola
+One shots	Tek ciltlikler
+Ongoing	Devam ediyor
+Online	Çevrimiçi
+Only this collection is removed. Channels and favorites are kept.	Yalnızca bu koleksiyon kaldırılır. Kanallar ve favoriler korunur.
+Open	Ayrıntılar
+Open a comic file	Çizgi roman dosyası aç
+Open a file	Dosya aç
+Open download	İndirmeyi aç
+Open group controls	Grup ayarlarını aç
+Open in guide	Rehberde aç
+Open the TV workspace on the app window to manage downloads.	İndirmeleri yönetmek için uygulama penceresinde TV alanını aç.
+Open website	Web sitesini aç
+Open your other groups	Diğer gruplarını aç
+Opening the chapter…	Bölüm açılıyor…
+Opening…	Açılıyor…
+Optional · enter off to disable	İsteğe bağlı · kapatmak için off yaz
+Optional · use provider default	İsteğe bağlı · sağlayıcı rehberini kullan
+Options	Seçenekler
+Order and hiding	Sıra ve gizleme
+Organize channels	Kanalları düzenle
+Organize groups and channels	Grupları ve kanalları düzenle
+Organize your TV	TV'ni düzenle
+Original audio	Orijinal ses
+Original language	Orijinal dil
+Oscars won	Kazanılan Oscarlar
+Other streams of this channel	Bu kanalın diğer yayınları
+OVA	OVA
+Page {1}	Sayfa {1}
+Pages	Sayfalar
+Part of the Collection	Koleksiyonun parçası
+Partly filler	Kısmen dolgu
+Password	Parola
+Picked from what you watch.	İzlediklerine göre seçildi.
+PICTURE	GÖRÜNTÜ
+Picture	Görüntü
+Picture and sound	Görüntü ve ses
+Picture format	Görüntü biçimi
+PIN	PIN
+PIN could not be saved or checked. Try again.	PIN kaydedilemedi veya kontrol edilemedi. Yeniden dene.
+PIN protected	PIN korumalı
+PIN saved.	PIN kaydedildi.
+Platforms	Platformlar
+PLATFORMS	PLATFORMLAR
+Play	Oynat
+Play Anyway	Yine de oynat
+Play episode	Bölümü oynat
+Play in Sokoul	Sokoul'da oynat
+Play or pause	Oynat veya duraklat
+Playback failed.	Oynatma başarısız.
+Playback paused after several episodes in a row without any action.	Hiçbir işlem yapılmadan art arda birkaç bölümden sonra oynatma durdu.
+Playback sources	Oynatma kaynakları
+Playing	Oynatılıyor
+Popular	Popüler
+Popular Films	Popüler filmler
+Popular Series	Popüler diziler
+Position	Konum
+Preferred source	Tercih edilen kaynak
+Preparing recording	Kayıt hazırlanıyor
+Preparing the selected server…	Seçilen sunucu hazırlanıyor…
+PRESENTS	SUNAR
+Press + on a film or series page to keep it here.	Burada tutmak için bir film veya dizi sayfasında + tuşuna bas.
+Press again to confirm	Onaylamak için tekrar bas
+Press OK to enter a link	Bağlantı girmek için OK'ye bas
+Previous	Önceki
+Previous chapter	Önceki bölüm
+Previous page	Önceki sayfa
+Private channel order, visibility and parental controls	Özel kanal sırası, görünürlük ve ebeveyn denetimi
+probably ready	muhtemelen hazır
+Profile	Profil
+Programme actions	Program işlemleri
+Programme guide unavailable for this channel.	Bu kanal için rehber yok.
+Programme information unavailable	Program bilgisi yok
+Programmes	Programlar
+Protect with PIN	PIN ile koru
+Provider	Sağlayıcı
+Provider information is unavailable. You can retry below.	Sağlayıcı bilgileri kullanılamıyor. Aşağıdan yeniden deneyebilirsin.
+Provider link	Sağlayıcı bağlantısı
+Provider movies	Sağlayıcının filmleri
+Provider refresh failed. Try again.	Sağlayıcı yenilenemedi. Yeniden dene.
+Provider series	Sağlayıcının dizileri
+Raised	Daha yukarıda
+Rating	Yaş sınırı
+Read	Oku
+READ MORE	DAHA FAZLA OKU
+Read the chapter	Bölümü oku
+Ready	Mevcut
+ready	hazır
+Real-Debrid	Real-Debrid
+Real-Debrid refused your key. Check it in Settings.	Real-Debrid anahtarını reddetti. Ayarlar'dan kontrol et.
+Recent	Son eklenenler
+Recent channels	Son kanallar
+Record once	Bir kez kaydet
+Record programme	Programı kaydet
+Record this programme to its end	Bu programı sonuna kadar kaydet
+Recording	Kaydediliyor
+Recording could not be exported. Try another destination.	Kayıt dışa aktarılamadı. Başka bir konum dene.
+Recording deleted.	Kayıt silindi.
+Recording exported.	Kayıt dışa aktarıldı.
+Recording extended.	Kayıt uzatıldı.
+Recording now	Şimdi kaydediliyor
+Recording saved.	Kayıt kaydedildi.
+Recording scheduled through the programme end.	Kayıt programın sonuna kadar planlandı.
+Recording scheduled.	Kayıt planlandı.
+Recording starts now and continues through the programme end, with a 5 minute safety margin. The provider’s Replay remains separate for the part already aired.	Kayıt şimdi başlar ve 5 dakikalık güvenlik payıyla programın sonuna kadar sürer. Yayınlanmış kısım için sağlayıcının tekrarı ayrı kalır.
+Recordings	Kayıtlar
+Recordings could not be loaded. Reopen this panel to retry.	Kayıtlar yüklenemedi. Yeniden denemek için bu paneli tekrar aç.
+Recurring Cast	Kalıcı oyuncular
+Refresh	Yenile
+Refresh servers	Sunucuları yenile
+Refresh subscription	Aboneliği yenile
+Refresh TV guide	TV rehberini yenile
+Release calendar	Çıkış takvimi
+Release Order	Çıkış sırası
+Released	Çıkış
+Reload services	Hizmetleri yeniden yükle
+Remember hoster chosen for each source	Her kaynak için seçilen barındırıcıyı hatırla
+Remind me	Bana hatırlat
+Reminder set	Hatırlatıcı açık
+Reminders	Hatırlatıcılar
+Remove	Kaldır
+Remove channel from favorites	Kanalı favorilerden kaldır
+Remove from collection	Koleksiyondan kaldır
+Remove protection	Korumayı kaldır
+Remove reminder	Hatırlatıcıyı kaldır
+Rename	Yeniden adlandır
+Rename collection	Koleksiyonu yeniden adlandır
+Reorder channel	Kanalı taşı
+Replay	Tekrar
+Reset filters	Filtreleri sıfırla
+Reset guide adjustment	Rehber ayarını sıfırla
+Reset the default style	Varsayılan stili geri yükle
+Reset the display settings	Görüntüyü sıfırla
+Restore the default order	Varsayılan sırayı geri yükle
+Resume	Devam et
+Resume chapter {1}	{1}. bölüme devam et
+Resumed at {1}	{1} noktasından devam edildi
+Retry	Yeniden dene
+Return on budget	Kârlılık
+Right to left	Sağdan sola
+Romance	Romantik
+Rotten Tomatoes	Rotten Tomatoes
+Roulette	Rulet
+Roulette: let chance choose	Rulet: şans seçsin
+Runtime	Süre
+S%1$d, E%2$d	S%1$d, B%2$d
+Sagas	Seriler
+SAGAS	SERİLER
+Same actors	Aynı oyuncularla
+Same day and time	Aynı gün ve saat
+Same team	Aynı ekip
+Save	Kaydet
+Save collection	Koleksiyonu kaydet
+Save episode offline	Bölümü çevrimdışı kaydet
+Save location	Kayıt konumu
+Save offline	Çevrimdışı kaydet
+Saved	Kaydedildi
+Saved library	Kayıtlı arşiv
+Saving schedule…	Planlama kaydediliyor…
+Schedule cancelled.	Planlama iptal edildi.
+Scheduled	Planlandı
+Scheduled, active and saved programmes	Planlanan, devam eden ve kayıtlı programlar
+Scheduled. This account allows one connection, so another live stream will be stopped.	Planlandı. Bu hesap tek bağlantıya izin verir: başka bir canlı yayın durdurulacak.
+Scheduling…	Planlanıyor…
+Sci-fi	Bilim kurgu
+Science fiction	Bilim kurgu
+Science Fiction	Bilim kurgu
+Screensaver	Ekran koruyucu
+Search	Ara
+Search could not be loaded. Edit your query to retry.	Arama yüklenemedi. Yeniden denemek için aramanı düzenle.
+Search titles	İçerik ara
+Search {1} categories	{1} kategoride ara
+Searching available catalogs…	Kullanılabilir kataloglarda aranıyor…
+Searching…	Aranıyor…
+Season	Sezon
+Season {1}	Sezon {1}
+Season {1} · 	Sezon {1} · 
+Season {1} · Episode {2}	Sezon {1} · Bölüm {2}
+Seasons and episodes	Sezonlar ve bölümler
+Seasons and episodes from the source	Kaynaktaki sezonlar ve bölümler
+See All	Tümünü gör
+See Versions	Sürümleri gör
+See you tomorrow at dawn.\nAnd this time, don't be late.	Yarın şafakta görüşürüz.\nVe bu sefer geç kalma.
+Select	Seç
+SELECTION	SEÇKİ
+Send	Gönder
+Series	Diziler
+Series are your second family.	Diziler senin ikinci ailen.
+Series set the pace of your days.	Diziler günlerinin ritmini belirliyor.
+Series That Twist Your Mind	Beyin yakan diziler
+Server	Sunucu
+Server, username and password are all required.	Sunucu, kullanıcı adı ve parola gerekli.
+Service	Hizmet
+Services	Hizmetler
+Set adult PIN	Yetişkin PIN'i belirle
+Set up	Ayarlandı
+Set up the Sokoul server in Settings > Credentials.	Sokoul sunucusunu Ayarlar > Kimlik bilgileri'nden ayarla.
+Settings	Ayarlar
+Settings always stays: it is how you get back here.	Ayarlar her zaman kalır: buraya dönüş yolun o.
+Setup	Kurulum
+Shadow only	Yalnızca gölge
+Share this code	Bu kodu paylaş
+Show	Göster
+Show 0.5 s earlier	0,5 sn önce göster
+Show 0.5 s later	0,5 sn sonra göster
+Show group	Grubu göster
+Show in guide	Rehberde göster
+Show results	Sonuçları göster
+Showing saved information; the provider could not be reached. Its connection counter may be delayed.	Kayıtlı bilgiler gösteriliyor: sağlayıcıya ulaşılamadı. Bağlantı sayacı gecikmeli olabilir.
+Showing {1}+ titles	{1}+ içerik gösteriliyor
+Shown	Görünür
+Size	Boyut
+Skip Credits	Jeneriği atla
+Skip Intro	Girişi atla
+Sleep timer	Uyku zamanlayıcısı
+Slice of life	Günlük yaşam
+Small	Küçük
+Society and more	Toplum ve dahası
+Sort anime by category	Animeleri kategoriye göre sırala
+SOUND	SES
+Sound	Ses
+Sound off	Ses kapalı
+Sound on	Ses açık
+Source health	Kaynak durumu
+Source preferences updated.	Kaynak tercihleri güncellendi.
+Source status and playback preferences	Kaynak durumu ve oynatma tercihleri
+Source {1}	Kaynak {1}
+Source: %s	Kaynak: %s
+Sources are still arriving…	Kaynaklar hâlâ geliyor…
+Space	Boşluk
+SPACE	BOŞLUK
+Speed	Hız
+Spin again	Yeniden çevir
+Spinning…	Dönüyor…
+Sports	Spor
+Sports and games	Spor ve oyunlar
+Stable	Kararlı
+Start	Başla
+Start a watch party	İzleme partisi başlat
+Start what is ready	Hazır sürümü başlat
+Starting	Başlatma
+Starting playback	Oynatmayı başlatma
+Status, stream format, guide offset, refresh	Durum, yayın biçimi, rehber farkı, yenileme
+Steady stream	Kararlı yayın
+Still coming out	Hâlâ yayımlanıyor
+Stop	Durdur
+Stop and save	Durdur ve kaydet
+Stop recording before opening another IPTV stream	Başka bir IPTV yayını açmadan önce kaydı durdur
+Stop recording before opening another stream	Başka bir yayın açmadan önce kaydı durdur
+Stop Trailer	Fragmanı durdur
+Storage	Depolama
+Story Order	Hikâye sırası
+Stream details	Yayın ayrıntıları
+Stream errors	Yayın hataları
+Stream formats: {1}	Yayın biçimleri: {1}
+Stream lost, moved to %s	Yayın kesildi, %s kanalına geçildi
+Stretch	Uzat
+Studios	Stüdyolar
+Subscription	Abonelik
+Subscription and guide	Abonelik ve rehber
+Subtitle style	Altyazı stili
+Subtitles	Altyazılar
+Subtitles of the stream itself take this style from the next title.	Yayının kendi altyazıları bir sonraki içerikten itibaren bu stili alır.
+Superheroes	Süper kahramanlar
+Switch	Geç
+Sync: %s s	Senkron: %s sn
+Synchronization: Classic	Senkronizasyon: Klasik
+Synchronization: Pro	Senkronizasyon: Pro
+System	Sistem
+S{1} · E{2}	S{1} · B{2}
+That PIN was not accepted.	Bu PIN kabul edilmedi.
+The address of the computer running the watch party server, for instance http://192.168.0.20:25566	İzleme partisi sunucusunu çalıştıran bilgisayarın adresi, örneğin http://192.168.0.20:25566
+The All-Rounder	Her Şeyi İzleyen
+The anime	Anime
+The Binge-Watcher	Maraton İzleyicisi
+The change could not be saved. Try again.	Değişiklik kaydedilemedi. Yeniden dene.
+The channel remains available to watch.	Kanal izlenmeye devam edebilir.
+The Cinephile	Sinefil
+The collection changed. Cancel and try again.	Koleksiyon değişti. İptal edip yeniden dene.
+The complete programme is scheduled, with a 2 minute lead-in and a 5 minute safety margin.	Programın tamamı 2 dakika önce başlayacak ve 5 dakika güvenlik payıyla planlandı.
+The connection was interrupted.	Bağlantı kesildi.
+The Early Bird	Erkenci Kuş
+The experience	Deneyim
+The Explorer	Kâşif
+The Faces	Yüzler
+The Films	Filmler
+The films everyone is watching.	Herkesin izlediği filmler.
+The highest rated of all time.	Tüm zamanların en yüksek puanlıları.
+The Honors	Onurlar
+The IPTV provider just refused a connection. Try again in %d s.	IPTV sağlayıcısı az önce bir bağlantıyı reddetti. %d sn sonra yeniden dene.
+The IPTV server refused these credentials or did not respond.	IPTV sunucusu bu bilgileri reddetti veya yanıt vermedi.
+The Machine	Makine
+The manga	Manga
+The Movie Lover	Sinema Aşığı
+The Night Owl	Gece Kuşu
+The only version left is not as long as this episode.	Kalan tek sürüm bu bölüm kadar uzun değil.
+The only version left seems to be a film, not this episode.	Kalan tek sürüm bu bölüm değil, bir film gibi görünüyor.
+The only version left seems to be another episode.	Kalan tek sürüm başka bir bölüm gibi görünüyor.
+The only version left seems to be another work with the same name.	Kalan tek sürüm aynı adlı başka bir eser gibi görünüyor.
+The playback engine was not found.	Oynatma motoru bulunamadı.
+The provider stream could not be opened. Try again.	Sağlayıcının yayını açılamadı. Yeniden dene.
+The recording could not be started.	Kayıt başlatılamadı.
+The recording is still growing	Kayıt hâlâ sürüyor
+The Series Addict	Dizi Bağımlısı
+The series everyone is talking about.	Herkesin konuştuğu diziler.
+The Series Fan	Dizi Hayranı
+The server refused this version (error %d).	Sunucu bu sürümü reddetti (hata %d).
+The server requires an active VIP key.	Sunucu etkin bir VIP anahtarı gerektiriyor.
+The server took too long to answer.	Sunucu yanıt vermekte çok gecikti.
+The service is unavailable. Try again later.	Hizmet kullanılamıyor. Daha sonra yeniden dene.
+The source refused this stream.	Kaynak bu yayını reddetti.
+The sports server did not provide a playable native stream.	Spor sunucusu oynatılabilir yerel bir yayın sağlamadı.
+The stream stopped before the end of the film.	Yayın filmin sonundan önce durdu.
+The stream was interrupted.	Yayın kesildi.
+The whole interface changes at once. Titles and descriptions follow the language too.	Tüm arayüz anında değişir. Başlıklar ve açıklamalar da dili izler.
+The Work	Eser
+The worlds of Studio Ghibli	Studio Ghibli'nin dünyaları
+THEME	TEMA
+These controls are unavailable on a kids profile.	Bu ayarlar çocuk profilinde kullanılamaz.
+This category is restricted for this profile.	Bu kategori bu profil için kısıtlı.
+This channel is no longer available.	Bu kanal artık kullanılamıyor.
+This channel is restricted for this profile	Bu kanal bu profil için kısıtlı
+This channel is restricted for this profile.	Bu kanal bu profil için kısıtlı.
+This entry is not a direct video file and cannot be saved offline.	Bu öğe doğrudan bir video dosyası değil ve çevrimdışı kaydedilemez.
+This episode adapts	Bu bölümün uyarladığı
+This file does not have the language wanted.	Bu dosyada istenen dil yok.
+This key was refused.	Bu anahtar reddedildi.
+This name is empty, too long or already used.	Bu ad boş, çok uzun veya zaten kullanılıyor.
+This provider entry has no playable stream.	Bu sağlayıcı öğesinde oynatılabilir yayın yok.
+This recording is no longer available.	Bu kayıt artık kullanılamıyor.
+This recording is not ready to play yet.	Bu kayıt henüz oynatılmaya hazır değil.
+This recording is restricted for this profile.	Bu kayıt bu profil için kısıtlı.
+This server requires a VIP account for native sports playback.	Bu sunucu yerel spor oynatma için VIP hesap gerektiriyor.
+This service could not unlock the link.	Bu hizmet bağlantının kilidini açamadı.
+This service did not respond. Try again.	Bu hizmet yanıt vermedi. Yeniden dene.
+This source does not expose a local recording stream.	Bu kaynak yerel olarak kaydedilebilir bir yayın sunmuyor.
+This sports source is unavailable. Try another server or refresh later.	Bu spor kaynağı kullanılamıyor. Başka bir sunucu dene veya daha sonra yenile.
+This title could not be opened.	Bu içerik açılamadı.
+This title is restricted for this profile.	Bu içerik bu profil için kısıtlı.
+This TV cannot play this video format.	Bu TV bu video biçimini oynatamaz.
+This version is not ready yet (%d %%).	Bu sürüm henüz hazır değil (%%%d).
+This version is not ready yet.	Bu sürüm henüz hazır değil.
+This version is not the film: its file is a short clip or not a video.	Bu sürüm film değil: dosyası kısa bir klip veya video değil.
+This version no longer exists.	Bu sürüm artık yok.
+This version takes too long to respond.	Bu sürüm yanıt vermekte çok gecikiyor.
+This week	Bu hafta
+This week's calendar	Haftanın takvimi
+This week's releases	Haftanın yeni çıkanları
+This year	Bu yıl
+Thriller	Gerilim
+titles	içerik
+to download	indirilecek
+to try	denenecek
+To Unwind	Rahatlamak için
+To watch it all	Hepsini izlemek için
+Today	Bugün
+Tomorrow	Yarın
+Tonight	Bu akşam
+Tonight: like {1}	Bu akşam: {1} gibi
+Too many attempts. Try again in one minute.	Çok fazla deneme. Bir dakika sonra yeniden dene.
+Top 10 Films This Week	Bu haftanın ilk 10 filmi
+Top 10 Series This Week	Bu haftanın ilk 10 dizisi
+Top Results	En iyi sonuçlar
+Torrent ready in Real-Debrid	Torrent Real-Debrid'de hazır
+Total budget	Toplam bütçe
+Trailer	Fragman
+Trailers	Fragmanlar
+Translate to	Şu dile çevir
+Translating…	Çevriliyor…
+Trending	Trend olanlar
+TRENDING	TREND
+TV	TV
+TV & Shows	TV ve diziler
+TV guide	TV rehberi
+TV settings	TV ayarları
+TV Show	Dizi
+TYPE	TÜR
+Type with your remote	Kumandanla yaz
+Unable to load this page. Try refreshing.	Bu sayfa yüklenemedi. Yenilemeyi dene.
+Unavailable	Kullanılamıyor
+Unavailable for now, the daily limit may be reached	Şimdilik kullanılamıyor, günlük sınıra ulaşılmış olabilir
+Unavailable · manage or remove this channel	Kullanılamıyor · bu kanalı yönet veya kaldır
+Under 1h40	1 sa 40 dk altı
+Under 2h	2 sa altı
+Unfavorite	Favorilerden kaldır
+Unknown language	Bilinmeyen dil
+Unlock a download link	İndirme bağlantısının kilidini aç
+Unlock IPTV controls in Organization to change source settings.	Kaynağı değiştirmek için Düzenleme'de IPTV ayarlarının kilidini aç.
+Unlocked for 15 minutes.	15 dakikalığına kilit açıldı.
+Unspecified	Belirtilmemiş
+Up for playback controls	Oynatma kontrolleri için yukarı
+Upcoming	Yakında
+Updating…	Güncelleniyor…
+USB storage	USB depolama
+Use 4–8 digits and unlock before changing an existing PIN.	4–8 hane kullan ve mevcut bir PIN'i değiştirmeden önce kilidi aç.
+Use a unique name from 1 to 40 characters.	1 ile 40 karakter arasında benzersiz bir ad kullan.
+Use for zapping	Zap için kullan
+Use your deployed website backend address. Sokoul's Mainapi address is separate.	Yayındaki web sitenin backend adresini kullan. Sokoul'un Mainapi adresi ayrıdır.
+Username	Kullanıcı adı
+Uses the provider connection and recording storage	Sağlayıcı bağlantısını ve kayıt depolamasını kullanır
+Version %d of %d	Sürüm %d / %d
+Versions	Sürümler
+Very large	Çok büyük
+Volume {1}	Cilt {1}
+Volumes	Ciltler
+Wait for the best	En iyisini bekle
+War, History & Western	Savaş, tarih ve western
+Watch	İzle
+Watch again	Yeniden izle
+Watch Again from the Start	Baştan yeniden izle
+Watch channel	Kanalı izle
+Watch from the beginning	Baştan izle
+Watch party	İzleme partisi
+Watch with the lights on.	Işıklar açıkken izle.
+watched	izlendi
+Watched	İzlendi
+Watchlist	İzleme listesi
+Web	Web
+Weekdays	Hafta içi
+What's Next	Sırada ne var
+What's on	Şimdi yayında
+Where to watch	Nerede izlenir
+Which version	Hangi sürüm
+White	Beyaz
+Who is watching	Kim izliyor
+Who is watching?	Kim izliyor?
+With Family	Aileyle
+With {1}	{1} ile
+WORLD CINEMA	DÜNYA SİNEMASI
+Worlds and places	Dünyalar ve mekânlar
+Worldwide box office	Dünya gişesi
+XMLTV guide URL	XMLTV rehber adresi
+Yellow	Sarı
+You haven't added any movies or shows.	Henüz hiç film veya dizi eklemedin.
+You joined	Katıldın
+You stopped at episode {1}: the story goes on at chapter {2}	{1}. bölümde kaldın: hikâye {2}. bölümde devam ediyor
+Your best sessions start after 10 pm.	En iyi seansların saat 22'den sonra başlıyor.
+your busiest month	en yoğun ayın
+Your channels, in your order	Kanalların, senin sıranla
+Your eras	Dönemlerin
+Your favorite channels belong here	Favori kanalların burada
+your favourite hour	en sevdiğin saat
+Your genres	Türlerin
+Your heart won't slow down.	Kalbin bir türlü yavaşlamıyor.
+Your IPTV account is in use elsewhere (%d of %d connections). Close the other device, then retry.	IPTV hesabın başka bir yerde kullanılıyor (%d / %d bağlantı). Diğer cihazı kapatıp yeniden dene.
+Your IPTV catalogue, with its own categories	IPTV kataloğun, kendi kategorileriyle
+Your live service, recordings and personal channel layout	Canlı hizmetin, kayıtların ve kişisel kanal düzenin
+Your most watched	En çok izlediklerin
+Your name	Adın
+Your next binge starts here.	Bir sonraki maratonun burada başlıyor.
+Your viewer profile	İzleyici profilin
+Your year in review	Yılının özeti
+Zapping, guide order, preview and your provider	Zap, rehber sırası, önizleme ve sağlayıcın
+Zoom in {1} %	Yakınlaştır %{1}
+Zoom out	Uzaklaştır
+{1}  ·  5 min safety margin	{1}  ·  5 dk güvenlik payı
+{1} awards	{1} ödül
+{1} catalog	{1} kataloğu
+{1} channels	{1} kanal
+{1} channels in this group	Bu grupta {1} kanal
+{1} channels · {2} programmes in the guide\n{3} films · {4} series	{1} kanal · rehberde {2} program\n{3} film · {4} dizi
+{1} chapters	{1} bölüm
+{1} entries	{1} öğe
+{1} episodes	{1} bölüm
+{1} free	{1} boş
+{1} left	{1} kaldı
+{1} min	{1} dk
+{1} min left	{1} dk kaldı
+{1} Originals	{1} Orijinalleri
+{1} programmes imported.	{1} program içe aktarıldı.
+{1} screens at a time	Aynı anda {1} ekran
+{1} screens watching right now	Şu anda {1} ekran izliyor
+{1} seasons	{1} sezon
+{1} to read here	Burada okunacak {1}
+{1} volumes	{1} cilt
+{1} · play/pause, next	{1} · oynat/duraklat, sonraki
+A second life	İkinci bir hayat
+Accounts	Hesaplar
+Anime films	Animasyon filmleri
+Another world	Başka bir dünya
+Anti-heroes	Anti kahramanlar
+Appearance	Görünüm
+At war	Savaşta
+Atkinson Hyperlegible	Atkinson Hyperlegible
+Blue	Mavi
+Chinese animation	Çin animasyonu
+Death games	Ölüm oyunları
+Finished, to read in one go	Tamamlananlar, tek solukta okunacak
+Food on screen	Ekrandaki yemekler
+Found family	Seçilmiş aile
+Hide the entries you never use.	Hiç kullanmadığın girişleri gizle.
+Highest rated	En yüksek puanlılar
+How a title starts and which version comes first.	Bir içeriğin nasıl başladığı ve hangi sürümün önce geldiği.
+How subtitles look, for every video.	Altyazıların görünümü, tüm videolar için.
+Led by women	Kadınların öncülüğünde
+Manhua from China	Çin'den manhua
+Manhwa from Korea	Kore'den manhwa
+Menu	Menü
+Monospace	Eş aralıklı
+Most popular of all time	Tüm zamanların en popülerleri
+Next season	Gelecek sezon
+Orange	Turuncu
+Pink	Pembe
+Playback	Oynatma
+Playing with time	Zamanla oynamak
+Purple	Mor
+Red	Kırmızı
+Serif	Serif
+Soft and soothing	Yumuşak ve dinlendirici
+Standard	Standart
+Still being published	Hâlâ yayımlanıyor
+Superpowers	Süper güçler
+The colour of what shows your progress.	İlerlemeni gösteren şeylerin rengi.
+The language of the interface.	Arayüzün dili.
+The rows of the home page and what moves by itself.	Ana Sayfa satırları ve kendiliğinden hareket edenler.
+This app, its credits and a little housekeeping.	Bu uygulama, emeği geçenler ve biraz temizlik.
+This season	Bu sezon
+Top 10 Anime	En iyi 10 anime
+Trending now	Şu an trend
+Tsundere alert	Tsundere alarmı
+Who is watching, and the services Sokoul draws on.	Kim izliyor ve Sokoul'un kullandığı hizmetler.
+Best quality first	Önce en iyi kalite
+At home on {1}	{1} tarihinde evde
+Built-in key	Yerleşik anahtar
+Dead link	Ölü bağlantı
+In cinemas	Sinemalarda
+Key entered	Anahtar girildi
+Not the film	Film değil
+Not yet at home	Henüz evde değil
+Refused by the host	Sunucu reddetti
+Coming soon	Yakında
+In cinemas on {1}	{1} tarihinde sinemalarda
+Recent searches	Son aramalar
+Speak	Konuş

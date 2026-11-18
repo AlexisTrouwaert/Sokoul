@@ -40,6 +40,29 @@ class SearchAggregator<TTitles, TLive, TAnime, TManga>(
         SearchResults(titles.await(), live.await(), anime.await(), manga.await())
     }
 
+    /**
+     * The same search, shown as it comes: [onUpdate] gets the results after each catalogue answers, so films are on
+     * screen while the anime and live TV catalogues are still answering (all four were awaited before, the slowest
+     * holding the films back). A catalogue not answered yet is empty in the updates before its own.
+     */
+    suspend fun searchEach(query: String, onUpdate: (SearchResults<TTitles, TLive, TAnime, TManga>) -> Unit): SearchResults<TTitles, TLive, TAnime, TManga> = coroutineScope {
+        var now = SearchResults<TTitles, TLive, TAnime, TManga>(
+            SearchSourceResults(available = true), SearchSourceResults(available = true), SearchSourceResults(available = true), SearchSourceResults(available = true),
+        )
+        // The parts run on this coroutine's dispatcher between their IO calls, one at a time: no lock needed.
+        fun publish(change: (SearchResults<TTitles, TLive, TAnime, TManga>) -> SearchResults<TTitles, TLive, TAnime, TManga>) {
+            now = change(now)
+            onUpdate(now)
+        }
+        listOf(
+            async { load(titlesAvailable, searchTitles, query).let { r -> publish { it.copy(titles = r) } } },
+            async { load(liveAvailable, searchLive, query).let { r -> publish { it.copy(live = r) } } },
+            async { load(animeAvailable, searchAnime, query).let { r -> publish { it.copy(anime = r) } } },
+            async { load(mangaAvailable, searchManga, query).let { r -> publish { it.copy(manga = r) } } },
+        ).forEach { it.await() }
+        now
+    }
+
     private suspend fun <T> load(
         available: suspend () -> Boolean,
         search: suspend (String) -> List<T>,

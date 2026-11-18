@@ -41,22 +41,55 @@ data class Release(
 object ReleaseName {
     private val tokenSep = Regex("[^A-Za-z0-9+]+")
 
+    // Compiled once: parse runs for each of some 800 versions, again at each answer of a service, on a TV too.
+    private val rxVideoExtLine = Regex("(?im)\\.(mkv|mp4|avi|ts|m2ts|m4v|mov|webm)$")
+    private val rxExplicitAudio = Regex("(?i)\\b(?:vf[0-9]*|vff|vfq|vfi|vfb|truefrench)\\b")
+    private val rxSeedersIcon = Regex("👤\\s*(\\d+)")
+    private val rxSeedersWord = Regex("(?i)seeders?:?\\s*(\\d+)")
+    private val rxHdCam = Regex("(?i)\\bHD-?(CAM|TS|TC)\\b")
+    private val rxDual = Regex("(?i)\\bdual\\b")
+    /** One flag emoji: two regional indicator letters. */
+    private val rxFlag = Regex("[\\x{1F1E6}-\\x{1F1FF}]{2}")
+    private val rxSize = Regex("(?i)(\\d+(?:[.,]\\d+)?)\\s*(TB|GB|GO|MB|MO|GIB|MIB)\\b")
+    // PR #7: "S04E006_Episode 6.mkv": "_" is a word character, so a "\\b" after the number would not read it.
+    private val rxSxE = Regex("(?i)(?<![a-z0-9])S(\\d{1,2})[ ._-]?E(\\d{1,3})(?![0-9])")
+    private val rxNxN = Regex("(?i)(?<![a-z0-9])(\\d{1,2})x(\\d{2,3})(?![0-9a-z])")
+    private val rxSample = Regex("(?i)\\bsample\\b")
+    private val rxExtras = Regex("(?i)(/|\\b)(extras?|bonus|featurettes?)(/|\\b)")
+    /** A service's own "instant" label, never the word inside a title ("Instant Family"). */
+    private val rxInstantLabel = Regex("(?i)\\[(?:RD\\s*)?INSTANT\\]|\\bINSTANT\\s+(?:RD|AVAILABLE|PLAY)\\b")
+
     fun parse(vararg texts: String?): Release {
         // extension retirée : « .ts » n'est pas « TS » (telesync)
-        val all = texts.filterNotNull().joinToString("\n").replace(Regex("(?im)\\.(mkv|mp4|avi|ts|m2ts|m4v|mov|webm)$"), " ")
+        val all = texts.filterNotNull().joinToString("\n").replace(rxVideoExtLine, " ")
         val tokens = all.split(tokenSep).filter { it.isNotEmpty() }.map { it.uppercase() }.toSet()
         val up = all.uppercase()
         val subtitleLines = all.lineSequence().filter { subtitleLabel.containsMatchIn(it) && !audioLabel.containsMatchIn(it) }.toList()
         val audioText = all.lineSequence().map { line ->
             if (line in subtitleLines) {
                 val at = subtitleLabel.find(line)!!.range.first
-                val explicitAudio = Regex("(?i)\\b(?:vf[0-9]*|vff|vfq|vfi|vfb|truefrench)\\b").findAll(line.substring(at)).joinToString(" ") { it.value }
+                val explicitAudio = rxExplicitAudio.findAll(line.substring(at)).joinToString(" ") { it.value }
                 line.substring(0, at) + " " + explicitAudio
             } else line
         }.joinToString("\n")
+            // "Dual Audio" is two tracks: more than two flags beside it name the subtitles (Torrentio puts them on the
+            // same line: "Dubbed / Multi Subs / Dual Audio / 🇬🇧 / 🇷🇺 / … / 🇫🇷"), not a French track.
+            .let { text -> if (rxDual.containsMatchIn(text) && flags(text).distinct().size > 2) text.replace(rxFlag, " ") else text }
+            // Flags alone, more than two, with no language word in the name: Torrentio lists the subtitles that way
+            // ("🇬🇧 / 🇫🇷 / 🇨🇿 / 🇪🇸" beside an English-only YTS, KAY or Pebas release). Taken for tracks, they made
+            // MULTI versions of files with one English track, played before the real MULTI.VFQ (L'Odyssée, 2026-11-18).
+            .let { text -> if (flags(text).distinct().size > 2 && !namesLanguage(text.replace(rxFlag, " "))) text.replace(rxFlag, " ") else text }
         val audioTokens = audioText.split(tokenSep).map { it.uppercase() }.toSet()
-        val announced = language(audioText, audioText.uppercase(), audioTokens, audio(audioText))
+        // Read once, used by the language, the announced tracks and the dub marker.
+        // A name that says VOSTFR has French subtitles: a 🇫🇷 flag beside it (Torrentio flags subtitles too) is no French
+        // track; only a French word in the name ("VOSTFR.FRENCH", "VF") still announces one.
+        val vostfr = audioTokens.any { it in VOSTFR_TAGS }
+        // With VOSTFR, an IPTV group prefix ("FR| L'Odyssée [VOSTFR]") is the provider's country, not a French track.
+        val french = hasFrenchTag(audioText, audioTokens) && (!vostfr || audioTokens.any { it in FRENCH_WORDS_BESIDE_VOSTFR })
+        val others = audio(audioText)
+        val announced = language(audioText, audioText.uppercase(), audioTokens, others, french)
         val frenchSubtitles = subtitleLines.any { line -> "FR" in flags(line) || line.split(tokenSep).any { it.uppercase() in FRENCH_TAGS } }
+        val episodeTag = episodeTag(all)
         return Release(
             quality = quality(up, tokens),
             hdr = hdr(up, tokens),
@@ -70,15 +103,14 @@ object ReleaseName {
                 else -> null
             },
             sizeBytes = size(all),
-            seeders = Regex("👤\\s*(\\d+)").find(all)?.groupValues?.get(1)?.toIntOrNull()
-                ?: Regex("(?i)seeders?:?\\s*(\\d+)").find(all)?.groupValues?.get(1)?.toIntOrNull(),
-            cam = tokens.any { it in CAM } || Regex("(?i)\\bHD-?(CAM|TS|TC)\\b").containsMatchIn(all),
+            seeders = rxSeedersIcon.find(all)?.groupValues?.get(1)?.toIntOrNull()
+                ?: rxSeedersWord.find(all)?.groupValues?.get(1)?.toIntOrNull(),
+            cam = tokens.any { it in CAM } || rxHdCam.containsMatchIn(all),
             cached = cached(all, up),
-            season = episodeTag(all)?.first,
-            episode = episodeTag(all)?.second,
-            audio = audioCodes(audioText, audioTokens),
-            dub = !hasFrenchTag(audioText, audioTokens) &&
-                (Regex("(?i)\\bdual\\b").containsMatchIn(audioText) || audio(audioText).size >= 2),
+            season = episodeTag?.first,
+            episode = episodeTag?.second,
+            audio = (if (french) listOf("FR") else emptyList()) + others,
+            dub = !french && (rxDual.containsMatchIn(audioText) || others.size >= 2),
         )
     }
 
@@ -104,6 +136,9 @@ object ReleaseName {
     private val subtitleLabel = Regex("(?i)\\b(multi[ ._-]?subs?|subbed|subtitles?|sous[ ._-]?titres)\\b")
     private val audioLabel = Regex("(?i)\\b(audio|dub|dubbed)\\b")
     private val EXPLICIT_FRENCH_TAGS = FRENCH_TAGS - "FRENCH"
+    private val VOSTFR_TAGS = setOf("VOSTFR", "SUBFRENCH", "STFR")
+    /** What still says a French track beside VOSTFR ("VOSTFR.FRENCH", "VF"): a word, never a flag or a country prefix. */
+    private val FRENCH_WORDS_BESIDE_VOSTFR = setOf("FRENCH", "TRUEFRENCH", "VFF", "VFQ", "VFI", "VF", "VF2", "VFB")
     // An episode number also ends the title: "Dragon Ball Super E001 FRENCH 720p" is French, not VO.
     private val releaseMarker = Regex("(?i)\\b(19\\d{2}|20\\d{2})\\b|\\bS\\d{1,2}[ ._-]?E\\d{1,3}\\b|\\bE\\d{1,4}\\b|\\b(?:episode|ep)[ ._-]?\\d{1,4}\\b|\\s-\\s\\d{2,4}\\b|\\b\\d{3,4}\\b|\\b\\d{2}\\b(?=.*\\b(?:480|720|1080|2160)p\\b)")
     private val frenchPrefix = Regex("(?i)^\\s*(?:\\[(?:french|truefrench|vff|vfq|vfi|vf2|vfb|vf|fr|fre|fra)\\]|(?:truefrench|vff|vfq|vfi|vf2|vfb|vf|fr|fre|fra)\\s*[-:|]\\s*|french\\s+(?:dub|audio|track)\\b)")
@@ -132,17 +167,23 @@ object ReleaseName {
         else -> null
     }
 
+    /** A language written as a word in the name: French tags, MULTI, DUAL, VO, VOSTFR or another language's label. */
+    private fun namesLanguage(text: String): Boolean {
+        val tokens = text.split(tokenSep).map { it.uppercase() }.toSet()
+        return hasFrenchTag(text, tokens) || rxMultiAudio.containsMatchIn(text) || rxDual.containsMatchIn(text) ||
+            tokens.any { it in VOSTFR_TAGS || it == "VO" } || audio(text).isNotEmpty()
+    }
+
     private val rxMultiAudio = Regex("(?i)(?<![a-z0-9])multi(?![a-z0-9])(?![ ._-]?sub)")
 
-    private fun language(all: String, up: String, t: Set<String>, others: List<String>): AudioLanguage? {
-        val french = hasFrenchTag(all, t)
+    private fun language(all: String, up: String, t: Set<String>, others: List<String>, french: Boolean): AudioLanguage? {
         // « Multi-Sub », « Multi Subs » : des sous-titres en plusieurs langues, pas des pistes (groupes d'animés).
         val multi = rxMultiAudio.containsMatchIn(all) || "MULTI AUDIO" in up || t.any { it in setOf("MULTIAUDIO", "MULTILANG", "MULTILANGUAGE") }
         // « DUAL » = langue locale + anglais (groupes turcs, latino-américains…) : MULTI seulement avec le français
-        val dual = Regex("(?i)\\bdual\\b").containsMatchIn(all)
+        val dual = rxDual.containsMatchIn(all)
         return when {
-            french && t.any { it in setOf("VOSTFR", "SUBFRENCH", "STFR") } -> AudioLanguage.MULTI
-            t.any { it in setOf("VOSTFR", "SUBFRENCH", "STFR") } -> AudioLanguage.VOSTFR
+            french && t.any { it in VOSTFR_TAGS } -> AudioLanguage.MULTI
+            t.any { it in VOSTFR_TAGS } -> AudioLanguage.VOSTFR
             (multi || dual) && french -> AudioLanguage.MULTI
             // « FRENCH.ENG » : deux pistes, dont le français
             french && others.any { it != "FR" } -> AudioLanguage.MULTI
@@ -167,12 +208,6 @@ object ReleaseName {
         }
         flags(all).forEach { c -> FLAG_LANG[c]?.takeIf { it != "FR" }?.let(out::add) }
         return out.toList()
-    }
-
-    /** Langues du fichier : le français d'abord s'il est annoncé, puis les autres. */
-    private fun audioCodes(all: String, t: Set<String>): List<String> {
-        val french = hasFrenchTag(all, t)
-        return (if (french) listOf("FR") else emptyList()) + audio(all)
     }
 
     /** Drapeaux emoji (deux indicateurs régionaux) : « 🇮🇹 » → « IT ». */
@@ -214,36 +249,46 @@ object ReleaseName {
 
     /** « 💾 18.3 GB », « 4.7 Go », « 700 MB ». */
     fun size(text: String): Long? {
-        val m = Regex("(?i)(\\d+(?:[.,]\\d+)?)\\s*(TB|GB|GO|MB|MO|GIB|MIB)\\b").find(text) ?: return null
+        val m = rxSize.find(text) ?: return null
         val v = m.groupValues[1].replace(',', '.').toDoubleOrNull() ?: return null
         val mult = when (m.groupValues[2].uppercase()) { "TB" -> 1e12; "GB", "GO", "GIB" -> 1e9; else -> 1e6 }
         return (v * mult).toLong()
     }
 
     private fun cached(all: String, up: String): Boolean? = when {
-        "[RD+]" in up || "RD+" in up || "⚡" in all || "[RD⚡]" in up || "INSTANT" in up -> true
+        "[RD+]" in up || "RD+" in up || "⚡" in all || "[RD⚡]" in up || rxInstantLabel.containsMatchIn(all) -> true
         "[RD DOWNLOAD]" in up || "RD DOWNLOAD" in up || "⏳" in all -> false
         else -> null
     }
 
     /** S02E05, 2x05. */
     fun episodeTag(text: String): Pair<Int, Int>? {
-        // "S04E006_Episode 6.mkv": "_" is a word character, so a "\\b" after the number would not read it.
-        Regex("(?i)(?<![a-z0-9])S(\\d{1,2})[ ._-]?E(\\d{1,3})(?![0-9])").find(text)?.let { return it.groupValues[1].toInt() to it.groupValues[2].toInt() }
-        Regex("(?i)(?<![a-z0-9])(\\d{1,2})x(\\d{2,3})(?![0-9a-z])").find(text)?.let { return it.groupValues[1].toInt() to it.groupValues[2].toInt() }
+        rxSxE.find(text)?.let { return it.groupValues[1].toInt() to it.groupValues[2].toInt() }
+        rxNxN.find(text)?.let { return it.groupValues[1].toInt() to it.groupValues[2].toInt() }
         return null
     }
 
     private val VIDEO_EXT = setOf("mkv", "mp4", "avi", "m4v", "ts", "m2ts", "mov", "webm")
 
-    fun isVideo(path: String) = path.substringAfterLast('.', "").lowercase() in VIDEO_EXT && !Regex("(?i)\\bsample\\b").containsMatchIn(path)
+    fun isVideo(path: String) = path.substringAfterLast('.', "").lowercase() in VIDEO_EXT && !rxSample.containsMatchIn(path)
+
+    /** Under this size, a video beside a much larger one is a sample or a teaser. */
+    private const val SAMPLE_MAX_BYTES = 50L * 1024 * 1024
+
+    /**
+     * A sample without the word in its name: small in absolute terms and next to a video at least ten times larger. A
+     * short or very compressed episode alone, or among others of its size, is never one.
+     */
+    fun sampleBySize(bytes: Long, largest: Long) = bytes in 1 until SAMPLE_MAX_BYTES && bytes < largest / 10
 
     /**
      * Fichier à lire dans un torrent : l'épisode demandé dans un pack de saison, sinon la plus grosse vidéo.
      * Un « extra » (sample, bonus) n'est jamais choisi.
      */
     fun pickFile(files: List<RdFile>, season: Int?, episode: Int?, absolute: Int? = null, movieTitles: List<String> = emptyList(), movieYear: Int? = null): RdFile? {
-        val videos = files.filter { isVideo(it.path) && !Regex("(?i)(/|\\b)(extras?|bonus|featurettes?)(/|\\b)").containsMatchIn(it.path) }
+        val named = files.filter { isVideo(it.path) && !rxExtras.containsMatchIn(it.path) }
+        val largest = named.maxOfOrNull { it.bytes } ?: 0L
+        val videos = named.filterNot { sampleBySize(it.bytes, largest) }
         if (season != null && episode != null && absolute != null) {
             // Anime packs number from the first episode: "One Piece - 062" is S02E01. Never a file named for another one.
             return videos.filter { DebridStreams.episodeMatches(it.name, season, episode, absolute) == true }.maxByOrNull { it.bytes }

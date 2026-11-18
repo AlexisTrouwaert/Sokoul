@@ -145,6 +145,17 @@ class DesktopPlayer private constructor() {
                 }
             }
         }
+        // Same rule as the PC (AudioMatch), applied once per media and never over the viewer's own choice.
+        if (!audioPicked && audio.isNotEmpty()) {
+            audioPicked = true
+            val p = prefs()
+            val pick = com.sokoul.pc.playback.sources.AudioMatch.pickTrack(audio, p.audioLanguages, current?.originalLanguage)
+            pick?.takeIf { it != audioId }?.let { id -> choose(C.TRACK_TYPE_AUDIO, id) }
+            // Off, a chosen language, or "auto": the interface language when the audio heard is another one.
+            val heard = audio.firstOrNull { it.first == (pick ?: audioId) }?.second
+            com.sokoul.pc.playback.sources.AudioMatch.pickSubtitle(subs, p.subtitleLanguage, heard, Locale.getDefault().language)
+                ?.takeIf { it != subId }?.let { id -> choose(C.TRACK_TYPE_TEXT, id) }
+        }
         val v = exo.videoFormat
         _status.update { it.copy(audio = audio, audioId = audioId, subtitles = subs, subtitleId = subId, video = v?.let { f -> listOfNotNull("${f.width}×${f.height}".takeIf { f.width > 0 }, f.sampleMimeType?.substringAfter('/')).joinToString(" · ") }) }
     }
@@ -191,9 +202,11 @@ class DesktopPlayer private constructor() {
         val p = prefs()
         exo.trackSelectionParameters = exo.trackSelectionParameters.buildUpon()
             .clearOverrides()
-            .setPreferredAudioLanguage(p.audioLanguage.ifEmpty { null })
-            .setPreferredTextLanguage(p.subtitleLanguage.ifEmpty { null })
-            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, p.subtitleLanguage.isEmpty())
+            // A first guess for Media3; the exact track is then set by AudioMatch once the tracks are known.
+            .setPreferredAudioLanguage(p.audioLanguages.firstOrNull { it != com.sokoul.desktop.data.AudioIntent.ORIGINAL } ?: req.originalLanguage)
+            .setPreferredTextLanguage(null)
+            // Text stays off until the rule picks a track (or the viewer does).
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
             .build()
         exo.setMediaSource(source(req), at.coerceAtLeast(0))
         exo.prepare()
@@ -213,6 +226,7 @@ class DesktopPlayer private constructor() {
         }
         retries = 0
         pausedAt = 0
+        audioPicked = false
         _stats.value = null
         _status.update { PlayerStatus(title = req.title, buffering = true, volume = it.volume, muted = it.muted, session = req.session) }
         exo.setPlaybackSpeed(1f)
@@ -288,7 +302,10 @@ class DesktopPlayer private constructor() {
         exo.trackSelectionParameters = b.build()
     }
 
-    fun setAudio(id: Int) = ui { choose(C.TRACK_TYPE_AUDIO, id) }
+    fun setAudio(id: Int) = ui { audioPicked = true; choose(C.TRACK_TYPE_AUDIO, id) }
+
+    /** The audio track of this media is set (by the rule or by the viewer): later track updates leave it alone. */
+    private var audioPicked = false
     fun setSubtitles(id: Int) = ui { choose(C.TRACK_TYPE_TEXT, id) }
     fun setRate(rate: Float) = ui { exo.setPlaybackSpeed(rate); _status.update { it.copy(rate = rate) } }
     fun setSubtitleDelay(ms: Long) { _status.update { it.copy(subtitleDelayMs = ms) } }

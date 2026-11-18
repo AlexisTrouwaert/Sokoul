@@ -7,11 +7,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -121,6 +123,10 @@ internal fun SearchContent(
     }
 }
 
+/** Room left of a rail for its focused card to grow into; the rail is pulled back by as much, so the cards keep the section's edge. */
+private val RAIL_ROOM = 28.dp
+private val RailEdge = Modifier.offset(x = -RAIL_ROOM)
+
 @Composable
 private fun SearchSection(title: String, content: @Composable () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -131,7 +137,7 @@ private fun SearchSection(title: String, content: @Composable () -> Unit) {
 
 @Composable
 private fun TitlesRail(deps: AppDeps, items: List<TmdbItem>, onOpen: (List<TmdbItem>, Int, CardOrigin?) -> Unit) {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(22.dp), contentPadding = PaddingValues(end = 42.dp)) {
+    LazyRow(RailEdge, horizontalArrangement = Arrangement.spacedBy(22.dp), contentPadding = PaddingValues(start = RAIL_ROOM, end = 42.dp)) {
         items(items, key = { it.kind() + it.id }) { item ->
             ResultCard(deps, item) { origin -> onOpen(items, items.indexOf(item), origin) }
         }
@@ -140,14 +146,14 @@ private fun TitlesRail(deps: AppDeps, items: List<TmdbItem>, onOpen: (List<TmdbI
 
 @Composable
 private fun LiveRail(items: List<TvCatalog.Hit>, onOpen: (TvCatalog.Hit) -> Unit) {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(22.dp), contentPadding = PaddingValues(end = 42.dp)) {
+    LazyRow(RailEdge, horizontalArrangement = Arrangement.spacedBy(22.dp), contentPadding = PaddingValues(start = RAIL_ROOM, end = 42.dp)) {
         items(items, key = { "${it.channel.id}:${it.program?.start ?: 0}" }) { hit -> LiveResultCard(hit) { onOpen(hit) } }
     }
 }
 
 @Composable
 private fun WorkRail(items: List<AniTitle>, onOpen: (AniTitle, CardOrigin?) -> Unit) {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(22.dp), contentPadding = PaddingValues(end = 42.dp)) {
+    LazyRow(RailEdge, horizontalArrangement = Arrangement.spacedBy(22.dp), contentPadding = PaddingValues(start = RAIL_ROOM, end = 42.dp)) {
         items(items, key = { it.id }) { work -> WorkResultCard(work) { origin -> onOpen(work, origin) } }
     }
 }
@@ -183,10 +189,18 @@ private fun LiveResultCard(hit: TvCatalog.Hit, onClick: () -> Unit) {
     val detail = hit.program?.let { "${TvCatalog.shortLabel(hit.channel.name)} · ${clock(it.start)}–${clock(it.end)}" } ?: tr(Text.SearchLive)
     FocusCard(560.dp, 160.dp, { onClick() }, corner = 32.dp) { focused ->
         val fill by animateColorAsState(if (focused) Palette.FocusFill else Palette.RowFill)
-        Column(Modifier.fillMaxSize().background(fill).padding(22.dp), verticalArrangement = Arrangement.Center) {
-            Label(title, Type.Meta.copy(fontSize = 28.sp, fontWeight = FontWeight.SemiBold), maxLines = 2)
-            Spacer(Modifier.height(8.dp))
-            Label(detail, Type.Body, if (focused) Palette.OnFocus.copy(alpha = 0.72f) else Palette.Secondary, maxLines = 1)
+        Row(Modifier.fillMaxSize().background(fill).padding(20.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            // The channel's logo on a dark plate, so a white logo still shows on the white focus fill.
+            Box(Modifier.size(128.dp, 96.dp).clip(RoundedCornerShape(14.dp)).background(androidx.compose.ui.graphics.Color(0xFF1C1C1E)).padding(10.dp)) {
+                com.sokoul.pc.live.ChannelLogo(hit.channel.name, hit.channel.logo, Modifier.fillMaxSize(), guideId = hit.channel.epgKey)
+            }
+            Spacer(Modifier.width(20.dp))
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.Center) {
+                // Dark on the white focus fill: the title stayed white and vanished on the TV (2026-11-18).
+                Label(title, Type.Meta.copy(fontSize = 28.sp, fontWeight = FontWeight.SemiBold), if (focused) Palette.OnFocus else Palette.OnBackground, maxLines = 2)
+                Spacer(Modifier.height(8.dp))
+                Label(detail, Type.Body, if (focused) Palette.OnFocus.copy(alpha = 0.72f) else Palette.Secondary, maxLines = 1)
+            }
         }
     }
 }
@@ -199,7 +213,7 @@ private fun WorkResultCard(work: AniTitle, onClick: (CardOrigin) -> Unit) {
             Art(work.cover, Modifier.size(80.dp, 120.dp).clip(RoundedCornerShape(10.dp)))
             Spacer(Modifier.width(20.dp))
             Column(Modifier.fillMaxWidth()) {
-                Label(work.title, Type.Meta.copy(fontSize = 28.sp, fontWeight = FontWeight.Normal), maxLines = 2)
+                Label(work.title, Type.Meta.copy(fontSize = 28.sp, fontWeight = FontWeight.Normal), if (focused) Palette.OnFocus else Palette.OnBackground, maxLines = 2)
                 Spacer(Modifier.height(4.dp))
                 val details = listOfNotNull(
                     work.year?.toString(),

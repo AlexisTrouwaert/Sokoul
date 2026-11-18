@@ -82,7 +82,8 @@ class DesktopDb(file: File) : AutoCloseable {
     @Volatile var profile: String = ""
 
     /** The stored key of a resume point: the first profile keeps the plain key, the others get theirs prefixed. */
-    private fun scoped(key: String) = if (profile.isEmpty()) key else "$profile|$key"
+    private fun scoped(key: String) = scopedFor(key, profile)
+    private fun scopedFor(key: String, scope: String) = if (scope.isEmpty()) key else "$scope|$key"
 
     private fun programOf(r: java.sql.ResultSet) =
         Program(r.getString("channel_key"), r.getLong("start"), r.getLong("stop"), r.getString("title"), tidyDescription(r.getString("description")), r.getString("icon"))
@@ -452,31 +453,55 @@ class DesktopDb(file: File) : AutoCloseable {
 
     // --- guide ---------------------------------------------------------------------------------------
 
-    @Synchronized
-    fun replacePrograms(pid: Long, programs: Sequence<Program>, keepFrom: Long): Int = tx {
-        val iterator = programs.iterator()
-        var first: Program? = null
-        while (iterator.hasNext() && first == null) {
-            iterator.next().takeIf { it.end >= keepFrom }?.let { first = it }
-        }
-        if (first == null) return@tx 0
-        update("DELETE FROM programs WHERE playlist_id=?", pid)
+    /**
+     * The guide is read (a large XMLTV, parsed lazily by [programs]) outside the lock and written in short batches.
+     * Holding the database for the whole download blocked every write of the interface behind it, and the TV killed the
+     * app for not answering (three ANRs while searching and playing, 2026-11-18). The old guide is cleared only once
+     * the first programme to keep has arrived, so an empty or failed download leaves it in place.
+     */
+    fun replacePrograms(pid: Long, programs: Sequence<Program>, keepFrom: Long): Int {
+        val batch = ArrayList<Program>(GUIDE_BATCH)
+        var cleared = false
         var n = 0
-        // Named columns: on an older base, icon was added last (ALTER TABLE).
-        conn.prepareStatement("INSERT OR REPLACE INTO programs(playlist_id, channel_key, start, stop, title, description, icon) VALUES(?,?,?,?,?,?,?)").use { st ->
-            var p: Program? = first
-            while (p != null) {
-                if (p.end >= keepFrom) {
-                    bind(st, pid, p.channelKey, p.start, p.end, p.title, p.description, p.icon)
-                    st.addBatch()
-                    if (++n % 5000 == 0) st.executeBatch()
+        fun flush() {
+            if (batch.isEmpty()) return
+            synchronized(this) {
+                tx {
+                    if (!cleared) update("DELETE FROM programs WHERE playlist_id=?", pid)
+                    // Named columns: on an older base, icon was added last (ALTER TABLE).
+                    conn.prepareStatement("INSERT OR REPLACE INTO programs(playlist_id, channel_key, start, stop, title, description, icon) VALUES(?,?,?,?,?,?,?)").use { st ->
+                        batch.forEach { p -> bind(st, pid, p.channelKey, p.start, p.end, p.title, p.description, p.icon); st.addBatch() }
+                        st.executeBatch()
+                    }
                 }
-                p = if (iterator.hasNext()) iterator.next() else null
+                cleared = true
             }
-            st.executeBatch()
+            n += batch.size
+            batch.clear()
         }
-        n
+        for (p in programs) {
+            if (p.end < keepFrom) continue
+            batch += p
+            if (batch.size >= GUIDE_BATCH) flush()
+        }
+        flush()
+        return n
     }
+
+    /**
+     * Writes asked by the interface thread go to one background writer, in order: waiting there for the database lock
+     * (held by a sync) froze the screen. Elsewhere, and inside a transaction, they stay synchronous.
+     */
+    private fun write(block: () -> Unit) {
+        val name = Thread.currentThread().name
+        if ((name == "main" || name.startsWith("AWT-EventQueue")) && !Thread.holdsLock(this)) {
+            writer.execute { runCatching { synchronized(this) { block() } }.onFailure { System.err.println("Sokoul db write failed: ${it.javaClass.simpleName}") } }
+        } else {
+            synchronized(this) { block() }
+        }
+    }
+
+    private val writer = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "sokoul-db-writer").apply { isDaemon = true } }
 
     @Synchronized
     fun programs(pid: Long, keys: Collection<String>, from: Long, to: Long): List<Program> {
@@ -506,13 +531,11 @@ class DesktopDb(file: File) : AutoCloseable {
     fun favoriteIds(pid: Long, type: String = "LIVE"): Set<String> =
         query("SELECT id FROM favorites WHERE playlist_id=? AND type=?", pid, type) { it.getString(1) }.toSet()
 
-    @Synchronized
     fun addFavorite(pid: Long, type: String, id: String, at: Long) =
-        update("INSERT OR IGNORE INTO favorites VALUES(?,?,?,?)", pid, type, id, at)
+        write { update("INSERT OR IGNORE INTO favorites VALUES(?,?,?,?)", pid, type, id, at) }
 
-    @Synchronized
     fun removeFavorite(pid: Long, type: String, id: String) =
-        update("DELETE FROM favorites WHERE playlist_id=? AND type=? AND id=?", pid, type, id)
+        write { update("DELETE FROM favorites WHERE playlist_id=? AND type=? AND id=?", pid, type, id) }
 
     /** Progression : la plus récente l'emporte. */
     @Synchronized
@@ -540,10 +563,10 @@ class DesktopDb(file: File) : AutoCloseable {
         v
     }
 
-    @Synchronized
     fun putSetting(key: String, value: String?) {
-        if (value == null) update("DELETE FROM settings WHERE key=?", key) else update("INSERT OR REPLACE INTO settings VALUES(?,?)", key, value)
+        // The copy first: the screen reads it back at once, the row follows on the writer.
         settingsCache[key] = java.util.Optional.ofNullable(value)
+        write { if (value == null) update("DELETE FROM settings WHERE key=?", key) else update("INSERT OR REPLACE INTO settings VALUES(?,?)", key, value) }
     }
 
     // --- cache TMDB, reprise --------------------------------------------------------------------------
@@ -559,12 +582,14 @@ class DesktopDb(file: File) : AutoCloseable {
     @Synchronized
     fun purgeCache(prefix: String, before: Long) { update("DELETE FROM tmdb_cache WHERE key LIKE ? AND fetched_at < ?", "$prefix%", before) }
 
-    @Synchronized
     fun saveResume(r: Resume) {
-        update(
-            "INSERT OR REPLACE INTO resume(key, kind, tmdb_id, season, episode, title, subtitle, image, position_ms, duration_ms, updated_at, finished, profile) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            scoped(r.key), r.kind, r.tmdbId, r.season, r.episode, r.title, r.subtitle, r.image, r.positionMs, r.durationMs, r.updatedAt, r.finished, profile,
-        )
+        val scope = profile
+        write {
+            update(
+                "INSERT OR REPLACE INTO resume(key, kind, tmdb_id, season, episode, title, subtitle, image, position_ms, duration_ms, updated_at, finished, profile) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                scopedFor(r.key, scope), r.kind, r.tmdbId, r.season, r.episode, r.title, r.subtitle, r.image, r.positionMs, r.durationMs, r.updatedAt, r.finished, scope,
+            )
+        }
     }
 
     @Synchronized
@@ -683,6 +708,8 @@ class DesktopDb(file: File) : AutoCloseable {
     )
 
     companion object {
+        /** Programmes written per lock: a few milliseconds each, so the interface never waits long behind the guide. */
+        private const val GUIDE_BATCH = 2000
         /** Programmes read per step when walking a guide window in start order. */
         private const val PROGRAM_SCAN_BATCH = 500
         /** Longer guide rows are provider placeholders, not programmes. */

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -29,6 +30,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -109,6 +112,12 @@ fun SearchScreen(
     onOpenWork: (AniTitle, CardOrigin?) -> Unit,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
+    var recent by remember(deps) { mutableStateOf(RecentSearches.read(deps.db)) }
+    // A search counts as done when one of its results is opened: what was typed on the way is not kept.
+    fun keep(q: String) { recent = RecentSearches.add(deps.db, q) }
+    val openTitle: (List<TmdbItem>, Int, CardOrigin?) -> Unit = { list, i, o -> keep(query); onOpen(list, i, o) }
+    val openLive: (TvCatalog.Hit) -> Unit = { keep(query); onOpenLive(it) }
+    val openWork: (AniTitle, CardOrigin?) -> Unit = { w, o -> keep(query); onOpenWork(w, o) }
     var results by remember { mutableStateOf<SearchResults<TmdbItem, TvCatalog.Hit, AniTitle, AniTitle>?>(null) }
     var loading by remember { mutableStateOf(false) }
     var tabName by rememberSaveable { mutableStateOf(SearchTab.All.name) }
@@ -120,7 +129,7 @@ fun SearchScreen(
             liveAvailable = { deps.tv.playlist() != null },
             animeAvailable = { deps.anime != null },
             mangaAvailable = { deps.anime != null },
-            searchTitles = { deps.catalog.search(it) },
+            searchTitles = { deps.catalog.searchMore(it) },
             searchLive = { deps.tv.search(it) },
             searchAnime = { deps.anime?.client?.titles(AniQuery(MediaKind.ANIME, search = it, sort = "SEARCH_MATCH", perPage = 12)).orEmpty() },
             searchManga = { deps.anime?.client?.titles(AniQuery(MediaKind.MANGA, search = it, sort = "SEARCH_MATCH", perPage = 12)).orEmpty() },
@@ -138,7 +147,7 @@ fun SearchScreen(
         results = null
         try {
             delay(DEBOUNCE_MS)
-            results = searcher.search(q)
+            searcher.searchEach(q) { results = it }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } finally {
@@ -180,6 +189,10 @@ fun SearchScreen(
             if (loading) CircularProgressIndicator(Modifier.size(40.dp), color = Palette.Secondary, strokeWidth = 4.dp)
         }
         Column(Modifier.offset(x = 80.dp, y = 265.dp).width(432.dp)) {
+            if (com.sokoul.pc.Platform.hasVoice) {
+                VoiceButton { com.sokoul.pc.Platform.listen { said -> query = said } }
+                Spacer(Modifier.height(14.dp))
+            }
             ModeSwitch(digits) { digits = it }
             Spacer(Modifier.height(14.dp))
             Keyboard(
@@ -191,14 +204,22 @@ fun SearchScreen(
                 onClear = { query = "" },
             )
         }
-        Column(Modifier.offset(x = 592.dp, y = 265.dp).width(1328.dp).fillMaxSize()) {
+        // Padding, not offset: an offset column kept the screen's height, its bottom off screen, and the focus went to
+        // cards there without the list scrolling to them (seen on the TV, 2026-11-18).
+        Column(Modifier.padding(start = 592.dp, top = 265.dp).width(1328.dp).fillMaxHeight()) {
             val found = results
             if (query.isBlank()) {
                 Box(Modifier.width(1248.dp).height(1.dp).background(Palette.Secondary.copy(alpha = 0.5f)))
                 Spacer(Modifier.height(32.dp))
+                if (recent.isNotEmpty()) {
+                    Label(com.sokoul.pc.data.L("Recent searches", "Recherches récentes").text(), Type.RowTitle, Palette.Secondary)
+                    Spacer(Modifier.height(14.dp))
+                    QueryChips(recent, Icons.Filled.History, "recent") { query = it }
+                    Spacer(Modifier.height(32.dp))
+                }
                 Label(tr(Text.Explore), Type.RowTitle, Palette.Secondary)
                 Spacer(Modifier.height(14.dp))
-                GenreGrid(deps, genres, onOpen)
+                GenreGrid(deps, genres, openTitle)
             } else if (found == null) {
                 Label(tr(Text.SearchLoading), Type.Meta, Palette.Secondary)
             } else {
@@ -206,13 +227,50 @@ fun SearchScreen(
                 Spacer(Modifier.height(20.dp))
                 Tabs(tab) { tabName = it.name }
                 Spacer(Modifier.height(20.dp))
-                SearchContent(deps, found, tab, onOpen, onOpenLive, onOpenWork)
+                SearchContent(deps, found, tab, openTitle, openLive, openWork)
             }
         }
     }
 }
 
 private const val DEBOUNCE_MS = 300L
+
+/** The remote's microphone, through the system's speech recogniser: typing on a grid is slow from a sofa. */
+@Composable
+private fun VoiceButton(onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    val fill by animateColorAsState(if (focused) Palette.FocusFill else Palette.RowFill)
+    Row(
+        Modifier.size(432.dp, 68.dp).clip(RoundedCornerShape(50)).background(fill).testTag("search-voice")
+            .tvFocusable(onFocusChanged = { focused = it }, onClick = onClick),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val tint = if (focused) Palette.OnFocus else Palette.OnBackground
+        Icon(Icons.Filled.Mic, null, tint = tint, modifier = Modifier.size(36.dp))
+        Spacer(Modifier.width(12.dp))
+        BasicText(com.sokoul.pc.data.L("Speak", "Dicter").text(), style = Type.Button.copy(color = tint))
+    }
+}
+
+/** The last searches that led somewhere, newest first, kept on this device. */
+object RecentSearches {
+    private const val KEY = "search.recent"
+    private const val MAX = 8
+    private const val NEWLINE = "\n"
+
+    fun read(db: com.sokoul.desktop.data.DesktopDb): List<String> =
+        db.setting(KEY).orEmpty().lines().map { it.trim() }.filter { it.isNotEmpty() }.take(MAX)
+
+    fun add(db: com.sokoul.desktop.data.DesktopDb, query: String): List<String> {
+        val q = query.trim().lowercase()
+        val now = read(db)
+        if (q.length < 2) return now
+        val next = (listOf(q) + now.filter { it != q }).take(MAX)
+        db.putSetting(KEY, next.joinToString(NEWLINE))
+        return next
+    }
+}
 
 @Composable
 private fun ModeSwitch(digits: Boolean, onChange: (Boolean) -> Unit) {
@@ -340,19 +398,25 @@ private fun GenreGrid(deps: AppDeps, genres: List<GenreTile>, onOpen: (List<Tmdb
 
 /** TMDB has no suggestion service: the top matching titles act as suggestions, as real data rather than invented text. */
 @Composable
-private fun Suggestions(results: List<TmdbItem>, onPick: (String) -> Unit) {
+private fun Suggestions(results: List<TmdbItem>, onPick: (String) -> Unit) =
+    QueryChips(results.take(4).map { it.title.lowercase() }, Icons.Filled.Search, "suggestion", onPick)
+
+/** A row of searches to run again in one press: suggestions, or the recent searches. */
+@Composable
+private fun QueryChips(queries: List<String>, icon: androidx.compose.ui.graphics.vector.ImageVector, tag: String, onPick: (String) -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-        results.take(4).forEach { item ->
+        queries.take(4).forEachIndexed { i, text ->
             var focused by remember { mutableStateOf(false) }
             val fill by animateColorAsState(if (focused) Palette.FocusFill else Palette.RowFill)
             Row(
                 Modifier.height(66.dp).clip(RoundedCornerShape(50)).background(fill)
-                    .tvFocusable(onFocusChanged = { focused = it }, onClick = { onPick(item.title) }).padding(horizontal = 18.dp),
+                    .testTag("$tag-$i")
+                    .tvFocusable(onFocusChanged = { focused = it }, onClick = { onPick(text) }).padding(horizontal = 18.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Filled.Search, null, tint = if (focused) Palette.OnFocus else Palette.OnBackground, modifier = Modifier.size(34.dp))
+                Icon(icon, null, tint = if (focused) Palette.OnFocus else Palette.OnBackground, modifier = Modifier.size(34.dp))
                 Spacer(Modifier.width(12.dp))
-                SingleLine(item.title.lowercase(), Type.Button, if (focused) Palette.OnFocus else Palette.Secondary, Modifier.width(220.dp))
+                SingleLine(text, Type.Button, if (focused) Palette.OnFocus else Palette.Secondary, Modifier.width(220.dp))
             }
         }
     }

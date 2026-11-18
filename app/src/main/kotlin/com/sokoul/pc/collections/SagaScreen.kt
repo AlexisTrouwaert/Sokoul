@@ -194,9 +194,13 @@ fun SagaScreen(
     }
     val films = current?.films.orEmpty()
     LaunchedEffect(full, idle, trailer.playing, films, onTop) {
-        while (onTop && full && idle && !trailer.playing && films.size > 1) {
-            delay(ROTATE_MILLIS)
-            rotation++
+        // Off the interface dispatcher, and in the real app only (like the drift below): each new backdrop starts a
+        // crossfade, and a UI test would never find the screen at rest.
+        if (FocusSource.trackRealMouse && onTop && full && idle && !trailer.playing && films.size > 1) kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            while (true) {
+                delay(ROTATE_MILLIS)
+                rotation++
+            }
         }
     }
 
@@ -304,7 +308,7 @@ fun SagaScreen(
                 origin = origin,
                 enter = enter.value,
                 expand = expand,
-                slide = slide.value,
+                slide = { slide.value },
                 scrollPx = { scroll.value },
                 blockColor = blockColor,
                 videoOn = trailer.playing && hasFrames && idle,

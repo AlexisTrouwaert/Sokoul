@@ -200,3 +200,6 @@ data class LiveRecording(
     val channel: com.sokoul.desktop.data.Channel,
     val canPlay: (com.sokoul.desktop.data.Recording) -> Boolean = { false },
 )
+
+/** The active version has no track in [wanted] (ISO 639-1); [heard] is the label of the track playing. */
+data class LanguageNotice(val wanted: String, val heard: String)

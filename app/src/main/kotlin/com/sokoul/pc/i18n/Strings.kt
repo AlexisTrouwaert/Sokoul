@@ -211,11 +211,11 @@ object Strings {
         Text.UpgradeReady to "%s is ready",
         Text.Switch to "Switch",
         Text.NotNow to "Not Now",
-        Text.PrefStart to "Starting a film",
+        Text.PrefStart to "Starting playback",
         Text.PrefAudio to "Audio language",
         Text.PrefSubtitles to "Subtitles",
-        Text.PrefMaxQuality to "Maximum quality",
-        Text.PrefMaxSize to "Maximum size",
+        Text.PrefMaxQuality to "Prefer quality up to",
+        Text.PrefMaxSize to "Prefer size up to",
         Text.PrefBuffer to "Buffer",
         Text.PrefOrigin to "Preferred source",
         Text.PrefSystem to "Follow the system",
@@ -457,11 +457,11 @@ object Strings {
         Text.UpgradeReady to "%s est prête",
         Text.Switch to "Basculer",
         Text.NotNow to "Plus tard",
-        Text.PrefStart to "Démarrage d'un film",
+        Text.PrefStart to "Démarrage de la lecture",
         Text.PrefAudio to "Langue audio",
         Text.PrefSubtitles to "Sous-titres",
-        Text.PrefMaxQuality to "Qualité maximale",
-        Text.PrefMaxSize to "Taille maximale",
+        Text.PrefMaxQuality to "Préférer une qualité jusqu'à",
+        Text.PrefMaxSize to "Préférer une taille jusqu'à",
         Text.PrefBuffer to "Mémoire tampon",
         Text.PrefOrigin to "Source préférée",
         Text.PrefSystem to "Selon le système",
@@ -535,25 +535,48 @@ object Strings {
     /** The system's own language, kept before the user's choice replaces it. */
     val system: Locale = Locale.getDefault()
 
-    /** Applies the language chosen in the settings: "auto" is the system's, "fr" and "en" force theirs. */
+    /**
+     * Applies the language chosen in the settings: a shipped language code forces it; anything else ("auto") follows the
+     * system, in English when the system's language is not shipped. The system's country is kept for the region.
+     */
     fun applyLanguage(choice: String) {
-        Locale.setDefault(if (choice == "fr" || choice == "en") Locale.forLanguageTag(choice) else system)
+        val chosen = InterfaceLanguages.of(choice.takeIf { it != "auto" && it != "system" })
+        Locale.setDefault(
+            when {
+                chosen != null -> Locale.forLanguageTag(chosen.code)
+                InterfaceLanguages.of(system.language) != null -> system
+                else -> Locale.Builder().setLanguage("en").setRegion(system.country.takeIf { it.length == 2 } ?: "US").build()
+            },
+        )
     }
 
     fun isFrench(locale: Locale = Locale.getDefault()): Boolean = locale.language == "fr"
 
+    /** The shipped interface language in use: the default locale's when shipped, English otherwise. */
+    fun language(locale: Locale = Locale.getDefault()): InterfaceLanguage = InterfaceLanguages.current(locale)
+
     /** Language sent with catalog requests, matching the interface. */
-    fun catalogLanguage(locale: Locale = Locale.getDefault()): String = if (isFrench(locale)) "fr-FR" else "en-US"
+    fun catalogLanguage(locale: Locale = Locale.getDefault()): String = language(locale).tmdb
 
-    /** A text with both languages: French on a French system, English otherwise. */
-    fun pick(en: String, fr: String, locale: Locale = Locale.getDefault()): String = if (isFrench(locale)) fr else en
+    /**
+     * A text written in English and French in the code: French keeps its own, another language is read from its
+     * catalogue by the English text, and anything missing stays in English.
+     */
+    fun pick(en: String, fr: String, locale: Locale = Locale.getDefault()): String = when (val code = language(locale).code) {
+        "fr" -> fr
+        "en" -> en
+        else -> Translations.lookup(code, en) ?: en
+    }
 
-    /** Streaming availability is regional: the system's country, or France on a French system without one. */
+    /** Streaming availability is regional: the system's country, or the language's own region without one. */
     fun region(locale: Locale = Locale.getDefault()): String =
-        locale.country.takeIf { it.length == 2 } ?: if (isFrench(locale)) "FR" else "US"
+        locale.country.takeIf { it.length == 2 } ?: language(locale).region
 
-    fun resolve(key: Text, locale: Locale = Locale.getDefault()): String =
-        (if (isFrench(locale)) french[key] else null) ?: english.getValue(key)
+    fun resolve(key: Text, locale: Locale = Locale.getDefault()): String = when (val code = language(locale).code) {
+        "fr" -> french[key] ?: english.getValue(key)
+        "en" -> english.getValue(key)
+        else -> english.getValue(key).let { en -> Translations.lookup(code, en) ?: en }
+    }
 }
 
 fun tr(key: Text): String = Strings.resolve(key)

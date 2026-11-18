@@ -24,6 +24,7 @@ import com.sokoul.pc.data.providers.WikipediaClient
 import com.sokoul.pc.i18n.Strings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -72,6 +73,8 @@ interface CatalogApi {
     suspend fun season(tvId: Int, season: Int): List<TmdbEpisode>
     suspend fun similar(kind: String, id: Int): List<TmdbItem>
     suspend fun search(query: String): List<TmdbItem>
+    /** What the search screen shows: more than one page of results. Other callers keep [search], one page. */
+    suspend fun searchMore(query: String): List<TmdbItem> = search(query)
     suspend fun genreName(kind: String, id: Int): String?
     suspend fun genreTiles(kind: String = "movie"): List<GenreTile>
     suspend fun byGenre(kind: String, id: Int, page: Int = 1): List<TmdbItem>
@@ -121,7 +124,8 @@ fun usableTitles(items: List<TmdbItem>) = items.filter { it.poster != null }.dis
 
 class TmdbCatalog(private val db: DesktopDb, private val catalog: Catalog, private val configured: () -> Boolean) : CatalogApi {
     init {
-        catalog.tmdb.defaultLanguage = Strings.catalogLanguage()
+        // Read at each request: titles, summaries and artwork follow the interface language as soon as it changes.
+        catalog.tmdb.languageSource = { Strings.catalogLanguage() }
     }
 
     private val tmdb get() = catalog.tmdb
@@ -444,6 +448,12 @@ class TmdbCatalog(private val db: DesktopDb, private val catalog: Catalog, priva
 
     override suspend fun search(query: String) = tmdb.searchMulti(key(), query).filter { it.poster != null }.distinctBy { it.kind() to it.id }
 
+    /** Three pages of TMDB results asked at once (one page gave 7 titles for "Oppenheimer"), in TMDB's order. */
+    override suspend fun searchMore(query: String): List<TmdbItem> = coroutineScope {
+        (1..SEARCH_PAGES).map { page -> async { tmdb.searchMulti(key(), query, page) } }.awaitAll().flatten()
+            .filter { it.poster != null }.distinctBy { it.kind() to it.id }
+    }
+
     override suspend fun genreName(kind: String, id: Int) = tmdb.genres(key(), kind)[id]
 
     override suspend fun genreTiles(kind: String): List<GenreTile> = coroutineScope {
@@ -475,6 +485,8 @@ class TmdbCatalog(private val db: DesktopDb, private val catalog: Catalog, priva
         /** "off" puts every title back on the plain IMDb search, as before the anime ids. */
         const val ANIME_IDENTITY = "pc.anime.identity"
         const val HERO_COUNT = 8
+        /** Pages of TMDB search results the search screen asks for. */
+        const val SEARCH_PAGES = 3
         /** Keep the PC Anime hero responsive; slide details load only for the slide currently on screen. */
         private const val PC_ANIME_HERO_CANDIDATES = 4
         const val CONTINUE_COUNT = 15

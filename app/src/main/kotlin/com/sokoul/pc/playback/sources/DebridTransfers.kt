@@ -76,6 +76,9 @@ class DebridTransfers(
                 }
                 throw PlayFailureException(PlayFailure.NotReady(null))
             }
+            // Real-Debrid's own reason in the source timings ("infringing_file", "torrent_file_invalid"…): a refused
+            // version otherwise only says "dead link".
+            StartClock.note("rd ${hash.take(6)} refused: HTTP ${e.code} code ${e.apiCode} ${e.message.orEmpty().take(60)}")
             throw PlayFailureException(failureOf(e))
         }
     }
@@ -85,7 +88,7 @@ class DebridTransfers(
         if (info.ready) {
             val file = pick(info.files.filter { it.selected }, stream, query)
             val link = file?.let { linkFor(info, it) }
-            if (link != null) return api.unrestrict(link).url
+            if (link != null) return unrestricted(link, query)
             // Ready, but with other files chosen when it was added: this episode was not part of the download.
             throw PlayFailureException(PlayFailure.NotReady(null))
         }
@@ -118,7 +121,7 @@ class DebridTransfers(
             api.selectFiles(id, listOf(file.id))
             repeat(READY_POLLS) { attempt ->
                 info = api.torrentInfo(id)
-                if (info.ready) return api.unrestrict(linkFor(info, file) ?: throw PlayFailureException(PlayFailure.DeadLink)).url.also { keepTorrent = true }
+                if (info.ready) return unrestricted(linkFor(info, file) ?: throw PlayFailureException(PlayFailure.DeadLink), query).also { keepTorrent = true }
                 if (info.status in DEAD) throw PlayFailureException(PlayFailure.DeadLink)
                 if (attempt < READY_POLLS - 1) delay(quickPollMs)
             }
@@ -171,7 +174,7 @@ class DebridTransfers(
             }
             if (info.ready) {
                 val file = pick(info.files.filter { it.selected }, stream, query) ?: throw PlayFailureException(PlayFailure.FakeFile)
-                return api.unrestrict(linkFor(info, file) ?: throw PlayFailureException(PlayFailure.DeadLink)).url
+                return unrestricted(linkFor(info, file) ?: throw PlayFailureException(PlayFailure.DeadLink), query)
             }
             // Real-Debrid starts over from 0 for the last step, once the file is downloaded: a person must not see it go back.
             shownPercent = maxOf(shownPercent, info.progress.coerceIn(0, 100))
@@ -208,6 +211,19 @@ class DebridTransfers(
     }
 
     /** Links follow the order of the chosen files. */
+    /**
+     * The playable link of [link], refused when Real-Debrid names a file of another episode: a pack's file chosen by
+     * mistake (an index, the file selected last time) is never played as this episode (PR #7, The Handmaid's Tale S04E06).
+     */
+    private suspend fun unrestricted(link: String, query: DebridQuery): String {
+        val file = api.unrestrict(link)
+        if (query.series && com.sokoul.iptv.data.debrid.DebridStreams.episodeMatches(file.filename, query.season, query.episode, query.absolute) == false) {
+            StartClock.note("rd file ${file.filename.take(60)} is another episode")
+            throw PlayFailureException(PlayFailure.Doubtful(com.sokoul.pc.playback.session.Doubt.OtherEpisode))
+        }
+        return file.url
+    }
+
     private fun linkFor(info: RdTorrent, file: RdFile): String? {
         val selected = info.files.filter { it.selected }.sortedBy { it.id }
         return info.links.getOrNull(selected.indexOfFirst { it.id == file.id }) ?: info.links.singleOrNull()

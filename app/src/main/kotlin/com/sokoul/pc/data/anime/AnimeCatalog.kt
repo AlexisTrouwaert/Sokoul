@@ -270,7 +270,8 @@ class AnimeCatalog(val client: AniListClient, val fans: FanSources, private val 
     fun rows(kind: MediaKind, today: LocalDate = LocalDate.now()): List<AniRow> {
         val (season, year) = AnimeSeasons.of(today)
         val (nextSeason, nextYear) = AnimeSeasons.next(today)
-        fun row(key: String, en: String, fr: String, q: AniQuery) = AniRow(key, { french -> if (french) fr else en }, q)
+        // Through the catalogues: Spanish or Dutch get their own text, not the English one.
+        fun row(key: String, en: String, fr: String, q: AniQuery) = AniRow(key, { _ -> com.sokoul.pc.i18n.Strings.pick(en, fr) }, q)
         fun theme(tag: String, en: String, fr: String) = row("tag-$tag", en, fr, AniQuery(kind, sort = "POPULARITY_DESC", tag = tag))
         val common = listOf(
             theme("Isekai", "Another world", "Un autre monde"),

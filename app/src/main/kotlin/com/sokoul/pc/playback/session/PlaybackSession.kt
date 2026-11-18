@@ -1,4 +1,5 @@
 package com.sokoul.pc.playback.session
+import com.sokoul.pc.playback.sources.AudioMatch
 import com.sokoul.pc.playback.sources.DeviceCaps
 import com.sokoul.pc.playback.sources.SourceMemory
 import com.sokoul.pc.playback.sources.SourcePreferenceOrder
@@ -12,6 +13,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.sokoul.desktop.data.AudioPreference
+import com.sokoul.desktop.data.AudioFallback
 import com.sokoul.desktop.data.PlaybackPrefs
 import com.sokoul.desktop.player.AudioChoice
 import com.sokoul.iptv.domain.AudioLanguage
@@ -40,11 +42,15 @@ data class PlaybackBudgets(
     val firstChoiceMs: Long = 10_000,
     /** Once the first versions are there, how long the other quick answers have to join them. */
     val settleMs: Long = 1_500,
+    /** With the best picture first, how long the search may go on for a 4K once the first versions are there. */
+    val bestSettleMs: Long = 6_000,
     /** When nothing has been found by then, how much longer to wait for a first result. */
     // The search services answer one at a time, the slowest past 30 s for a long anime (DesktopDebrid.TIMEOUT_MS).
     val searchMs: Long = 40_000,
     /** From opening a stream to its first image. */
     val firstImageMs: Long = 20_000,
+    /** After the first image, how long the sound is held while the audio tracks are described and the track is set. */
+    val trackMs: Long = 3_000,
     /** A film that stops moving for this long moves to the next version, at the same position. */
     val stallMs: Long = 15_000,
     val tickMs: Long = 500,
@@ -76,6 +82,8 @@ class PlaybackSession(
     private val memory: SourceMemory? = null,
     /** How long the work lasts, by the catalog. */
     private val expectedMinutes: suspend (PlayRequest) -> Int? = { null },
+    /** The work's original language (ISO 639-1), by the catalog: which track is the original one. */
+    private val originalLanguage: suspend (PlayRequest) -> String? = { null },
     /** An anime episode's opening and ending, as AniSkip measured them. */
     private val skipTimes: suspend (PlayRequest) -> List<com.sokoul.iptv.data.anime.SkipInterval> = { emptyList() },
     /** How many Real-Debrid versions are tried at once (1: one after the other, as before). */
@@ -145,7 +153,27 @@ class PlaybackSession(
     private var expected: Int? = null
     /** The language the file proved to have once its tracks were read. It counts over what its name announced. */
     var provenLanguage by mutableStateOf<AudioLanguage?>(null)
+
+    /**
+     * The active version has none of the wanted languages: the first wanted one (ISO 639-1) and the label of the track
+     * heard; null otherwise. The player offers to keep listening or to see the versions: an active version is never
+     * replaced on its own.
+     */
+    var languageNotice by mutableStateOf<LanguageNotice?>(null)
         private set
+
+    fun dismissLanguageNotice() { languageNotice = null }
+
+    fun listenAnyway() {
+        engine?.endPreview()
+        languageNotice = null
+    }
+
+    fun holdsWantedLanguage(v: PlayVersion): Boolean =
+        AudioMatch.verdict(v, prefs().intent, memory?.fact(memoryKey(v)), workLanguage).matches
+
+    /** The work's original language for the request being played, from the catalog. */
+    private var workLanguage: String? = null
 
     private fun memoryKey(v: PlayVersion) = "${request?.resumeKey}|${v.key}"
 
@@ -787,6 +815,7 @@ class PlaybackSession(
 
     private fun stopEngine() {
         val wasOpen = streamOpen
+        languageNotice = null
         engine?.stop()
         streamOpen = false
         if (wasOpen) onStreamClosed()
@@ -812,6 +841,8 @@ class PlaybackSession(
         versions = emptyList()
         searching = true
         searchJob = scope.launch {
+            // The work's language first: "original" in the wanted languages ranks the versions by it.
+            workLanguage = runCatching { originalLanguage(target) }.getOrElse { if (it is CancellationException) throw it else null }
             try {
                 finder.find(target, refresh).collect { update ->
                     sourceNotices = update.notices
@@ -821,7 +852,9 @@ class PlaybackSession(
                 }
             } catch (e: CancellationException) {
                 throw e
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                // Said in the source timings: a search that stops here keeps the versions it had, silently otherwise.
+                StartClock.note("search stopped: ${e.javaClass.simpleName} ${e.message.orEmpty().take(160)} at ${e.stackTrace.firstOrNull { it.className.startsWith("com.sokoul") }}")
                 lastFailure = lastFailure ?: PlayFailure.Network
             }
             search.value = search.value.copy(done = true)
@@ -842,10 +875,11 @@ class PlaybackSession(
         val fact = { v: PlayVersion -> memory?.fact(memoryKey(v)) }
         // Why a version is at the end of the list shows beside it.
         found.forEach { v -> memory?.failure(memoryKey(v))?.let { failures.putIfAbsent(v.key, it) } }
-        val ranked = VersionRanking.rank(found, p, frenchSystem(), readyFirst ?: (p.startMode != StartMode.WaitBest), caps, fact, expected)
+        val ranked = VersionRanking.rank(found, p, frenchSystem(), readyFirst ?: (p.startMode != StartMode.WaitBest && !p.bestQualityFirst), caps, fact, expected, workLanguage)
         return SourcePreferences.rank(ranked, sourcePreferences, p, frenchSystem(), caps,
-            language = { fact(it)?.language ?: it.language },
-            failed = { fact(it)?.let { f -> f.failure != null && f.until > System.currentTimeMillis() } == true })
+            fact = fact,
+            failed = { fact(it)?.let { f -> f.failure != null && f.until > System.currentTimeMillis() } == true },
+            workLanguage = workLanguage)
     }
 
     /**
@@ -857,7 +891,16 @@ class PlaybackSession(
         val first = withTimeoutOrNull(budgets.firstChoiceMs) { search.first { it.done || it.versions.isNotEmpty() } }
         // A version already in the account goes at once: nothing quicker can come.
         val held = { u: SearchUpdate -> u.versions.any { it.readiness == Readiness.Ready && it.origin == VersionOrigin.Debrid && it.rejected == null } }
-        if (first != null && !first.done && !held(first)) withTimeoutOrNull(budgets.settleMs) { search.first { it.done || held(it) } }
+        if (prefs().bestQualityFirst) {
+            // The best picture first: the first answers were often the 1080p already in the account, and the 4K found a
+            // moment later was never waited for. The search gets a little longer, unless a 4K in the account is there.
+            // The best this screen shows: a 1080p set waits for a 1080p in the account, a 4K one for a 4K.
+            val top = if (caps.maxHeight >= 2160) com.sokoul.iptv.domain.VideoQuality.UHD_4K else com.sokoul.iptv.domain.VideoQuality.FHD_1080
+            val heldTop = { u: SearchUpdate ->
+                u.versions.any { it.readiness == Readiness.Ready && it.origin == VersionOrigin.Debrid && it.rejected == null && it.quality == top }
+            }
+            if (first != null && !first.done && !heldTop(first)) withTimeoutOrNull(budgets.bestSettleMs) { search.first { it.done || heldTop(it) } }
+        } else if (first != null && !first.done && !held(first)) withTimeoutOrNull(budgets.settleMs) { search.first { it.done || held(it) } }
         if (first == null && search.value.versions.isEmpty()) {
             withTimeoutOrNull(budgets.searchMs) { search.first { it.done || it.versions.isNotEmpty() } }
         }
@@ -867,6 +910,7 @@ class PlaybackSession(
         var pick = first
         var ready = resolved
         expected = request?.let { r -> runCatching { expectedMinutes(r) }.getOrNull() }
+        workLanguage = request?.let { r -> runCatching { originalLanguage(r) }.getOrNull() }
         versions = rank(search.value.versions)
         awaitFirstResults()
         while (true) {
@@ -914,7 +958,7 @@ class PlaybackSession(
     private suspend fun race(): Pair<PlayVersion, StreamRequest>? {
         val mode = prefs().startMode.takeIf { request?.chooseFirst != true } ?: StartMode.Ask
         val remembered = versions.filter { memory?.failure(memoryKey(it)) != null }.map { it.key }.toSet()
-        val group = StartPolicy.race(versions, mode, failed + remembered, quickTried, blocked, failedHosts, raceSize())
+        val group = StartPolicy.race(versions, mode, failed + remembered, quickTried, blocked, failedHosts, raceSize(), sameQuality = prefs().bestQualityFirst)
         if (group.isEmpty()) return null
         StartClock.note("race of " + group.size)
         current = group.first()
@@ -1027,8 +1071,12 @@ class PlaybackSession(
         // libVLC can take half a minute to load right after an install: that says nothing about this version.
         e.awaitLoaded()
         val id = PlayerEngine.nextSession()
-        val opening = stream.copy(startMs = positionMs, session = id)
-        e.play(opening)
+        val opening = stream.copy(startMs = positionMs, session = id, originalLanguage = workLanguage)
+        languageNotice = null
+        val wanted = prefs().intent.languages
+        StartClock.note("audio wants " + wanted.joinToString(",") + (workLanguage?.let { " work $it" } ?: ""))
+        // The sound is held until the audio track is set: the viewer never hears the engine's default track first.
+        e.preview(opening)
         streamOpen = true
         val started = withTimeoutOrNull(budgets.firstImageMs) {
             e.status.first { it.error == PlayerEngine.MISSING || (it.session == id && (it.error != null || it.ended || (it.playing && it.timeMs > 0))) }
@@ -1039,10 +1087,49 @@ class PlaybackSession(
             started.error != null -> return failOpen(version, opening, PlayFailure.Unknown)
             started.ended -> return failOpen(version, opening, PlayFailure.Cut)
         }
+        resolveAudio(e, id, version, automatic, wanted)?.let { return it }
+        val intent = prefs().intent
+        val audioState = e.status.value.takeIf { it.session == id }
+        val tracks = audioState?.audio.orEmpty()
+        if (intent.fallback == AudioFallback.Ask && AudioMatch.missingWanted(tracks, intent, workLanguage)) {
+            val heard = tracks.firstOrNull { it.first == audioState?.audioId }?.second ?: tracks.first().second
+            provenLanguage = SourceRules.heardLanguage(tracks)
+            languageNotice = AudioMatch.firstWanted(intent, workLanguage)?.let { LanguageNotice(it, heard) }
+        } else {
+            e.endPreview()
+        }
         phase = Phase.Playing(version)
         StartClock.note("first image")
         offerUpgrade(version)
         return watch(e, id, version, opening, automatic)
+    }
+
+    /**
+     * While the sound is held: waits for the audio tracks, then for the player to select the wanted one, within
+     * [PlaybackBudgets.trackMs]. An automatic try whose named tracks lack the wanted language may still give way to
+     * another version here, before it is active. Null when the version may become active.
+     */
+    private suspend fun resolveAudio(e: PlayerEngine, id: Long, version: PlayVersion, automatic: Boolean, wanted: List<String>): PlayFailure? {
+        val end = System.currentTimeMillis() + budgets.trackMs
+        fun left() = (end - System.currentTimeMillis()).coerceAtLeast(0)
+        if (withTimeoutOrNull(left()) { e.status.first { it.session == id && it.audio.isNotEmpty() } } == null) {
+            StartClock.note("audio tracks not described in time")
+            return null
+        }
+        // Tracks are announced one by one: a moment lets the others join before judging the file.
+        delay(minOf(TRACK_SETTLE_MS, left()))
+        val tracks = e.status.value.takeIf { it.session == id }?.audio.orEmpty()
+        val pick = AudioMatch.pickTrack(tracks, wanted, workLanguage)
+        StartClock.note("tracks " + tracks.joinToString(" | ") { it.second.take(TRACE_NAME) } +
+            " -> " + (tracks.firstOrNull { it.first == pick }?.second?.take(TRACE_NAME) ?: "engine default"))
+        if (pick != null) withTimeoutOrNull(left()) { e.status.first { it.session != id || it.audioId == pick } }
+        if (automatic && lacksWantedLanguage(version, tracks)) {
+            languageMoves++
+            StartClock.note("stopped before start: wanted language missing")
+            stopEngine()
+            return PlayFailure.WrongLanguage
+        }
+        return null
     }
 
     private suspend fun failOpen(version: PlayVersion?, stream: StreamRequest, fallback: PlayFailure): PlayFailure {
@@ -1052,7 +1139,7 @@ class PlaybackSession(
 
     /** Follows a film that plays: saves its position, and notices a failure, a cut or a stream that stopped moving. */
     private suspend fun watch(e: PlayerEngine, id: Long, version: PlayVersion, stream: StreamRequest, automatic: Boolean): PlayFailure? {
-        var languageChecked = !automatic
+        var languageChecked = languageNotice != null
         var lastTime = -1L
         var stillSince = System.currentTimeMillis()
         var savedAt = stillSince
@@ -1094,15 +1181,16 @@ class PlaybackSession(
             // It really played: what was held against it ends, and what it contains is known from now on.
             if (!provedGood && st.playing && now - openedAt >= PROVEN_AFTER_MS) {
                 provedGood = true
-                memory?.noteGood(memoryKey(version), SourceRules.heardLanguage(st.audio), Regex("""(\d+)×(\d+)""").find(st.video.orEmpty())?.groupValues?.get(2)?.toIntOrNull())
+                memory?.noteGood(memoryKey(version), SourceRules.heardLanguage(st.audio), Regex("""(\d+)×(\d+)""").find(st.video.orEmpty())?.groupValues?.get(2)?.toIntOrNull(), SourceRules.heardCodes(st.audio))
             }
             if (!languageChecked && st.audio.isNotEmpty()) {
                 languageChecked = true
                 provenLanguage = SourceRules.heardLanguage(st.audio)
-                if (lacksWantedLanguage(version, st.audio)) {
-                    languageMoves++
-                    stopEngine()
-                    return PlayFailure.WrongLanguage
+                // An active version is never stopped for its language: the viewer is told, and chooses.
+                if (missingWantedLanguage(st.audio)) {
+                    val heard = st.audio.firstOrNull { it.first == st.audioId }?.second ?: st.audio.first().second
+                    languageNotice = AudioMatch.firstWanted(prefs().intent, workLanguage)?.let { LanguageNotice(it, heard) }
+                    StartClock.note("wanted language missing in the active version")
                 }
             }
             if (st.timeMs != lastTime || st.paused) {
@@ -1122,14 +1210,16 @@ class PlaybackSession(
      * "MULTI" in a name says nothing of which languages: only the opened file tells. When French is wanted, tracks are named
      * and none is French, another version is tried while one that may have it remains. A version picked by hand stays.
      */
+    /** Every track is named and none is in a wanted language, whatever it is. An unnamed track may hold it: it disproves nothing. */
+    private fun missingWantedLanguage(audio: List<Pair<Int, String>>): Boolean =
+        AudioMatch.missingWanted(audio, prefs().intent, workLanguage)
+
+    /** Before activation: the file lacks every wanted language, and another version still may have one. */
     private fun lacksWantedLanguage(version: PlayVersion, audio: List<Pair<Int, String>>): Boolean {
-        val p = prefs()
-        val wantsFrench = p.audio == AudioPreference.Vf || (p.audio == AudioPreference.System && frenchSystem())
-        if (!wantsFrench || languageMoves >= MAX_LANGUAGE_MOVES) return false
-        if (version.language != AudioLanguage.MULTI && version.language != AudioLanguage.VF) return false
-        // An unnamed track may contain French: incomplete metadata cannot disprove it.
-        if (audio.isEmpty() || audio.any { AudioChoice.languageOf(it.second) == null } || AudioChoice.hasFrench(audio)) return false
-        return versions.any { it.key != version.key && it.key !in failed && it.origin !in blocked && it.readiness in READY_TO_TRY && (it.language == AudioLanguage.VF || it.language == AudioLanguage.MULTI) }
+        if (!missingWantedLanguage(audio) || languageMoves >= MAX_LANGUAGE_MOVES) return false
+        val intent = prefs().intent
+        val matches = { v: PlayVersion -> AudioMatch.verdict(v, intent, memory?.fact(memoryKey(v)), workLanguage).matches }
+        return versions.any { it.key != version.key && it.key !in failed && it.origin !in blocked && it.readiness in READY_TO_TRY && matches(it) }
     }
 
     /** With the "start what is ready" preference, a sharper version is fetched behind the film and offered when ready. */
@@ -1138,7 +1228,7 @@ class PlaybackSession(
         upgradeJob?.cancel()
         upgradeJob = scope.launch {
             search.first { it.done }
-            val target = StartPolicy.upgrade(rank(search.value.versions, readyFirst = false).filter { SourceRules.pictureRank(it.hdr, caps) <= 2 }, playing, failed) { VersionRanking.heard(it, prefs(), frenchSystem()) } ?: return@launch
+            val target = StartPolicy.upgrade(rank(search.value.versions, readyFirst = false).filter { SourceRules.pictureRank(it.hdr, caps) <= 2 }, playing, failed) { VersionRanking.heard(it, prefs(), frenchSystem(), memory?.fact(memoryKey(it)), workLanguage) } ?: return@launch
             upgrade = UpgradeOffer(target, null, null)
             upgrade = try {
                 val stream = target.open(true) { transfer -> upgrade = UpgradeOffer(target, transfer, null) }
@@ -1160,6 +1250,7 @@ class PlaybackSession(
         const val MIN_FILM_MS = 180_000L
         const val END_RATIO = 0.9
         const val MAX_LANGUAGE_MOVES = 4
+        const val TRACK_SETTLE_MS = 400L
         val READY_TO_TRY = setOf(Readiness.Ready, Readiness.Likely, Readiness.Unknown)
     }
 }

@@ -89,13 +89,6 @@ fun realDeps(db: DesktopDb, player: CompletableFuture<DesktopPlayer?>, loaded: (
         DebridTransfers(RealDebridApi(catalog.http, { ProviderConfig.key(db, "realdebrid") })),
         gate,
         StreamProbe(catalog.http),
-        frenchSearch = {
-            when (prefs.audioPreference) {
-                AudioPreference.System -> Strings.isFrench()
-                AudioPreference.Vo -> false
-                else -> true
-            }
-        },
         anime = pcCatalog.animeIdentity,
         web = WebSources(
             catalog.http,
@@ -104,6 +97,21 @@ fun realDeps(db: DesktopDb, player: CompletableFuture<DesktopPlayer?>, loaded: (
             accessKey = { ProviderConfig.key(db, "mainapi") ?: LocalServerKey.read() },
             probe = StreamProbe(catalog.http),
             localResolver = nativeEmbedResolver,
+            // Sources the app reads itself, without the Sokoul server (Docker): the others follow one by one.
+            direct = mapOf(
+                "PurStream" to com.sokoul.pc.playback.sources.PurStreamDirect(
+                    catalog.http, tmdb = { kind, id -> catalog.tmdb.namesAndImages(catalog.key(), kind, id) },
+                )::find,
+                "Coflix" to com.sokoul.pc.playback.sources.CoflixDirect(
+                    catalog.http, tmdb = { kind, id, language -> catalog.tmdb.namesAndImages(catalog.key(), kind, id, language) },
+                )::find,
+                "FStream" to com.sokoul.pc.playback.sources.FStreamDirect(
+                    catalog.http, tmdb = { kind, id, language -> catalog.tmdb.namesAndImages(catalog.key(), kind, id, language) },
+                )::find,
+                "VoirDrama" to com.sokoul.pc.playback.sources.VoirDramaDirect(
+                    catalog.http, tmdb = { kind, id, language -> catalog.tmdb.namesAndImages(catalog.key(), kind, id, language) },
+                )::find,
+            ),
         ),
         animeWeb = com.sokoul.pc.playback.sources.AniProjectSources(
             catalog.http,
@@ -117,6 +125,8 @@ fun realDeps(db: DesktopDb, player: CompletableFuture<DesktopPlayer?>, loaded: (
             accessKey = { ProviderConfig.key(db, "mainapi") ?: LocalServerKey.read() },
             probe = StreamProbe(catalog.http),
             localResolver = nativeEmbedResolver,
+            // Without the Sokoul server (Docker off, or a TV away from the PC), the app reads Anime-Sama itself.
+            direct = com.sokoul.pc.playback.sources.AnimeSamaDirect(catalog.http),
         ),
         kidsProfile = { profiles.current.kids },
     )
@@ -165,6 +175,7 @@ fun realDeps(db: DesktopDb, player: CompletableFuture<DesktopPlayer?>, loaded: (
         keepAlive = Platform::recordingKeepAlive,
     )
     deps.tv.recorder.start(deps.tv::playlist)
+    deps.clearSearchCache = debrid::clearCache
     return deps
 }
 

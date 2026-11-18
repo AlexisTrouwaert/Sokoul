@@ -12,7 +12,10 @@ class NativeEmbedResolver(http: OkHttpClient) : AutoCloseable {
 
     suspend fun resolve(embedUrl: String, title: String): StreamRequest {
         val result = extractor.extract(embedUrl)
-        val url = result?.url ?: throw IllegalStateException("Local source extraction unavailable")
+        val url = result?.url ?: run {
+            com.sokoul.pc.playback.session.StartClock.note("extract failed: ${extractor.lastError ?: "unknown"}")
+            throw IllegalStateException("Local source extraction unavailable")
+        }
         return StreamRequest(url, result.headers["User-Agent"], result.headers["Referer"], title,
             live = false, mediaType = if (result.isHls == true) "hls" else null,
             headers = result.headers,

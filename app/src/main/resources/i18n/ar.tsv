@@ -1,0 +1,1051 @@
+# العربية — english<TAB>translation, keyed by app/src/main/resources/i18n/source.tsv
+"One more episode" is your motto.	«حلقة أخرى فقط» هو شعارك.
+%1$d h %2$d min	%1$d س %2$d د
+%1$d min	%1$d د
+%1$s Originals	أعمال %1$s الأصلية
+%d awards	%d جوائز
+%d channels	%d قنوات
+%d films	%d أفلام
+%d hours	%d ساعات
+%d min left	متبقٍ %d د
+%d Oscar nominations	%d ترشيحات للأوسكار
+%d Oscars	%d جوائز أوسكار
+%d s left	متبقٍ %d ث
+%d versions found…	تم العثور على %d نسخ…
+%s Collection	مجموعة %s
+%s is ready	%s جاهزة
+%s is unavailable	%s غير متاحة
+%s starts soon on %s	%s يبدأ قريبًا على %s
+1 award	جائزة واحدة
+1 channel	قناة واحدة
+1 channel in this group	قناة واحدة في هذه المجموعة
+1 film	فيلم واحد
+1 Oscar	أوسكار واحد
+1 Oscar nomination	ترشيح واحد للأوسكار
+1 screen at a time	شاشة واحدة في المرة
+1 screen watching right now	شاشة واحدة تشاهد الآن
+30 minutes earlier	قبل 30 دقيقة
+30 minutes later	بعد 30 دقيقة
+A film, not this episode	فيلم، وليس هذه الحلقة
+A kids profile cannot start titles rated 16 or 18.	لا يمكن لملف الأطفال تشغيل الأعمال المصنفة +16 أو +18.
+A Real-Debrid limit was reached. Try again shortly.	تم بلوغ أحد حدود Real-Debrid. حاول مجددًا بعد قليل.
+A single provider connection is shared between playback and DVR	يتشارك التشغيل والتسجيل اتصالًا واحدًا لدى المزوّد
+About	حول
+Accent colour	لون التمييز
+Account status, formats and guide time offset	حالة الحساب والصيغ وفارق توقيت الدليل
+Action	أكشن
+Action & Adventure	أكشن ومغامرة
+Actions	إجراءات
+Active	نشط
+Active collection	المجموعة النشطة
+Adaptations	اقتباسات
+Add	إضافة
+Add a language	إضافة لغة
+Add channel to favorites	إضافة القناة إلى المفضلة
+Add channels	إضافة قنوات
+Add channels from any group. Your provider's groups stay as they are.	أضف قنوات من أي مجموعة. تبقى مجموعات المزوّد كما هي.
+Add channels from any provider group. Your provider categories remain unchanged.	أضف قنوات من أي مجموعة لدى المزوّد. تبقى فئاته دون تغيير.
+Add to collection	إضافة إلى مجموعة
+Add your IPTV account in Settings to see your channels.	أضف حساب IPTV في الإعدادات لرؤية قنواتك.
+Added to downloads. Open Recordings to follow progress.	أُضيف إلى التنزيلات. افتح التسجيلات لمتابعة التقدم.
+Adrenaline	أدرينالين
+After {1} min	بعد {1} د
+Airing today	يُعرض اليوم
+Alert on	التنبيه مفعّل
+All	الكل
+ALL\nCOLLECTIONS	كل\nالمجموعات
+All channels	كل القنوات
+All formats	كل الصيغ
+All groups	كل المجموعات
+All languages	كل اللغات
+All providers	كل المزوّدين
+All sports	كل الرياضات
+All the Feels	مشاعر جيّاشة
+All titles	كل الأعمال
+All Versions	كل النسخ
+All-Time Essentials	كلاسيكيات خالدة
+Already seen	شوهد سابقًا
+Also by {1}	أعمال أخرى لـ {1}
+Also directed by {1}	من إخراج {1} أيضًا
+Also on	متاح أيضًا على
+Also on %s	متاح أيضًا على %s
+Always hunting for the next gem.	تبحث دائمًا عن الجوهرة التالية.
+An adult profile manages source settings.	يدير ملف بالغ إعدادات المصدر.
+An episode before coffee.	حلقة قبل القهوة.
+Animation	رسوم متحركة
+Anime	أنمي
+Anime only	في الأنمي فقط
+Anime source priorities	أولويات مصادر الأنمي
+Anime sources	مصادر الأنمي
+Anime-Sama: no resolved stream available	Anime-Sama: لا يتوفر بث
+Anime-Sama: server key requires VIP access	Anime-Sama: مفتاح الخادم يتطلب وصول VIP
+AniProject backend URL	عنوان خادم AniProject
+Another episode	حلقة أخرى
+Another work with the same name	عمل آخر بالاسم نفسه
+Any length	أي مدة
+Any status	أي حالة
+API keys	مفاتيح API
+Application	التطبيق
+Applied the next time a channel is opened. Local live recording currently requires MPEG-TS.	يُطبَّق عند فتح قناة في المرة القادمة. يتطلب التسجيل المحلي للبث المباشر حاليًا صيغة MPEG-TS.
+Are you still watching?	هل ما زلت تشاهد؟
+Arts and music	فنون وموسيقى
+Ask at start	السؤال عند البدء
+Ask me	اسألني
+at %s	في %s
+Audience	الجمهور
+Audio	الصوت
+Audio language	لغة الصوت
+Audio languages	لغات الصوت
+Audio not identified	الصوت غير محدد
+Audio verified	تم التحقق من الصوت
+Audio: {1}	الصوت: {1}
+Auto scroll off	التمرير التلقائي متوقف
+Auto scroll {1}	التمرير التلقائي {1}
+Automatic	تلقائية
+Automatic trailers	إعلانات تلقائية
+Average IMDb rating	متوسط تقييم IMDb
+AWARDS	الجوائز
+Awards won	الجوائز المحرزة
+Back	رجوع
+Back 10 s	رجوع 10 ث
+Back closes · Menu opens actions · Info shows details	رجوع يغلق · القائمة تفتح الإجراءات · معلومات تعرض التفاصيل
+Back returns to the guide. Your provider credentials stay in the existing protected source profile.	رجوع يعيدك إلى الدليل. تبقى بيانات اعتماد المزوّد في ملف المصدر المحمي.
+Back to collection	العودة إلى المجموعة
+Back to guide	العودة إلى الدليل
+Back to live	العودة إلى المباشر
+Back to My TV	العودة إلى تلفازي
+Back to series	العودة إلى المسلسل
+Back to the catalogue	العودة إلى الكتالوج
+Background	الخلفية
+Because you watched	لأنك شاهدت
+Because You Watched %1$s	لأنك شاهدت %1$s
+Behaviour	السلوك
+Behind the Scenes	وراء الكواليس
+Best rated	الأعلى تقييمًا
+Big Emotions	مشاعر كبيرة
+Biggest hit	النجاح الأكبر
+Black outline	حدّ أسود
+Bottom	في الأسفل
+Brightness {1} %	السطوع {1}٪
+Bring your channels together across provider groups: sport, family, an evening selection…	اجمع قنواتك من مجموعات مختلفة: رياضة، عائلة، اختيارات للسهرة…
+Browse	تصفّح
+Browse by Category	تصفّح حسب الفئة
+Browse the IPTV catalogue and resume playback	تصفّح كتالوج IPTV واستأنف التشغيل
+Buffer	التخزين المؤقت
+Calendar	التقويم
+Cancel	إلغاء
+Cancelled	أُلغي
+Cast & Crew	الممثلون وفريق العمل
+CATALOG	الكتالوج
+Categories	الفئات
+Categories could not be refreshed. Stored titles remain available.	تعذّر تحديث الفئات. تبقى الأعمال المحفوظة متاحة.
+Channel	القناة
+Channel preview	معاينة القنوات
+Channel up / down	القناة التالية / السابقة
+Channels	القنوات
+channels	قنوات
+Channels by name or number · Programmes from your guide	القنوات بالاسم أو الرقم · برامج من دليلك
+Channels could not be loaded. Try refreshing.	تعذّر تحميل القنوات. حاول التحديث.
+Chapter	الفصل
+Chapter {1}	الفصل {1}
+Chapters	الفصول
+Chapters of volume {1}	فصول المجلد {1}
+Chapters {1}	الفصول {1}
+Characters	الشخصيات
+Checking PIN…	جارٍ التحقق من الرمز…
+Checking…	جارٍ التحقق…
+Chills	قشعريرة
+China	الصين
+Choose a category, then a title · Back to close	اختر فئة ثم عملًا · رجوع للإغلاق
+Choose a collection in the group column, then Menu › Use for zapping.	اختر مجموعة في عمود المجموعات، ثم القائمة › استخدام للتنقل.
+Choose a private 4–8 digit PIN to protect your TV groups.	اختر رمزًا خاصًا من 4 إلى 8 أرقام لحماية مجموعات التلفاز.
+Choose a season	اختيار موسم
+Choose a unique name, 1–40 characters.	اختر اسمًا فريدًا من 1 إلى 40 حرفًا.
+Choose an adult profile to browse these external sports sources.	اختر ملفًا لبالغ لتصفّح هذه المصادر الرياضية الخارجية.
+Choose an export destination. The original recording is kept.	اختر وجهة للتصدير. يُحتفظ بالتسجيل الأصلي.
+Choose another group	اختيار مجموعة أخرى
+Choose Another Version	اختيار نسخة أخرى
+Choose Channels and enter a name or number, or explore Programmes.	اختر القنوات وأدخل اسمًا أو رقمًا، أو استكشف البرامج.
+Choose folder…	اختيار مجلد…
+Clear	مسح
+CLEAR	مسح
+Clear the catalogue cache	مسح ذاكرة الكتالوج المؤقتة
+Forget source failures	نسيان أخطاء المصادر
+Your languages	لغاتك
+Search services	خدمات البحث
+If no language matches	إذا لم تتطابق أي لغة
+Play the file's own track	تشغيل المسار الصوتي للملف
+Close	إغلاق
+Code	الرمز
+Collection	مجموعة
+COLLECTION	مجموعة
+Collections	المجموعات
+Colour	اللون
+Colours the progress of what you watch: the player's bar and the cards of Continue Watching.	يلوّن تقدّم ما تشاهده: شريط المشغل وبطاقات متابعة المشاهدة.
+Comedy	كوميديا
+Coming up	التالي
+Compatible · {1}	متوافقة · {1}
+Configure later	الإعداد لاحقًا
+Configure your Sokoul server and access key in Credentials.	اضبط خادم Sokoul ومفتاحه في بيانات الاعتماد.
+Confirm delete	تأكيد الحذف
+Connecting…	جارٍ الاتصال…
+Continue	متابعة
+Continue Watching	متابعة المشاهدة
+Could not reach the source server.	تعذّر الوصول إلى خادم المصدر.
+Could not start the download.	تعذّر بدء التنزيل.
+Counting…	جارٍ العد…
+Create a collection	إنشاء مجموعة
+Create and add	إنشاء وإضافة
+CREATED BY	من ابتكار
+Created by	من ابتكار
+Credentials and API keys	بيانات الاعتماد ومفاتيح API
+Credits	الشارة
+Crime	جريمة
+Crime & Thriller	جريمة وإثارة
+Cult Sagas	سلاسل أيقونية
+Current group	المجموعة الحالية
+Cyan	سماوي
+D-pad to type and browse · Back returns to your selection	الأسهم للكتابة والتصفح · رجوع يعيدك إلى اختيارك
+Dark box	مربع داكن
+days in a row, at best	يومًا متتاليًا كحد أقصى
+days in front of the screen	يومًا أمام الشاشة
+Default folder	المجلد الافتراضي
+delayed %d min	متأخر %d د
+Delete	حذف
+Delete collection	حذف المجموعة
+Delete “{1}”?	حذف «{1}»؟
+DETAILS	التفاصيل
+DIRECTED BY	إخراج
+Directed by	إخراج
+Director	الإخراج
+Directors	المخرجون
+Discover	اكتشاف
+Dismiss	تجاهل
+Done	تم
+Double page	صفحتان
+Double page, right to left	صفحتان، من اليمين إلى اليسار
+Download started.	بدأ التنزيل.
+downloading %d %%	جارٍ التنزيل %d %%
+Drama	دراما
+Drama & Romance	دراما ورومانسية
+Edit profiles	تعديل الملفات
+Edit search	تعديل البحث
+ends	النهاية
+Ends at 	ينتهي في 
+ends at %s	ينتهي في %s
+English	الإنجليزية
+Enter a name or number	أدخل اسمًا أو رقمًا
+Enter a public HTTP or HTTPS host link.	أدخل رابط استضافة عامًا بصيغة HTTP أو HTTPS.
+Enter a title	أدخل عنوانًا
+Enter a valid HTTP or HTTPS XMLTV address, or off to clear it.	أدخل عنوان XMLTV صالحًا بصيغة HTTP أو HTTPS، أو off لمسحه.
+Enter a valid HTTPS address, or a local HTTP address.	أدخل عنوان HTTPS صالحًا أو عنوان HTTP محليًا.
+Enter your adult PIN to manage protected groups.	أدخل رمز البالغ لإدارة المجموعات المحمية.
+Enter your IPTV credentials or a TMDB key, or choose Configure later.	أدخل بيانات IPTV أو مفتاح TMDB، أو اختر الإعداد لاحقًا.
+Ep. {1}	ح {1}
+EPISODE	الحلقة
+Episode {1}	الحلقة {1}
+Episodes	الحلقات
+Episodes could not be loaded.	تعذّر تحميل الحلقات.
+Episodes {1}	الحلقات {1}
+ERA	الحقبة
+Erase this profile's watch history	محو سجل مشاهدة هذا الملف
+ESSENTIALS	الأساسيات
+Every day	كل يوم
+Every week	كل أسبوع
+Everyone plays the title with their own sources; play, pause and jumps stay in step.	يشغّل كل شخص العمل من مصادره؛ ويبقى التشغيل والإيقاف والتقديم متزامنًا.
+Everything	كل شيء
+Everywhere	في كل مكان
+Excluded sources	المصادر المستبعدة
+Excluded · {1}	مستبعدة · {1}
+Exit full screen	الخروج من ملء الشاشة
+Expires {1}	ينتهي: {1}
+Explore	استكشاف
+Export	تصدير
+Export failed. Check available space, folder access and existing files.	فشل التصدير. تحقق من المساحة المتاحة والوصول إلى المجلد والملفات الموجودة.
+Exporting recording…	جارٍ تصدير التسجيل…
+Extend 15 minutes	تمديد 15 دقيقة
+Failed	فشل
+Failing stream	بث متعثر
+Family	عائلي
+Fantasy	فانتازيا
+Fast	سريع
+Favorite	إضافة إلى المفضلة
+Favorites	المفضلة
+Favorites first	المفضلة أولًا
+Favorites only	المفضلة فقط
+Featured	مميز
+Fill (crop)	ملء (قص)
+Filler	حلقة حشو
+Fillers hidden	حلقات الحشو مخفية
+Film	فيلم
+Film Page	صفحة الفيلم
+Films	الأفلام
+Films and series	أفلام ومسلسلات
+Films and series: you take it all.	أفلام ومسلسلات: تأخذ كل شيء.
+Films are your religion.	السينما هي دينك.
+Films That Twist Your Mind	أفلام تلوي العقل
+Films, OVAs and more	أفلام وOVA والمزيد
+Find something to watch	اعثر على ما تشاهده
+Finding a source…	جارٍ البحث عن مصدر…
+Finished	منتهية
+First page	الصفحة الأولى
+Fit	ملاءمة
+Fit height	الصفحة كاملة
+Fit width	العرض الكامل
+Follow the system	حسب النظام
+Font	الخط
+For the Whole Family	لكل العائلة
+FOR YOU	لك
+For You	لك
+Forward 30 s	تقديم 30 ث
+fps	إطار/ث
+Fragile stream	بث غير مستقر
+Fragile stream. Try %s?	بث غير مستقر. تجربة %s؟
+French	الفرنسية
+From the youngest to the oldest, everyone follows.	من الصغار إلى الكبار، الجميع يتابع.
+From your guide, in your channels' order	من دليلك، بترتيب قنواتك
+Full guide duration	المدة الكاملة للدليل
+Full programme capture, schedules and saved files	تسجيل كامل للبرامج والجدولة والملفات المحفوظة
+Full screen	ملء الشاشة
+Gallery	المعرض
+Generate a download or playable link with a host service enabled on your Sokoul server.	أنشئ رابط تنزيل أو تشغيل باستخدام خدمة مفعّلة على خادم Sokoul.
+Generate link	إنشاء رابط
+Generated link	الرابط المُنشأ
+Generating…	جارٍ الإنشاء…
+GENRE	النوع
+Genres	الأنواع
+Give it a short name	أعطها اسمًا قصيرًا
+Go on after the anime	المتابعة بعد الأنمي
+Green	أخضر
+Groups	المجموعات
+Guaranteed Chills	قشعريرة مضمونة
+Guide	الدليل
+Guide adjustment	ضبط الدليل
+Guide refresh failed. The stored guide is preserved.	فشل تحديث الدليل. يُحتفظ بالدليل المحفوظ.
+Guide times are given in {1}	أوقات الدليل بتوقيت {1}
+Guide updated {1}	تم تحديث الدليل في {1}
+Hearing impaired	لضعاف السمع
+Hidden	مخفية
+Hidden categories are removed from browsing and playback. Protected categories require an adult PIN session.	تُزال الفئات المخفية من الكتالوج والتشغيل. وتتطلب الفئات المحمية جلسة بالغ مفتوحة.
+Hidden from guide	مخفية من الدليل
+Hide	إخفاء
+Hide fillers	إخفاء حلقات الحشو
+Hide group	إخفاء المجموعة
+Hide, order, parental code	إخفاء، ترتيب، رمز الرقابة الأبوية
+Hide, protect and reorder groups	إخفاء المجموعات وحمايتها وإعادة ترتيبها
+High Tension	توتر عالٍ
+Highest rated manga	المانغا الأعلى تقييمًا
+Hold OK	اضغط مطولًا على OK
+Hold OK on a channel to add it to favorites or a collection.	اضغط مطولًا على OK فوق قناة لإضافتها إلى المفضلة أو إلى مجموعة.
+Home	الرئيسية
+Home rows	صفوف الرئيسية
+Horror	رعب
+Host link	رابط الاستضافة
+Host link tools	أدوات روابط الاستضافة
+Hoster {1}	الاستضافة {1}
+If you liked this	إن أعجبك هذا
+If You Liked This Saga	إن أعجبتك هذه السلسلة
+In %d min	خلال %d د
+In account	في الحساب
+In My List	في قائمتي
+In the Same Universe	في العالم نفسه
+Inactive	غير نشط
+Information	معلومات
+Internal storage	التخزين الداخلي
+IPTV	IPTV
+Its length is not this episode's	مدته لا تطابق هذه الحلقة
+Japan	اليابان
+Join	انضمام
+Just Released	صدر حديثًا
+Keep collection	الإبقاء على المجموعة
+Keep reading	متابعة القراءة
+Keep the tissues close.	أبقِ المناديل قريبة.
+Keep this channel and time	القناة نفسها والوقت نفسه
+Keep Watching	متابعة المشاهدة
+Kids profile: off	ملف الأطفال: معطّل
+Kids profile: on	ملف الأطفال: مفعّل
+Korea	كوريا
+Language	اللغة
+LANGUAGES	اللغات
+Languages	اللغات
+Large	كبير
+Last year	العام الماضي
+Later	قريبًا
+Laughs, smiles and nothing else.	ضحك وابتسامات ولا شيء غير ذلك.
+Leave the watch party	مغادرة حفلة المشاهدة
+Left to right	من اليسار إلى اليمين
+LESS	أقل
+Library	المكتبة
+Light Hearted	خفيف الظل
+Light novels	روايات خفيفة
+Link entered	الرابط المُدخل
+LIVE	مباشر
+Live	مباشر
+Live action	تمثيل حي
+Live and upcoming events	أحداث مباشرة وقادمة
+Live preview	معاينة مباشرة
+Live stream format	صيغة البث المباشر
+Live TV	البث المباشر
+loading %d %%	جارٍ التحميل %d %%
+Loading channels…	جارٍ تحميل القنوات…
+Loading groups…	جارٍ تحميل المجموعات…
+Loading provider information…	جارٍ تحميل معلومات المزوّد…
+Loading sports…	جارٍ تحميل الرياضة…
+Loading titles…	جارٍ تحميل الأعمال…
+Loading your guide…	جارٍ تحميل دليلك…
+Loading…	جارٍ التحميل…
+Lock now	قفل الآن
+Long strip	شريط متصل
+Look	المظهر
+Lost frames	إطارات مفقودة
+M3U source	مصدر M3U
+Made for you	صُنع لك
+Maintenance	الصيانة
+Manga	مانغا
+Manga of the moment	مانغا اللحظة
+Manga sources	مصادر المانغا
+Manga still coming out	مانغا قيد النشر
+Prefer quality up to	تفضيل جودة حتى
+Prefer size up to	تفضيل حجم حتى
+MB/s	م.ب/ث
+Measuring the stream	جارٍ قياس البث
+Menu · edit	القائمة · تعديل
+Message	رسالة
+Metacritic	Metacritic
+Mind Games	ألعاب ذهنية
+Monday to Friday	من الاثنين إلى الجمعة
+Moods	الأمزجة
+MOODS	الأجواء
+More	المزيد
+More options	خيارات أخرى
+Move down	تحريك للأسفل
+Move group down	تحريك المجموعة للأسفل
+Move group up	تحريك المجموعة للأعلى
+Move up	تحريك للأعلى
+Move with ↑ ↓ · OK saves · Back cancels	حرّك بـ ↑ ↓ · OK يحفظ · رجوع يلغي
+Movie	فيلم
+Movie and series source priorities	أولويات مصادر الأفلام والمسلسلات
+Movies	الأفلام
+Movies, shows, cast and more	أفلام ومسلسلات وممثلون والمزيد
+Music	موسيقى
+Must-See Series	مسلسلات لا تُفوّت
+Must-sees this week.	ما لا يُفوّت هذا الأسبوع.
+My channels	قنواتي
+My List	قائمتي
+My reminders	تذكيراتي
+My series	مسلسلاتي
+My space	مساحتي
+My TV	تلفازي
+Name	الاسم
+Name your collection	سمِّ مجموعتك
+NEW	جديد
+New chapters every week or month	فصول جديدة كل أسبوع أو شهر
+New collection	مجموعة جديدة
+New collection…	مجموعة جديدة…
+New episode	حلقة جديدة
+New Episodes	حلقات جديدة
+New in cinemas, just arrived.	وصلت للتو من دور السينما.
+Newest	الأحدث
+Next	التالي
+Next channel	القناة التالية
+Next chapter	الفصل التالي
+Next episode	الحلقة التالية
+Next episode automatically	الحلقة التالية تلقائيًا
+Next episode in {1} s	الحلقة التالية خلال {1} ث
+Next episode: S%dE%d on %s	الحلقة التالية: م%dح%d في %s
+Next page	الصفحة التالية
+Next Version	النسخة التالية
+No accessible result. Try a shorter name or switch to Programmes.	لا نتائج متاحة. جرّب اسمًا أقصر أو انتقل إلى البرامج.
+No accessible titles match. Try another category or page.	لا أعمال متاحة مطابقة. جرّب فئة أو صفحة أخرى.
+No channels here.	لا قنوات هنا.
+No channels in this group.	لا قنوات في هذه المجموعة.
+No channels in this zapping list. Choose a list in My TV.	لا قنوات في قائمة التنقل هذه. اختر قائمة في تلفازي.
+No chapter can be read here: its publisher holds it.	لا يمكن قراءة أي فصل هنا: حقوقه لدى الناشر.
+No chapter can be read here: its publisher holds it. Read it on {1}	لا يمكن قراءة أي فصل هنا: حقوقه لدى الناشر. اقرأه على {1}
+No episodes were returned by this provider.	لم يُرجع هذا المزوّد أي حلقات.
+No events are listed right now.	لا أحداث معلنة حاليًا.
+No groups are available. Add or refresh your IPTV source in Settings.	لا مجموعات متاحة. أضف مصدر IPTV أو حدّثه في الإعدادات.
+No guide for this channel	لا دليل لهذه القناة
+No host service is enabled on the server.	لا توجد خدمة استضافة مفعّلة على الخادم.
+No limit	بلا حد
+No matching group. Back clears the search.	لا مجموعة مطابقة. رجوع يمسح البحث.
+No matching groups. Back clears the search.	لا مجموعات مطابقة. رجوع يمسح البحث.
+No messages yet.	لا رسائل بعد.
+No new programmes were received. The stored guide was preserved.	لم تُستلم برامج جديدة. تم الاحتفاظ بالدليل المحفوظ.
+No programme description is available.	لا يتوفر وصف لهذا البرنامج.
+No provider replay available for this channel	لا إعادة من المزوّد لهذه القناة
+No provider source is configured.	لم يُضبط أي مصدر لمزوّد.
+No recordings yet. Schedule a programme from its guide entry.	لا تسجيلات بعد. جدوِل برنامجًا من الدليل.
+No reminder yet. In the guide, choose a programme to come and press OK.	لا تذكيرات بعد. في الدليل، اختر برنامجًا قادمًا واضغط OK.
+No results.	لا نتائج.
+No screen watching right now	لا شاشة تشاهد الآن
+No server is available for this event yet.	لا خادم متاح لهذا الحدث بعد.
+No source configured	لا مصدر مضبوط
+No source is available for this title.	لا يتوفر مصدر لهذا العمل.
+No subtitles found online.	لم يُعثر على ترجمات عبر الإنترنت.
+No upcoming programmes. Choose a future programme in the guide and select Remind me.	لا برامج قادمة. اختر برنامجًا في الدليل واختر ذكّرني.
+No version matches these filters. Reset them or refresh the sources.	لا نسخة تطابق هذه الفلاتر. أعد ضبطها أو حدّث المصادر.
+No {1} audio · Playing in {2}	لا صوت بـ{1} · التشغيل بـ{2}
+Normal	عادي
+Not a single day off.	ولا يوم راحة واحد.
+Not available	غير متاح
+Not available on a kids profile ({1})	غير متاح في ملف الأطفال ({1})
+Not available to read here	غير متاح للقراءة هنا
+Not Now	ليس الآن
+Not set	غير مضبوط
+Nothing announced this week.	لا شيء معلن هذا الأسبوع.
+Nothing beats a good film.	لا شيء يضاهي فيلمًا جيدًا.
+Nothing found.	لم يُعثر على شيء.
+Nothing in your guide for this period. Try another tab.	لا شيء في دليلك لهذه الفترة. جرّب علامة تبويب أخرى.
+Nothing is what it seems.	لا شيء كما يبدو.
+Nothing matches. Widen the filters.	لا شيء مطابق. وسّع الفلاتر.
+Nothing watched this year yet.	لم تشاهد شيئًا هذا العام بعد.
+Notify me	أعلمني
+Now	الآن
+Now available	متاح الآن
+Off	معطّل
+OK  Apply group   ·   Back  Cancel	OK  تطبيق المجموعة   ·   رجوع  إلغاء
+OK  Watch · Menu  Actions · F  Favorite	OK  مشاهدة · القائمة  إجراءات · F  مفضلة
+OK  Watch · Menu  Favorite	OK  مشاهدة · القائمة  مفضلة
+OK opens in the guide · Back to guide	OK يفتح في الدليل · العودة إلى الدليل
+OK shows or hides a row; the arrows beside it change its place.	OK يُظهر الصف أو يخفيه؛ والأسهم بجانبه تغيّر موضعه.
+OK to change · Back to guide	OK للتغيير · العودة إلى الدليل
+OK to choose · Back to guide	OK للاختيار · العودة إلى الدليل
+On	مفعّل
+On now	يُعرض الآن
+On the air right now.	على الهواء الآن.
+One page	صفحة واحدة
+One page, right to left	صفحة واحدة، من اليمين إلى اليسار
+One shots	قصص قصيرة
+Ongoing	مستمر
+Online	متصل
+Only this collection is removed. Channels and favorites are kept.	تُحذف هذه المجموعة فقط. يُحتفظ بالقنوات والمفضلة.
+Open	التفاصيل
+Open a comic file	فتح ملف قصص مصورة
+Open a file	فتح ملف
+Open download	فتح التنزيل
+Open group controls	فتح إعدادات المجموعة
+Open in guide	فتح في الدليل
+Open the TV workspace on the app window to manage downloads.	افتح مساحة التلفاز في نافذة التطبيق لإدارة التنزيلات.
+Open website	فتح الموقع
+Open your other groups	فتح مجموعاتك الأخرى
+Opening the chapter…	جارٍ فتح الفصل…
+Opening…	جارٍ الفتح…
+Optional · enter off to disable	اختياري · اكتب off للتعطيل
+Optional · use provider default	اختياري · استخدام دليل المزوّد
+Options	خيارات
+Order and hiding	الترتيب والإخفاء
+Organize channels	تنظيم القنوات
+Organize groups and channels	تنظيم المجموعات والقنوات
+Organize your TV	تنظيم تلفازك
+Original audio	الصوت الأصلي
+Original language	اللغة الأصلية
+Oscars won	جوائز الأوسكار المحرزة
+Other streams of this channel	بثوث أخرى لهذه القناة
+OVA	OVA
+Page {1}	الصفحة {1}
+Pages	الصفحات
+Part of the Collection	جزء من المجموعة
+Partly filler	حشو جزئيًا
+Password	كلمة المرور
+Picked from what you watch.	مختارة حسب ما تشاهده.
+PICTURE	الصورة
+Picture	الصورة
+Picture and sound	الصورة والصوت
+Picture format	صيغة الصورة
+PIN	الرمز
+PIN could not be saved or checked. Try again.	تعذّر حفظ الرمز أو التحقق منه. حاول مجددًا.
+PIN protected	محمي برمز
+PIN saved.	تم حفظ الرمز.
+Platforms	المنصات
+PLATFORMS	المنصات
+Play	تشغيل
+Play Anyway	التشغيل على أي حال
+Play episode	تشغيل الحلقة
+Play in Sokoul	التشغيل في Sokoul
+Play or pause	تشغيل أو إيقاف مؤقت
+Playback failed.	فشل التشغيل.
+Playback paused after several episodes in a row without any action.	توقف التشغيل بعد عدة حلقات متتالية دون أي إجراء.
+Playback sources	مصادر التشغيل
+Playing	قيد التشغيل
+Popular	الأكثر شعبية
+Popular Films	أفلام رائجة
+Popular Series	مسلسلات رائجة
+Position	الموضع
+Preferred source	المصدر المفضل
+Preparing recording	جارٍ تجهيز التسجيل
+Preparing the selected server…	جارٍ تجهيز الخادم المختار…
+PRESENTS	يقدّم
+Press + on a film or series page to keep it here.	اضغط + في صفحة فيلم أو مسلسل للاحتفاظ به هنا.
+Press again to confirm	اضغط مجددًا للتأكيد
+Press OK to enter a link	اضغط OK لإدخال رابط
+Previous	السابق
+Previous chapter	الفصل السابق
+Previous page	الصفحة السابقة
+Private channel order, visibility and parental controls	ترتيب خاص للقنوات والظهور والرقابة الأبوية
+probably ready	جاهزة على الأرجح
+Profile	الملف
+Programme actions	إجراءات البرنامج
+Programme guide unavailable for this channel.	الدليل غير متاح لهذه القناة.
+Programme information unavailable	معلومات البرنامج غير متاحة
+Programmes	البرامج
+Protect with PIN	الحماية برمز
+Provider	المزوّد
+Provider information is unavailable. You can retry below.	معلومات المزوّد غير متاحة. يمكنك إعادة المحاولة أدناه.
+Provider link	رابط المزوّد
+Provider movies	أفلام المزوّد
+Provider refresh failed. Try again.	فشل تحديث المزوّد. حاول مجددًا.
+Provider series	مسلسلات المزوّد
+Raised	أعلى
+Rating	التصنيف العمري
+Read	قراءة
+READ MORE	اقرأ المزيد
+Read the chapter	قراءة الفصل
+Ready	متاح
+ready	جاهزة
+Real-Debrid	Real-Debrid
+Real-Debrid refused your key. Check it in Settings.	رفض Real-Debrid مفتاحك. تحقق منه في الإعدادات.
+Recent	الأحدث
+Recent channels	القنوات الأخيرة
+Record once	تسجيل مرة واحدة
+Record programme	تسجيل البرنامج
+Record this programme to its end	تسجيل هذا البرنامج حتى نهايته
+Recording	جارٍ التسجيل
+Recording could not be exported. Try another destination.	تعذّر تصدير التسجيل. جرّب وجهة أخرى.
+Recording deleted.	تم حذف التسجيل.
+Recording exported.	تم تصدير التسجيل.
+Recording extended.	تم تمديد التسجيل.
+Recording now	جارٍ التسجيل الآن
+Recording saved.	تم حفظ التسجيل.
+Recording scheduled through the programme end.	تمت جدولة التسجيل حتى نهاية البرنامج.
+Recording scheduled.	تمت جدولة التسجيل.
+Recording starts now and continues through the programme end, with a 5 minute safety margin. The provider’s Replay remains separate for the part already aired.	يبدأ التسجيل الآن ويستمر حتى نهاية البرنامج مع هامش أمان 5 دقائق. تبقى إعادة المزوّد منفصلة للجزء الذي عُرض.
+Recordings	التسجيلات
+Recordings could not be loaded. Reopen this panel to retry.	تعذّر تحميل التسجيلات. أعد فتح هذه اللوحة للمحاولة مجددًا.
+Recurring Cast	الممثلون الدائمون
+Refresh	تحديث
+Refresh servers	تحديث الخوادم
+Refresh subscription	تحديث الاشتراك
+Refresh TV guide	تحديث دليل التلفاز
+Release calendar	تقويم الإصدارات
+Release Order	ترتيب الإصدار
+Released	الإصدار
+Reload services	إعادة تحميل الخدمات
+Remember hoster chosen for each source	تذكّر الاستضافة المختارة لكل مصدر
+Remind me	ذكّرني
+Reminder set	التذكير مفعّل
+Reminders	التذكيرات
+Remove	إزالة
+Remove channel from favorites	إزالة القناة من المفضلة
+Remove from collection	إزالة من المجموعة
+Remove protection	إزالة الحماية
+Remove reminder	إزالة التذكير
+Rename	إعادة التسمية
+Rename collection	إعادة تسمية المجموعة
+Reorder channel	نقل القناة
+Replay	إعادة
+Reset filters	إعادة ضبط الفلاتر
+Reset guide adjustment	إعادة ضبط الدليل
+Reset the default style	استعادة النمط الافتراضي
+Reset the display settings	إعادة ضبط العرض
+Restore the default order	استعادة الترتيب الافتراضي
+Resume	استئناف
+Resume chapter {1}	استئناف الفصل {1}
+Resumed at {1}	استُؤنف عند {1}
+Retry	إعادة المحاولة
+Return on budget	المردودية
+Right to left	من اليمين إلى اليسار
+Romance	رومانسية
+Rotten Tomatoes	Rotten Tomatoes
+Roulette	الروليت
+Roulette: let chance choose	الروليت: دع الصدفة تختار
+Runtime	المدة
+S%1$d, E%2$d	م%1$d، ح%2$d
+Sagas	السلاسل
+SAGAS	السلاسل
+Same actors	بالممثلين أنفسهم
+Same day and time	اليوم نفسه والوقت نفسه
+Same team	الفريق نفسه
+Save	حفظ
+Save collection	حفظ المجموعة
+Save episode offline	حفظ الحلقة دون اتصال
+Save location	مكان الحفظ
+Save offline	حفظ دون اتصال
+Saved	محفوظ
+Saved library	المكتبة المحفوظة
+Saving schedule…	جارٍ حفظ الجدولة…
+Schedule cancelled.	أُلغيت الجدولة.
+Scheduled	مجدول
+Scheduled, active and saved programmes	البرامج المجدولة والجارية والمحفوظة
+Scheduled. This account allows one connection, so another live stream will be stopped.	تمت الجدولة. يسمح هذا الحساب باتصال واحد، لذا سيتوقف أي بث مباشر آخر.
+Scheduling…	جارٍ الجدولة…
+Sci-fi	خيال علمي
+Science fiction	خيال علمي
+Science Fiction	خيال علمي
+Screensaver	شاشة التوقف
+Search	بحث
+Search could not be loaded. Edit your query to retry.	تعذّر تحميل البحث. عدّل طلبك للمحاولة مجددًا.
+Search titles	البحث عن أعمال
+Search {1} categories	البحث في {1} فئة
+Searching available catalogs…	جارٍ البحث في الكتالوجات المتاحة…
+Searching…	جارٍ البحث…
+Season	الموسم
+Season {1}	الموسم {1}
+Season {1} · 	الموسم {1} · 
+Season {1} · Episode {2}	الموسم {1} · الحلقة {2}
+Seasons and episodes	المواسم والحلقات
+Seasons and episodes from the source	مواسم المصدر وحلقاته
+See All	عرض الكل
+See Versions	عرض النسخ
+See you tomorrow at dawn.\nAnd this time, don't be late.	نلتقي غدًا عند الفجر.\nوهذه المرة، لا تتأخر.
+Select	اختيار
+SELECTION	اختيارات
+Send	إرسال
+Series	المسلسلات
+Series are your second family.	المسلسلات عائلتك الثانية.
+Series set the pace of your days.	المسلسلات تحدد إيقاع أيامك.
+Series That Twist Your Mind	مسلسلات تلوي العقل
+Server	الخادم
+Server, username and password are all required.	الخادم واسم المستخدم وكلمة المرور كلها مطلوبة.
+Service	الخدمة
+Services	الخدمات
+Set adult PIN	تعيين رمز البالغ
+Set up	مضبوط
+Set up the Sokoul server in Settings > Credentials.	اضبط خادم Sokoul في الإعدادات > بيانات الاعتماد.
+Settings	الإعدادات
+Settings always stays: it is how you get back here.	تبقى الإعدادات دائمًا: فمنها تعود إلى هنا.
+Setup	الإعداد
+Shadow only	ظل فقط
+Share this code	شارك هذا الرمز
+Show	إظهار
+Show 0.5 s earlier	الإظهار قبل 0.5 ث
+Show 0.5 s later	الإظهار بعد 0.5 ث
+Show group	إظهار المجموعة
+Show in guide	الإظهار في الدليل
+Show results	عرض النتائج
+Showing saved information; the provider could not be reached. Its connection counter may be delayed.	تُعرض معلومات محفوظة: تعذّر الوصول إلى المزوّد. قد يتأخر عداد اتصالاته.
+Showing {1}+ titles	عرض {1}+ عمل
+Shown	ظاهرة
+Size	الحجم
+Skip Credits	تخطي الشارة الختامية
+Skip Intro	تخطي المقدمة
+Sleep timer	مؤقت النوم
+Slice of life	شريحة من الحياة
+Small	صغير
+Society and more	المجتمع والمزيد
+Sort anime by category	فرز الأنمي حسب الفئة
+SOUND	الصوت
+Sound	الصوت
+Sound off	الصوت مكتوم
+Sound on	الصوت مفعّل
+Source health	حالة المصدر
+Source preferences updated.	تم تحديث تفضيلات المصدر.
+Source status and playback preferences	حالة المصدر وتفضيلات التشغيل
+Source {1}	المصدر {1}
+Source: %s	المصدر: %s
+Sources are still arriving…	ما زالت المصادر تصل…
+Space	مسافة
+SPACE	مسافة
+Speed	السرعة
+Spin again	التدوير مجددًا
+Spinning…	جارٍ التدوير…
+Sports	الرياضة
+Sports and games	رياضة وألعاب
+Stable	مستقر
+Start	ابدأ
+Start a watch party	بدء حفلة مشاهدة
+Start what is ready	بدء النسخة الجاهزة
+Starting	البدء
+Starting playback	بدء التشغيل
+Status, stream format, guide offset, refresh	الحالة، صيغة البث، فارق الدليل، التحديث
+Steady stream	بث مستقر
+Still coming out	ما زال يصدر
+Stop	إيقاف
+Stop and save	إيقاف وحفظ
+Stop recording before opening another IPTV stream	أوقف التسجيل قبل فتح بث IPTV آخر
+Stop recording before opening another stream	أوقف التسجيل قبل فتح بث آخر
+Stop Trailer	إيقاف الإعلان
+Storage	التخزين
+Story Order	ترتيب القصة
+Stream details	تفاصيل البث
+Stream errors	أخطاء البث
+Stream formats: {1}	صيغ البث: {1}
+Stream lost, moved to %s	انقطع البث، الانتقال إلى %s
+Stretch	تمديد
+Studios	الاستوديوهات
+Subscription	الاشتراك
+Subscription and guide	الاشتراك والدليل
+Subtitle style	نمط الترجمة
+Subtitles	الترجمة
+Subtitles of the stream itself take this style from the next title.	تأخذ ترجمات البث نفسه هذا النمط بدءًا من العمل التالي.
+Superheroes	أبطال خارقون
+Switch	تبديل
+Sync: %s s	المزامنة: %s ث
+Synchronization: Classic	المزامنة: كلاسيكية
+Synchronization: Pro	المزامنة: احترافية
+System	النظام
+S{1} · E{2}	م{1} · ح{2}
+That PIN was not accepted.	لم يُقبل هذا الرمز.
+The address of the computer running the watch party server, for instance http://192.168.0.20:25566	عنوان الحاسوب الذي يشغّل خادم حفلة المشاهدة، مثل http://192.168.0.20:25566
+The All-Rounder	المتعدد المواهب
+The anime	الأنمي
+The Binge-Watcher	مدمن المشاهدة المتواصلة
+The change could not be saved. Try again.	تعذّر حفظ التغيير. حاول مجددًا.
+The channel remains available to watch.	تبقى القناة متاحة للمشاهدة.
+The Cinephile	عاشق السينما
+The collection changed. Cancel and try again.	تغيّرت المجموعة. ألغِ وحاول مجددًا.
+The complete programme is scheduled, with a 2 minute lead-in and a 5 minute safety margin.	تمت جدولة البرنامج كاملًا بتقدم دقيقتين وهامش أمان 5 دقائق.
+The connection was interrupted.	انقطع الاتصال.
+The Early Bird	الطائر المبكر
+The experience	الخبرة
+The Explorer	المستكشف
+The Faces	الوجوه
+The Films	الأفلام
+The films everyone is watching.	الأفلام التي يشاهدها الجميع.
+The highest rated of all time.	الأعلى تقييمًا على الإطلاق.
+The Honors	التكريمات
+The IPTV provider just refused a connection. Try again in %d s.	رفض مزوّد IPTV اتصالًا للتو. حاول مجددًا بعد %d ث.
+The IPTV server refused these credentials or did not respond.	رفض خادم IPTV بيانات الاعتماد هذه أو لم يستجب.
+The Machine	الآلة
+The manga	المانغا
+The Movie Lover	محب الأفلام
+The Night Owl	بومة الليل
+The only version left is not as long as this episode.	النسخة الوحيدة المتبقية ليست بطول هذه الحلقة.
+The only version left seems to be a film, not this episode.	تبدو النسخة الوحيدة المتبقية فيلمًا، لا هذه الحلقة.
+The only version left seems to be another episode.	تبدو النسخة الوحيدة المتبقية حلقة أخرى.
+The only version left seems to be another work with the same name.	تبدو النسخة الوحيدة المتبقية عملًا آخر بالاسم نفسه.
+The playback engine was not found.	لم يُعثر على محرك التشغيل.
+The provider stream could not be opened. Try again.	تعذّر فتح بث المزوّد. حاول مجددًا.
+The recording could not be started.	تعذّر بدء التسجيل.
+The recording is still growing	التسجيل ما زال جاريًا
+The Series Addict	مدمن المسلسلات
+The series everyone is talking about.	المسلسلات التي يتحدث عنها الجميع.
+The Series Fan	محب المسلسلات
+The server refused this version (error %d).	رفض الخادم هذه النسخة (الخطأ %d).
+The server requires an active VIP key.	يتطلب الخادم مفتاح VIP نشطًا.
+The server took too long to answer.	استغرق الخادم وقتًا طويلًا للرد.
+The service is unavailable. Try again later.	الخدمة غير متاحة. حاول لاحقًا.
+The source refused this stream.	رفض المصدر هذا البث.
+The sports server did not provide a playable native stream.	لم يوفر خادم الرياضة بثًا أصليًا قابلًا للتشغيل.
+The stream stopped before the end of the film.	توقف البث قبل نهاية الفيلم.
+The stream was interrupted.	انقطع البث.
+The whole interface changes at once. Titles and descriptions follow the language too.	تتغير الواجهة كلها فورًا. وتتبع العناوين والأوصاف اللغة أيضًا.
+The Work	العمل
+The worlds of Studio Ghibli	عوالم استوديو جيبلي
+THEME	الموضوع
+These controls are unavailable on a kids profile.	هذه الإعدادات غير متاحة في ملف الأطفال.
+This category is restricted for this profile.	هذه الفئة مقيدة لهذا الملف.
+This channel is no longer available.	لم تعد هذه القناة متاحة.
+This channel is restricted for this profile	هذه القناة مقيدة لهذا الملف
+This channel is restricted for this profile.	هذه القناة مقيدة لهذا الملف.
+This entry is not a direct video file and cannot be saved offline.	هذا العنصر ليس ملف فيديو مباشرًا ولا يمكن حفظه دون اتصال.
+This episode adapts	تقتبس هذه الحلقة
+This file does not have the language wanted.	لا يحتوي هذا الملف على اللغة المطلوبة.
+This key was refused.	رُفض هذا المفتاح.
+This name is empty, too long or already used.	هذا الاسم فارغ أو طويل جدًا أو مستخدم بالفعل.
+This provider entry has no playable stream.	لا يحتوي عنصر المزوّد هذا على بث قابل للتشغيل.
+This recording is no longer available.	لم يعد هذا التسجيل متاحًا.
+This recording is not ready to play yet.	هذا التسجيل غير جاهز للتشغيل بعد.
+This recording is restricted for this profile.	هذا التسجيل مقيد لهذا الملف.
+This server requires a VIP account for native sports playback.	يتطلب هذا الخادم حساب VIP لتشغيل الرياضة الأصلي.
+This service could not unlock the link.	تعذّر على هذه الخدمة فتح الرابط.
+This service did not respond. Try again.	لم تستجب هذه الخدمة. حاول مجددًا.
+This source does not expose a local recording stream.	لا يوفر هذا المصدر بثًا قابلًا للتسجيل محليًا.
+This sports source is unavailable. Try another server or refresh later.	هذا المصدر الرياضي غير متاح. جرّب خادمًا آخر أو حدّث لاحقًا.
+This title could not be opened.	تعذّر فتح هذا العمل.
+This title is restricted for this profile.	هذا العمل مقيد لهذا الملف.
+This TV cannot play this video format.	لا يمكن لهذا التلفاز تشغيل صيغة الفيديو هذه.
+This version is not ready yet (%d %%).	هذه النسخة غير جاهزة بعد (%d %%).
+This version is not ready yet.	هذه النسخة غير جاهزة بعد.
+This version is not the film: its file is a short clip or not a video.	هذه النسخة ليست الفيلم: ملفها مقطع قصير أو ليس فيديو.
+This version no longer exists.	لم تعد هذه النسخة موجودة.
+This version takes too long to respond.	تستغرق هذه النسخة وقتًا طويلًا للرد.
+This week	هذا الأسبوع
+This week's calendar	تقويم الأسبوع
+This week's releases	إصدارات الأسبوع
+This year	هذا العام
+Thriller	إثارة
+titles	أعمال
+to download	للتنزيل
+to try	للتجربة
+To Unwind	للاسترخاء
+To watch it all	لمشاهدة كل شيء
+Today	اليوم
+Tomorrow	غدًا
+Tonight	الليلة
+Tonight: like {1}	الليلة: مثل {1}
+Too many attempts. Try again in one minute.	محاولات كثيرة جدًا. حاول مجددًا بعد دقيقة.
+Top 10 Films This Week	أفضل 10 أفلام هذا الأسبوع
+Top 10 Series This Week	أفضل 10 مسلسلات هذا الأسبوع
+Top Results	أفضل النتائج
+Torrent ready in Real-Debrid	التورنت جاهز في Real-Debrid
+Total budget	الميزانية الإجمالية
+Trailer	الإعلان
+Trailers	الإعلانات
+Translate to	الترجمة إلى
+Translating…	جارٍ الترجمة…
+Trending	الرائج
+TRENDING	الرائج
+TV	التلفاز
+TV & Shows	التلفاز والمسلسلات
+TV guide	دليل التلفاز
+TV settings	إعدادات التلفاز
+TV Show	مسلسل
+TYPE	النوع
+Type with your remote	اكتب بجهاز التحكم
+Unable to load this page. Try refreshing.	تعذّر تحميل هذه الصفحة. حاول التحديث.
+Unavailable	غير متاح
+Unavailable for now, the daily limit may be reached	غير متاح حاليًا، ربما تم بلوغ الحد اليومي
+Unavailable · manage or remove this channel	غير متاحة · أدِر هذه القناة أو أزلها
+Under 1h40	أقل من ساعة و40 دقيقة
+Under 2h	أقل من ساعتين
+Unfavorite	إزالة من المفضلة
+Unknown language	لغة غير معروفة
+Unlock a download link	فتح رابط تنزيل
+Unlock IPTV controls in Organization to change source settings.	افتح إعدادات IPTV في التنظيم لتغيير المصدر.
+Unlocked for 15 minutes.	مفتوح لمدة 15 دقيقة.
+Unspecified	غير محدد
+Up for playback controls	للأعلى لعناصر التحكم بالتشغيل
+Upcoming	قريبًا
+Updating…	جارٍ التحديث…
+USB storage	تخزين USB
+Use 4–8 digits and unlock before changing an existing PIN.	استخدم من 4 إلى 8 أرقام وافتح القفل قبل تغيير رمز موجود.
+Use a unique name from 1 to 40 characters.	استخدم اسمًا فريدًا من 1 إلى 40 حرفًا.
+Use for zapping	استخدام للتنقل
+Use your deployed website backend address. Sokoul's Mainapi address is separate.	استخدم عنوان خادم موقعك المنشور. عنوان Mainapi الخاص بـ Sokoul منفصل.
+Username	اسم المستخدم
+Uses the provider connection and recording storage	يستخدم اتصال المزوّد ومساحة التسجيلات
+Version %d of %d	النسخة %d من %d
+Versions	النسخ
+Very large	كبير جدًا
+Volume {1}	المجلد {1}
+Volumes	المجلدات
+Wait for the best	انتظار الأفضل
+War, History & Western	حرب وتاريخ وويسترن
+Watch	مشاهدة
+Watch again	المشاهدة مجددًا
+Watch Again from the Start	المشاهدة مجددًا من البداية
+Watch channel	مشاهدة القناة
+Watch from the beginning	المشاهدة من البداية
+Watch party	حفلة المشاهدة
+Watch with the lights on.	شاهده والأضواء مضاءة.
+watched	شوهدت
+Watched	شوهد
+Watchlist	للمشاهدة
+Web	الويب
+Weekdays	أيام الأسبوع
+What's Next	ما التالي
+What's on	ما يُعرض الآن
+Where to watch	أين تشاهد
+Which version	أي نسخة
+White	أبيض
+Who is watching	من يشاهد
+Who is watching?	من يشاهد؟
+With Family	مع العائلة
+With {1}	مع {1}
+WORLD CINEMA	السينما العالمية
+Worlds and places	عوالم وأماكن
+Worldwide box office	الإيرادات العالمية
+XMLTV guide URL	عنوان دليل XMLTV
+Yellow	أصفر
+You haven't added any movies or shows.	لم تضف أي أفلام أو مسلسلات بعد.
+You joined	انضممت
+You stopped at episode {1}: the story goes on at chapter {2}	توقفت عند الحلقة {1}: تكمل القصة في الفصل {2}
+Your best sessions start after 10 pm.	أفضل جلساتك تبدأ بعد العاشرة مساءً.
+your busiest month	أكثر شهورك نشاطًا
+Your channels, in your order	قنواتك، بترتيبك
+Your eras	حقبك
+Your favorite channels belong here	قنواتك المفضلة مكانها هنا
+your favourite hour	ساعتك المفضلة
+Your genres	أنواعك
+Your heart won't slow down.	قلبك لا يهدأ.
+Your IPTV account is in use elsewhere (%d of %d connections). Close the other device, then retry.	حساب IPTV قيد الاستخدام في مكان آخر (%d من %d اتصالات). أغلق الجهاز الآخر ثم أعد المحاولة.
+Your IPTV catalogue, with its own categories	كتالوج IPTV الخاص بك بفئاته
+Your live service, recordings and personal channel layout	خدمتك المباشرة وتسجيلاتك وترتيب قنواتك الشخصي
+Your most watched	الأكثر مشاهدة لديك
+Your name	اسمك
+Your next binge starts here.	ماراثونك القادم يبدأ هنا.
+Your viewer profile	ملفك كمشاهد
+Your year in review	عامك في لمحة
+Zapping, guide order, preview and your provider	التنقل وترتيب الدليل والمعاينة ومزوّدك
+Zoom in {1} %	تكبير {1}٪
+Zoom out	تصغير
+{1}  ·  5 min safety margin	{1}  ·  هامش أمان 5 د
+{1} awards	{1} جوائز
+{1} catalog	كتالوج {1}
+{1} channels	{1} قنوات
+{1} channels in this group	{1} قنوات في هذه المجموعة
+{1} channels · {2} programmes in the guide\n{3} films · {4} series	{1} قنوات · {2} برامج في الدليل\n{3} أفلام · {4} مسلسلات
+{1} chapters	{1} فصول
+{1} entries	{1} عناصر
+{1} episodes	{1} حلقات
+{1} free	{1} متاحة
+{1} left	متبقٍ {1}
+{1} min	{1} د
+{1} min left	متبقٍ {1} د
+{1} Originals	أعمال {1} الأصلية
+{1} programmes imported.	تم استيراد {1} برامج.
+{1} screens at a time	{1} شاشات في المرة
+{1} screens watching right now	{1} شاشات تشاهد الآن
+{1} seasons	{1} مواسم
+{1} to read here	{1} للقراءة هنا
+{1} volumes	{1} مجلدات
+{1} · play/pause, next	{1} · تشغيل/إيقاف، التالي
+A second life	حياة ثانية
+Accounts	الحسابات
+Anime films	أفلام الرسوم المتحركة
+Another world	عالم آخر
+Anti-heroes	أبطال مضادون
+Appearance	المظهر
+At war	في الحرب
+Atkinson Hyperlegible	Atkinson Hyperlegible
+Blue	أزرق
+Chinese animation	رسوم متحركة صينية
+Death games	ألعاب الموت
+Finished, to read in one go	منتهية، للقراءة دفعة واحدة
+Food on screen	الطعام على الشاشة
+Found family	عائلة مختارة
+Hide the entries you never use.	أخفِ العناصر التي لا تستخدمها أبدًا.
+Highest rated	الأعلى تقييمًا
+How a title starts and which version comes first.	كيف يبدأ العمل وأي نسخة تأتي أولًا.
+How subtitles look, for every video.	مظهر الترجمة لكل الفيديوهات.
+Led by women	بطولة نسائية
+Manhua from China	مانهوا من الصين
+Manhwa from Korea	مانهوا من كوريا
+Menu	القائمة
+Monospace	أحادي المسافة
+Most popular of all time	الأكثر شعبية على الإطلاق
+Next season	الموسم القادم
+Orange	برتقالي
+Pink	وردي
+Playback	التشغيل
+Playing with time	اللعب بالزمن
+Purple	بنفسجي
+Red	أحمر
+Serif	Serif
+Soft and soothing	هادئ ومريح
+Standard	قياسي
+Still being published	قيد النشر
+Superpowers	قوى خارقة
+The colour of what shows your progress.	لون ما يُظهر تقدمك.
+The language of the interface.	لغة الواجهة.
+The rows of the home page and what moves by itself.	صفوف الرئيسية وما يتحرك تلقائيًا.
+This app, its credits and a little housekeeping.	هذا التطبيق وشارته وبعض التنظيف.
+This season	هذا الموسم
+Top 10 Anime	أفضل 10 أنمي
+Trending now	الرائج الآن
+Tsundere alert	تنبيه تسونديري
+Who is watching, and the services Sokoul draws on.	من يشاهد، والخدمات التي يستخدمها Sokoul.
+Best quality first	أفضل جودة أولًا
+At home on {1}	في المنزل في {1}
+Built-in key	مفتاح مدمج
+Dead link	رابط معطل
+In cinemas	في السينما
+Key entered	تم إدخال المفتاح
+Not the film	ليس الفيلم
+Not yet at home	غير متاح في المنزل بعد
+Refused by the host	رفضه المضيف
+Coming soon	قريبًا
+In cinemas on {1}	في السينما في {1}
+Recent searches	عمليات البحث الأخيرة
+Speak	تحدّث

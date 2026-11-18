@@ -20,6 +20,48 @@ class ReleaseNameTest {
         assertFalse("one other language may be the original", ReleaseName.parse("Squid.Game.S01E01.1080p.WEB\n🇰🇷").dub)
     }
 
+    @Test fun `a French flag beside VOSTFR is subtitles, not a French track`() {
+        val vostfr = ReleaseName.parse("[Xspitfire911] Sousou no Frieren S01E04 BDRIP 1080p X265 10bit VOSTFR.mkv\n👤 12 💾 1.4 GB ⚙️ Nyaa\n🇯🇵 / 🇫🇷")
+        assertEquals(AudioLanguage.VOSTFR, vostfr.language)
+        assertFalse("FR" in vostfr.audio)
+        // A French word in the name still announces a French track beside the subtitles.
+        assertEquals(AudioLanguage.MULTI, ReleaseName.parse("Frieren.S01E04.VOSTFR.FRENCH.1080p.WEB\n🇯🇵 / 🇫🇷").language)
+    }
+
+    @Test fun `flags beside Dual Audio are the subtitles, not a French track`() {
+        // Torrentio's text for Frieren S01E08: fifteen subtitle flags on the "Dual Audio" line, French among them.
+        val sokudo = ReleaseName.parse(
+            "[Sokudo] Sousou no Frieren S01 P1 [1080p EAC3 AV1][dual audio] | Frieren: Beyond Journey's End\n" +
+                "[Sokudo] Sousou no Frieren S01E08 [1080p EAC3 AV1][dual audio].mkv\n👤 2 💾 302.73 MB ⚙️ NyaaSi\n" +
+                "Dubbed / Dual Audio / 🇬🇧 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇲🇽 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇸🇦 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+        )
+        assertFalse("FR" in sokudo.audio)
+        assertTrue(sokudo.dub)
+        assertTrue(sokudo.language != AudioLanguage.MULTI && sokudo.language != AudioLanguage.VF)
+        // Two flags beside "Dual Audio" are its two tracks: French with the original stays a French MULTI.
+        assertEquals(AudioLanguage.MULTI, ReleaseName.parse("Frieren.S01E08.1080p.WEB\nDual Audio / 🇫🇷 / 🇯🇵").language)
+    }
+
+    @Test fun `instant in a title is no cache label`() {
+        assertNull(ReleaseName.parse("Instant.Family.2018.1080p.BluRay.x264-DRONES").cached)
+        assertNull(ReleaseName.parse("Instant Karma 2024 2160p WEB-DL").cached)
+        assertEquals(true, ReleaseName.parse("[RD+] Instant.Family.2018.1080p.BluRay").cached)
+        assertEquals(true, ReleaseName.parse("Film.2020.1080p [INSTANT]").cached)
+        assertEquals(true, ReleaseName.parse("⚡ Film.2020.1080p").cached)
+    }
+
+    @Test fun `a small video beside a large one is a sample, a short episode alone is not`() {
+        val film = RdFile(1, "Film/Film.2020.1080p.mkv", 8_000_000_000, false)
+        val teaser = RdFile(2, "Film/teaser.mkv", 30_000_000, false)
+        assertEquals(film, ReleaseName.pickFile(listOf(teaser, film), null, null))
+        assertTrue(ReleaseName.sampleBySize(30_000_000, 8_000_000_000))
+        // A short, very compressed episode is no sample: alone, or among episodes of its size.
+        assertFalse(ReleaseName.sampleBySize(40_000_000, 40_000_000))
+        val e1 = RdFile(1, "Show/Show.S01E01.mkv", 40_000_000, false)
+        val e2 = RdFile(2, "Show/Show.S01E02.mkv", 45_000_000, false)
+        assertEquals(e1, ReleaseName.pickFile(listOf(e1, e2), 1, 1))
+    }
+
     @Test fun `DUAL sans francais - langue inconnue (version turque et anglaise)`() {
         // nom réel classé « MULTI 4K » sur le PC : le film démarrait en turc
         val r = ReleaseName.parse("Inception.2010.UHD.Bluray.1080p.DUAL.x264-HDM.mkv")
@@ -77,5 +119,22 @@ class ReleaseNameTest {
         assertEquals(AudioLanguage.VOSTFR, release.language)
         assertEquals(false, "FR" in release.audio)
         assertEquals(AudioLanguage.VF, ReleaseName.parse("Film.2020.1080p.mkv", "Dubbed / 🇫🇷").language)
+    }
+
+    @Test
+    fun flags_alone_beside_a_name_without_language_are_not_tracks() {
+        // L'Odyssée (2026-11-18): English-only releases listed as MULTI from Torrentio's flags, played before the real
+        // MULTI.VFQ and heard in English only.
+        val yts = ReleaseName.parse("The.Odyssey.2026.2160p.4K.BluRay.x265.10bit.AAC5.1-[YTS.GG - YTS.BZ]\n👤 100 💾 7.8 GB ⚙️ ThePirateBay\n🇬🇧 / 🇫🇷 / 🇨🇿 / 🇪🇸")
+        assertNull(yts.language)
+        assertTrue(yts.audio.isEmpty())
+        // A language word keeps the flags as tracks.
+        assertEquals(AudioLanguage.MULTI, ReleaseName.parse("The.Odyssey.2026.MULTI.VFQ.2160p.UHD.BluRay.Remux.DV.HDR10+.DTS-HD.MA.5.1.HEVC-HYPERION\n🇫🇷 / 🇬🇧 / 🇨🇿").language)
+        // An IPTV group prefix beside VOSTFR is the provider's country, and the cinema copy is a cam.
+        val iptv = ReleaseName.parse("FR| L'Odyssée - 2026 [VOSTFR] [HDCAM]")
+        assertEquals(AudioLanguage.VOSTFR, iptv.language)
+        assertTrue(iptv.cam)
+        // One or two flags still announce a language.
+        assertEquals(AudioLanguage.VF, ReleaseName.parse("Film.2024.1080p.WEB.H264-GRP\n🇫🇷").language)
     }
 }

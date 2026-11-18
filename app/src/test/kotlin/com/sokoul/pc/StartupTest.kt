@@ -96,7 +96,11 @@ class StartupTest {
     fun french_system_gets_french() = assertEquals("Continuer", Strings.resolve(Text.Continue, Locale.FRANCE))
 
     @Test
-    fun other_system_gets_english() = assertEquals("Continue", Strings.resolve(Text.Continue, Locale.GERMANY))
+    fun other_system_gets_english() = assertEquals("Continue", Strings.resolve(Text.Continue, Locale.JAPAN))
+
+    // German is one of the nine interface languages (i18n/de.tsv), no longer an "other system".
+    @Test
+    fun german_system_gets_german() = assertEquals("Weiter", Strings.resolve(Text.Continue, Locale.GERMANY))
 
     @Test
     fun every_text_exists_in_both_languages() {
