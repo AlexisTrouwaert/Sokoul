@@ -308,7 +308,7 @@ fun SagaScreen(
                 origin = origin,
                 enter = enter.value,
                 expand = expand,
-                slide = slide.value,
+                slide = { slide.value },
                 scrollPx = { scroll.value },
                 blockColor = blockColor,
                 videoOn = trailer.playing && hasFrames && idle,

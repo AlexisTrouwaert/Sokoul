@@ -103,12 +103,29 @@ internal fun SourceBrowserContent(
     var readyOnly by remember(searchRevision) { mutableStateOf(false) }
     var wantedOnly by remember(searchRevision) { mutableStateOf(false) }
     var eligibility by remember(searchRevision) { mutableStateOf(SourceEligibility.Compatible) }
-    val languages = versions.associateWith(languageOf)
-    val eligible = versions.filter(eligibility::keeps)
-    val excludedCount = versions.count { it.rejected != null }
+    // Worked out once per list and filters, not at every recomposition: the panel recomposes with the player (its
+    // position, its state), and filtering and counting 548 versions several times over, each asking the preferences
+    // again, made the list stutter on the TV (53 ms frames, 2026-11-18). Identity maps: a version's hash walks all its
+    // fields.
+    val languages = remember(versions, currentKey) { identityMap(versions, languageOf) }
+    val wantedOf = remember(versions, currentKey) { identityMap(versions, wanted) }
+    val isWanted = { v: PlayVersion -> wantedOf[v] ?: wanted(v) }
     val accountReady = ::isAccountReady
-    val byOrigin = eligible.filter { (origin == null || it.origin == origin) && (!readyOnly || accountReady(it)) }
-    val visible = byOrigin.filter { (!wantedOnly || wanted(it)) && language.keeps(languages[it]) && (audioCode == null || audioCode in it.announcedAudio) }
+    val eligible = remember(versions, eligibility) { versions.filter(eligibility::keeps) }
+    val excludedCount = remember(versions) { versions.count { it.rejected != null } }
+    val byOrigin = remember(eligible, origin, readyOnly) { eligible.filter { (origin == null || it.origin == origin) && (!readyOnly || accountReady(it)) } }
+    val visible = remember(byOrigin, wantedOnly, language, audioCode, languages) {
+        byOrigin.filter { (!wantedOnly || isWanted(it)) && language.keeps(languages[it]) && (audioCode == null || audioCode in it.announcedAudio) }
+    }
+    val readyCount = remember(eligible) { eligible.count(accountReady) }
+    val originCounts = remember(eligible) { VersionOrigin.entries.associateWith { o -> eligible.count { it.origin == o } } }
+    val wantedCount = remember(byOrigin, wantedOf) { byOrigin.count(isWanted) }
+    val languageCounts = remember(byOrigin, languages) { SourceLanguageFilter.entries.associateWith { f -> byOrigin.count { f.keeps(languages[it]) } } }
+    val audioCounts = remember(byOrigin) {
+        byOrigin.flatMap { it.announcedAudio }.distinct().sorted().map { code ->
+            Triple(code, java.util.Locale.forLanguageTag(code.lowercase()).getDisplayLanguage(java.util.Locale.getDefault()).replaceFirstChar { it.uppercase() }, byOrigin.count { code in it.announcedAudio })
+        }
+    }
     val first = remember { FocusRequester() }
     val state = rememberLazyListState()
     LaunchedEffect(Unit) { withFrameNanos { }; withFrameNanos { }; runCatching { first.requestFocus() } }
@@ -137,24 +154,22 @@ internal fun SourceBrowserContent(
                 PanelChip(L("Reset filters", "Réinitialiser").text(), icon = Icons.Filled.Close) { origin = null; language = SourceLanguageFilter.All; audioCode = null; readyOnly = false; wantedOnly = false; eligibility = SourceEligibility.Compatible }
             }
             SourceChip(L("All providers", "Tous fournisseurs").text() + " · ${eligible.size}", origin == null, "versions-filter-all") { origin = null }
-            if (eligibility == SourceEligibility.Compatible) SourceChip(L("In account", "Dans le compte").text() + " · ${eligible.count(accountReady)}", readyOnly, "versions-filter-ready") { readyOnly = !readyOnly }
+            if (eligibility == SourceEligibility.Compatible) SourceChip(L("In account", "Dans le compte").text() + " · $readyCount", readyOnly, "versions-filter-ready") { readyOnly = !readyOnly }
             VersionOrigin.entries.forEach { item ->
-                val count = eligible.count { it.origin == item }
+                val count = originCounts[item] ?: 0
                 if (count > 0) SourceChip("${sourceOriginLabel(item)} · $count", origin == item, "versions-filter-${item.name.lowercase()}") { origin = item }
             }
         }
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = PanelMetrics.RowPad, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            SourceChip(L("Your languages", "Vos langues").text() + " · ${byOrigin.count(wanted)}", wantedOnly, "versions-language-wanted") { wantedOnly = !wantedOnly }
+            SourceChip(L("Your languages", "Vos langues").text() + " · $wantedCount", wantedOnly, "versions-language-wanted") { wantedOnly = !wantedOnly }
             SourceLanguageFilter.entries.forEach { item ->
-                val count = byOrigin.count { item.keeps(languages[it]) }
+                val count = languageCounts[item] ?: 0
                 if (count > 0 || item == language || item == SourceLanguageFilter.All) {
                     SourceChip("${item.label()} · $count", item == language && audioCode == null, "versions-language-${item.name.lowercase()}") { language = item; audioCode = null }
                 }
             }
             // Announced audio tracks follow the language filters on the same line.
-            byOrigin.flatMap { it.announcedAudio }.distinct().sorted().forEach { code ->
-                val count = byOrigin.count { code in it.announcedAudio }
-                val name = java.util.Locale.forLanguageTag(code.lowercase()).getDisplayLanguage(java.util.Locale.getDefault()).replaceFirstChar { it.uppercase() }
+            audioCounts.forEach { (code, name, count) ->
                 SourceChip("$name · $count", audioCode == code, "versions-audio-${code.lowercase()}") {
                     language = SourceLanguageFilter.All
                     audioCode = if (audioCode == code) null else code
@@ -201,6 +216,9 @@ internal fun SourceBrowserContent(
         }
     }
 }
+
+private fun <T> identityMap(versions: List<PlayVersion>, of: (PlayVersion) -> T): java.util.IdentityHashMap<PlayVersion, T> =
+    java.util.IdentityHashMap<PlayVersion, T>(versions.size * 2).apply { versions.forEach { put(it, of(it)) } }
 
 @Composable
 private fun SourceChip(label: String, selected: Boolean, tag: String, onClick: () -> Unit) {

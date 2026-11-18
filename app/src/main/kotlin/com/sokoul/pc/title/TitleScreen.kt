@@ -94,7 +94,7 @@ import com.sokoul.iptv.data.net.TmdbInfo
 import com.sokoul.iptv.data.net.TmdbItem
 import com.sokoul.iptv.data.net.TmdbPerson
 import com.sokoul.pc.AppDeps
-import androidx.compose.animation.Crossfade
+import com.sokoul.desktop.ui.ImageLoader
 import androidx.compose.material.icons.filled.Theaters
 import com.sokoul.pc.collections.SagaLandscapeTile
 import com.sokoul.pc.data.SagaTile
@@ -192,7 +192,19 @@ fun TitleScreen(
 ) {
     var index by remember { mutableIntStateOf(startIndex.coerceIn(items.indices)) }
     val item = items[index]
-    val info by produceState<TmdbInfo?>(null, item.id) { value = deps.catalog.details(item.kind(), item.id) }
+    // Details of the titles around, read ahead: stepping to one then shows its final artwork at once, instead of its
+    // list image replaced by the textless one a moment later (two loads and two fades, the GPU's cost on the TV).
+    val known = remember(items) { java.util.concurrent.ConcurrentHashMap<Int, TmdbInfo>() }
+    val info by produceState(known[item.id], item.id) { value = deps.catalog.details(item.kind(), item.id)?.also { known[item.id] = it } }
+    val cardWidthPx = with(androidx.compose.ui.platform.LocalDensity.current) { CardWidth.roundToPx() }
+    LaunchedEffect(index) {
+        listOf(index + 1, index - 1, index + 2).mapNotNull(items::getOrNull).forEach { near ->
+            launch {
+                val details = known[near.id] ?: runCatching { deps.catalog.details(near.kind(), near.id) }.getOrNull()?.also { known[near.id] = it }
+                (details?.backdrop ?: near.backdrop)?.let { runCatching { ImageLoader.load(it, cardWidthPx) } }
+            }
+        }
+    }
     val saga by produceState<SagaTile?>(null, item.id, info) { value = deps.catalog.sagaOfTitle(item.kind(), item.id, info) }
     val extras by produceState(com.sokoul.pc.data.TitleExtras(), item.id, info) { value = deps.catalog.titleExtras(item.kind(), item.id, info) }
     var full by remember { mutableStateOf(false) }
@@ -357,7 +369,7 @@ fun TitleScreen(
                 origin = origin,
                 enter = enter.value,
                 expand = expand,
-                slide = slide.value,
+                slide = { slide.value },
                 scrollPx = { scroll.value },
                 blockColor = blockColor,
                 videoOn = trailer.playing && rememberHasFrames(deps.player),
@@ -453,7 +465,11 @@ internal fun HeroLayer(
     origin: CardOrigin?,
     enter: Float,
     expand: Float,
-    slide: Float,
+    /**
+     * Read when drawing, like [scrollPx]: read while composing, the slide to the next title recomposed the whole page
+     * (text, buttons, rows) at every frame of its 380 ms, the jank felt when changing film on the TV (2026-11-18).
+     */
+    slide: () -> Float,
     /** Read when drawing: read while composing, it recomposed and measured the whole page at every frame of a scroll. */
     scrollPx: () -> Int,
     blockColor: Color,
@@ -483,13 +499,12 @@ internal fun HeroLayer(
     val corner = lerp(36.dp, 0.dp, expand)
     val imageAlpha = ((enter - 0.45f) / 0.55f).coerceIn(0f, 1f)
     val shape = RoundedCornerShape(corner)
-    val offsetPx = slide
     val neighborAlpha = (1f - expand) * imageAlpha
 
     Box(Modifier.fillMaxSize().graphicsLayer {
         val px = scrollPx()
         alpha = (1f - px / 700f).coerceIn(0f, 1f)
-        translationX = offsetPx
+        translationX = slide()
         translationY = -px.toFloat()
     }) {
         neighbors.first?.let { n ->
@@ -526,7 +541,9 @@ internal fun HeroLayer(
                 .background(blockColor)
                 .pointerInput(Unit) { detectTapGestures { onTap() } },
         ) {
-            Crossfade(
+            // No crossfade: Art already fades a new image in, and a crossfade drew two full-size images through the
+            // card's offscreen layer at every frame of each change of title (21 ms of GPU per frame on the TV, 2026-11-18).
+            Art(
                 backdrop,
                 Modifier.fillMaxSize().graphicsLayer {
                     alpha = imageAlpha
@@ -534,7 +551,8 @@ internal fun HeroLayer(
                     scaleX = zoom
                     scaleY = zoom
                 },
-            ) { image -> Art(image, Modifier.fillMaxSize(), placeholder = Color.Transparent) }
+                placeholder = Color.Transparent,
+            )
             val engine = deps.player
             if (videoOn && engine != null) VideoFill(engine, Modifier.fillMaxSize())
             Box(Modifier.fillMaxSize().background(

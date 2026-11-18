@@ -102,6 +102,8 @@ class LocalMediaRelay : AutoCloseable {
                 target = checkedUri(target.resolve(next).toString())
             }
             (response ?: error("Media unavailable")).use { upstream ->
+                // What the host answered, never the address or its token: the trace says why a web stream does not play.
+                if (!upstream.isSuccessful) com.sokoul.pc.playback.session.StartClock.note("relay ${target.host} answered ${upstream.code}")
                 val responseBody = upstream.body ?: error("Media body unavailable")
                 val contentType = upstream.header("Content-Type").orEmpty()
                 val hls = contentType.contains("mpegurl", true) || target.path.endsWith(".m3u8", true) || context.hls && target.toString() == context.root
@@ -145,8 +147,9 @@ class LocalMediaRelay : AutoCloseable {
                     }
                 }
             }
-        } catch (_: Exception) {
-            // Upstream exceptions can contain signed URLs and private headers.
+        } catch (e: Exception) {
+            // Upstream exceptions can contain signed URLs and private headers: only the kind of failure is noted.
+            com.sokoul.pc.playback.session.StartClock.note("relay failed ${e.javaClass.simpleName}")
             runCatching { exchange.sendResponseHeaders(502, -1) }
         } finally { exchange.close() }
     }

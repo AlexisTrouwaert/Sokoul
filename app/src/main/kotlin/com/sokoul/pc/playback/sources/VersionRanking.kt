@@ -43,7 +43,8 @@ object VersionRanking {
         versions: List<PlayVersion>,
         prefs: PlaybackPrefs,
         frenchSystem: Boolean,
-        readyFirst: Boolean = prefs.startMode != StartMode.WaitBest,
+        // The best picture first means what the account already holds does not jump ahead of a better version.
+        readyFirst: Boolean = prefs.startMode != StartMode.WaitBest && !prefs.bestQualityFirst,
         caps: DeviceCaps = DeviceCaps.Pc,
         fact: (PlayVersion) -> SourceFact? = { null },
         expectedMinutes: Int? = null,
@@ -187,6 +188,8 @@ object StartPolicy {
         blocked: Set<VersionOrigin>,
         failedHosts: Set<String>,
         size: Int,
+        /** Only versions of the first one's quality race: else the quickest link, often a 1080p, beat the 4K. */
+        sameQuality: Boolean = false,
     ): List<PlayVersion> {
         if (size < 2) return emptyList()
         val first = next(ranked, mode, failed, quickTried, blocked, failedHosts) ?: return emptyList()
@@ -194,7 +197,8 @@ object StartPolicy {
         val open = ranked.filter { it.key !in failed && it.origin !in blocked && it.rejected == null }
         val usable = open.filter { it.providerHost == null || it.providerHost !in failedHosts } + open.filter { it.providerHost != null && it.providerHost in failedHosts }
         val group = usable.filter {
-            it.origin == VersionOrigin.Debrid && it.key !in quickTried && it.readiness != Readiness.Ready && worthATry(it.readiness, quickTried.size)
+            it.origin == VersionOrigin.Debrid && it.key !in quickTried && it.readiness != Readiness.Ready && worthATry(it.readiness, quickTried.size) &&
+                (!sameQuality || it.quality == first.version.quality)
         }.take(size)
         return if (group.size > 1) group else emptyList()
     }

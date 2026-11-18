@@ -16,6 +16,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.putJsonObject
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -55,6 +56,8 @@ class PurStreamDirect(
                     val url = (s["stream_url"] as? JsonPrimitive)?.contentOrNull ?: return@forEach
                     addJsonObject {
                         put("url", url)
+                        // The CDN sends any other site to a Telegram page: the site of the day, as its own player does.
+                        putJsonObject("headers") { put("Referer", siteReferer()) }
                         (s["source_name"] as? JsonPrimitive)?.contentOrNull?.let { put("name", it) }
                         (s["format"] as? JsonPrimitive)?.contentOrNull?.let { put("format", it) }
                     }
@@ -95,6 +98,12 @@ class PurStreamDirect(
     private fun items(answer: JsonObject): JsonObject? =
         if ((answer["type"] as? JsonPrimitive)?.contentOrNull != "success") null else ((answer["data"] as? JsonObject)?.get("items") as? JsonObject)
 
+    /** "https://purstream.gg/": the site the status page names, behind its API host. */
+    private fun siteReferer(): String {
+        val host = api?.second?.toHttpUrlOrNull()?.host?.removePrefix("api.") ?: DEFAULT_SITE
+        return "https://$host/"
+    }
+
     /** The API host named by the status page ("purstream.gg" → "https://api.purstream.gg/api/v1"), for five minutes. */
     private suspend fun apiBase(): String {
         api?.takeIf { it.first > now() }?.let { return it.second }
@@ -122,6 +131,7 @@ class PurStreamDirect(
 
     private companion object {
         const val STATUS_MS = 5 * 60_000L
+        const val DEFAULT_SITE = "purstream.gg"
         const val HOUR_MS = 60 * 60_000L
         const val DAY_MS = 24 * HOUR_MS
         const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"

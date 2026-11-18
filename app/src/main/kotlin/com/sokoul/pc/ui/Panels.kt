@@ -81,7 +81,9 @@ private const val OPEN_GUARD_MS = 350L
  * offset rectangle a large elevation shadow leaves under translucent glass.
  */
 fun Modifier.softShadow(corner: Dp, spread: Dp = 28.dp, strength: Float = 0.30f): Modifier = drawBehind {
-    val steps = 8
+    // One layer on the TV: eight translucent slabs larger than a panel, blended over the video at every frame of a
+    // scroll, took 34 ms of GPU per frame in the versions list (2026-11-18). The PC keeps the soft edge.
+    val steps = if (com.sokoul.pc.Platform.IS_TV) 1 else 8
     val reach = spread.toPx()
     val radius = corner.toPx()
     for (i in 1..steps) {

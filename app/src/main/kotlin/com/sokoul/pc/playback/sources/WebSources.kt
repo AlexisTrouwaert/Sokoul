@@ -349,8 +349,11 @@ class WebSources(
         /** A source slower than this is left out: the others must not wait for it. */
         const val SOURCE_MS = 20_000L
         const val WEB_RIP_RANK = 3
-        /** The CDN of PurStream refuses a request without the site as Referer (Movix sends the same header). */
-        val REFERRERS = mapOf("PurStream" to "https://purstream.mx/")
+        /**
+         * The CDN of PurStream refuses a request without the site as Referer (Movix sends the same header). The source
+         * gives the site of the day; this one is only for an answer without it.
+         */
+        val REFERRERS = mapOf("PurStream" to "https://purstream.gg/")
         const val BROWSER_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
     }
 }

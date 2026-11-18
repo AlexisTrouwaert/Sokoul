@@ -120,4 +120,21 @@ class ReleaseNameTest {
         assertEquals(false, "FR" in release.audio)
         assertEquals(AudioLanguage.VF, ReleaseName.parse("Film.2020.1080p.mkv", "Dubbed / 🇫🇷").language)
     }
+
+    @Test
+    fun flags_alone_beside_a_name_without_language_are_not_tracks() {
+        // L'Odyssée (2026-11-18): English-only releases listed as MULTI from Torrentio's flags, played before the real
+        // MULTI.VFQ and heard in English only.
+        val yts = ReleaseName.parse("The.Odyssey.2026.2160p.4K.BluRay.x265.10bit.AAC5.1-[YTS.GG - YTS.BZ]\n👤 100 💾 7.8 GB ⚙️ ThePirateBay\n🇬🇧 / 🇫🇷 / 🇨🇿 / 🇪🇸")
+        assertNull(yts.language)
+        assertTrue(yts.audio.isEmpty())
+        // A language word keeps the flags as tracks.
+        assertEquals(AudioLanguage.MULTI, ReleaseName.parse("The.Odyssey.2026.MULTI.VFQ.2160p.UHD.BluRay.Remux.DV.HDR10+.DTS-HD.MA.5.1.HEVC-HYPERION\n🇫🇷 / 🇬🇧 / 🇨🇿").language)
+        // An IPTV group prefix beside VOSTFR is the provider's country, and the cinema copy is a cam.
+        val iptv = ReleaseName.parse("FR| L'Odyssée - 2026 [VOSTFR] [HDCAM]")
+        assertEquals(AudioLanguage.VOSTFR, iptv.language)
+        assertTrue(iptv.cam)
+        // One or two flags still announce a language.
+        assertEquals(AudioLanguage.VF, ReleaseName.parse("Film.2024.1080p.WEB.H264-GRP\n🇫🇷").language)
+    }
 }

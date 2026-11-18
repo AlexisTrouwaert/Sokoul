@@ -42,6 +42,8 @@ data class PlaybackBudgets(
     val firstChoiceMs: Long = 10_000,
     /** Once the first versions are there, how long the other quick answers have to join them. */
     val settleMs: Long = 1_500,
+    /** With the best picture first, how long the search may go on for a 4K once the first versions are there. */
+    val bestSettleMs: Long = 6_000,
     /** When nothing has been found by then, how much longer to wait for a first result. */
     // The search services answer one at a time, the slowest past 30 s for a long anime (DesktopDebrid.TIMEOUT_MS).
     val searchMs: Long = 40_000,
@@ -873,7 +875,7 @@ class PlaybackSession(
         val fact = { v: PlayVersion -> memory?.fact(memoryKey(v)) }
         // Why a version is at the end of the list shows beside it.
         found.forEach { v -> memory?.failure(memoryKey(v))?.let { failures.putIfAbsent(v.key, it) } }
-        val ranked = VersionRanking.rank(found, p, frenchSystem(), readyFirst ?: (p.startMode != StartMode.WaitBest), caps, fact, expected, workLanguage)
+        val ranked = VersionRanking.rank(found, p, frenchSystem(), readyFirst ?: (p.startMode != StartMode.WaitBest && !p.bestQualityFirst), caps, fact, expected, workLanguage)
         return SourcePreferences.rank(ranked, sourcePreferences, p, frenchSystem(), caps,
             fact = fact,
             failed = { fact(it)?.let { f -> f.failure != null && f.until > System.currentTimeMillis() } == true },
@@ -889,7 +891,16 @@ class PlaybackSession(
         val first = withTimeoutOrNull(budgets.firstChoiceMs) { search.first { it.done || it.versions.isNotEmpty() } }
         // A version already in the account goes at once: nothing quicker can come.
         val held = { u: SearchUpdate -> u.versions.any { it.readiness == Readiness.Ready && it.origin == VersionOrigin.Debrid && it.rejected == null } }
-        if (first != null && !first.done && !held(first)) withTimeoutOrNull(budgets.settleMs) { search.first { it.done || held(it) } }
+        if (prefs().bestQualityFirst) {
+            // The best picture first: the first answers were often the 1080p already in the account, and the 4K found a
+            // moment later was never waited for. The search gets a little longer, unless a 4K in the account is there.
+            // The best this screen shows: a 1080p set waits for a 1080p in the account, a 4K one for a 4K.
+            val top = if (caps.maxHeight >= 2160) com.sokoul.iptv.domain.VideoQuality.UHD_4K else com.sokoul.iptv.domain.VideoQuality.FHD_1080
+            val heldTop = { u: SearchUpdate ->
+                u.versions.any { it.readiness == Readiness.Ready && it.origin == VersionOrigin.Debrid && it.rejected == null && it.quality == top }
+            }
+            if (first != null && !first.done && !heldTop(first)) withTimeoutOrNull(budgets.bestSettleMs) { search.first { it.done || heldTop(it) } }
+        } else if (first != null && !first.done && !held(first)) withTimeoutOrNull(budgets.settleMs) { search.first { it.done || held(it) } }
         if (first == null && search.value.versions.isEmpty()) {
             withTimeoutOrNull(budgets.searchMs) { search.first { it.done || it.versions.isNotEmpty() } }
         }
@@ -947,7 +958,7 @@ class PlaybackSession(
     private suspend fun race(): Pair<PlayVersion, StreamRequest>? {
         val mode = prefs().startMode.takeIf { request?.chooseFirst != true } ?: StartMode.Ask
         val remembered = versions.filter { memory?.failure(memoryKey(it)) != null }.map { it.key }.toSet()
-        val group = StartPolicy.race(versions, mode, failed + remembered, quickTried, blocked, failedHosts, raceSize())
+        val group = StartPolicy.race(versions, mode, failed + remembered, quickTried, blocked, failedHosts, raceSize(), sameQuality = prefs().bestQualityFirst)
         if (group.isEmpty()) return null
         StartClock.note("race of " + group.size)
         current = group.first()

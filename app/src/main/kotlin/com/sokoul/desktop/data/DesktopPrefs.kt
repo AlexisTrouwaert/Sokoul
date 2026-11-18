@@ -309,9 +309,12 @@ class DesktopPrefs(private val db: DesktopDb) {
 
     fun playback() = PlaybackPrefs(startMode, audioPreference, subtitlePreference, maxQuality, maxSize, preferredOrigin, audioIntent, bestQualityFirst)
 
-    /** Off by default: on an SDR screen an HDR stream through libVLC looks washed out, so 1080p SDR comes first. */
+    /**
+     * Off by default on the PC: on an SDR screen an HDR stream through libVLC looks washed out, so 1080p SDR comes first.
+     * On by default on the TV, which says itself what it shows (DeviceCaps): a 4K set got the 1080p found first.
+     */
     var bestQualityFirst: Boolean
-        get() = db.setting("play.best_quality_first") == "true"
+        get() = db.setting("play.best_quality_first")?.let { it == "true" } ?: com.sokoul.pc.Platform.IS_TV
         set(value) = db.putSetting("play.best_quality_first", value.toString())
 
     var rememberSourceHosters: Boolean

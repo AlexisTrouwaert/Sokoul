@@ -40,8 +40,28 @@ val extractSqliteNatives = tasks.register<Copy>("extractSqliteNatives") {
     into(sqliteNatives)
 }
 
+// The browser transport some players need (fsvid, Vidzy): curl-impersonate's pinned Android binaries, checked by their
+// SHA-256 (tools/prepare-curl-impersonate.py), and libsokoulcurl built against them. Without it those hosts answered
+// nothing on the TV ("curl_native_unavailable", 2026-11-18).
+val curlRoot = layout.buildDirectory.dir("curlImpersonate")
+val curlAbis = listOf("armeabi-v7a", "arm64-v8a")
+val prepareCurlImpersonate = tasks.register<Exec>("prepareCurlImpersonate") {
+    val root = curlRoot.get().asFile
+    outputs.dir(root)
+    onlyIf { curlAbis.any { !File(root, "$it/libcurl-impersonate.so").isFile } }
+    commandLine("python", rootProject.file("tools/prepare-curl-impersonate.py").absolutePath, root.absolutePath)
+}
+// Only the shared library goes into the APK, beside libsokoulcurl; the headers stay for CMake.
+val curlNatives = layout.buildDirectory.dir("curlNatives")
+val copyCurlNatives = tasks.register<Copy>("copyCurlNatives") {
+    dependsOn(prepareCurlImpersonate)
+    from(curlRoot) { include("*/libcurl-impersonate.so") }
+    into(curlNatives)
+}
+
 android {
     namespace = "com.sokoul.tv"
+    ndkVersion = "27.1.12297006"
     compileSdk = 35
     defaultConfig {
         applicationId = "com.sokoul.tv"
@@ -53,7 +73,11 @@ android {
         versionCode = 1
         versionName = "1.0"
         ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a") }
+        // c++_shared: libcurl-impersonate needs libc++_shared.so, packaged only when the native build asks for it.
+        externalNativeBuild { cmake { arguments += "-DANDROID_STL=c++_shared"; arguments += "-DCURL_IMPERSONATE_ROOT=${curlRoot.get().asFile.absolutePath.replace('\\', '/')}" } }
     }
+    // CMake's working files go with the other outputs (build-output/tv), not beside the sources.
+    externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1"; buildStagingDirectory = layout.buildDirectory.dir("cxx").get().asFile } }
     System.getenv("SOKOUL_DEBUG_KEYSTORE")?.let { path ->
         signingConfigs.getByName("debug").storeFile = file(path)
     }
@@ -76,6 +100,7 @@ android {
         resources.exclude("**/* - Copie.*", "**/* - copy.*")
         assets.exclude("**/* - Copie.*", "**/* - copy.*")
         jniLibs.srcDir(sqliteNatives)
+        jniLibs.srcDir(curlNatives)
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -102,7 +127,7 @@ if (project.hasProperty("composeReports")) {
     }
 }
 
-tasks.named("preBuild") { dependsOn(syncShared, ":app:generateDesktopKeys", extractSqliteNatives) }
+tasks.named("preBuild") { dependsOn(syncShared, ":app:generateDesktopKeys", extractSqliteNatives, copyCurlNatives) }
 tasks.named("preBuild") { dependsOn(":extractor:extractAndroidNatives") }
 android.sourceSets["main"].jniLibs.srcDir(project(":extractor").layout.buildDirectory.dir("generated/quickjsAndroid"))
 

@@ -397,6 +397,9 @@ class RealSources(
         } else {
             return null
         }
+        // A film shot in a cinema ("[HDCAM]", "TS") is dropped as on Real-Debrid: an IPTV one was played first, in
+        // English, for L'Odyssée (2026-11-18).
+        if (ReleaseName.parse(movie.name).cam) return null
         return iptvVersion("iptv-m-${movie.id}", movie.name) {
             if (!canOpenIptvCategory(db, p, movie.categoryId, "movie", movie.name, kidsProfile()))
                 throw PlayFailureException(PlayFailure.NoSource)

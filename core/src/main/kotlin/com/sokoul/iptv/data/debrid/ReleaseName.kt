@@ -75,12 +75,17 @@ object ReleaseName {
             // "Dual Audio" is two tracks: more than two flags beside it name the subtitles (Torrentio puts them on the
             // same line: "Dubbed / Multi Subs / Dual Audio / 🇬🇧 / 🇷🇺 / … / 🇫🇷"), not a French track.
             .let { text -> if (rxDual.containsMatchIn(text) && flags(text).distinct().size > 2) text.replace(rxFlag, " ") else text }
+            // Flags alone, more than two, with no language word in the name: Torrentio lists the subtitles that way
+            // ("🇬🇧 / 🇫🇷 / 🇨🇿 / 🇪🇸" beside an English-only YTS, KAY or Pebas release). Taken for tracks, they made
+            // MULTI versions of files with one English track, played before the real MULTI.VFQ (L'Odyssée, 2026-11-18).
+            .let { text -> if (flags(text).distinct().size > 2 && !namesLanguage(text.replace(rxFlag, " "))) text.replace(rxFlag, " ") else text }
         val audioTokens = audioText.split(tokenSep).map { it.uppercase() }.toSet()
         // Read once, used by the language, the announced tracks and the dub marker.
         // A name that says VOSTFR has French subtitles: a 🇫🇷 flag beside it (Torrentio flags subtitles too) is no French
         // track; only a French word in the name ("VOSTFR.FRENCH", "VF") still announces one.
         val vostfr = audioTokens.any { it in VOSTFR_TAGS }
-        val french = hasFrenchTag(audioText, audioTokens) && (!vostfr || hasFrenchTag(audioText.replace("🇫🇷", " "), audioTokens))
+        // With VOSTFR, an IPTV group prefix ("FR| L'Odyssée [VOSTFR]") is the provider's country, not a French track.
+        val french = hasFrenchTag(audioText, audioTokens) && (!vostfr || audioTokens.any { it in FRENCH_WORDS_BESIDE_VOSTFR })
         val others = audio(audioText)
         val announced = language(audioText, audioText.uppercase(), audioTokens, others, french)
         val frenchSubtitles = subtitleLines.any { line -> "FR" in flags(line) || line.split(tokenSep).any { it.uppercase() in FRENCH_TAGS } }
@@ -132,6 +137,8 @@ object ReleaseName {
     private val audioLabel = Regex("(?i)\\b(audio|dub|dubbed)\\b")
     private val EXPLICIT_FRENCH_TAGS = FRENCH_TAGS - "FRENCH"
     private val VOSTFR_TAGS = setOf("VOSTFR", "SUBFRENCH", "STFR")
+    /** What still says a French track beside VOSTFR ("VOSTFR.FRENCH", "VF"): a word, never a flag or a country prefix. */
+    private val FRENCH_WORDS_BESIDE_VOSTFR = setOf("FRENCH", "TRUEFRENCH", "VFF", "VFQ", "VFI", "VF", "VF2", "VFB")
     // An episode number also ends the title: "Dragon Ball Super E001 FRENCH 720p" is French, not VO.
     private val releaseMarker = Regex("(?i)\\b(19\\d{2}|20\\d{2})\\b|\\bS\\d{1,2}[ ._-]?E\\d{1,3}\\b|\\bE\\d{1,4}\\b|\\b(?:episode|ep)[ ._-]?\\d{1,4}\\b|\\s-\\s\\d{2,4}\\b|\\b\\d{3,4}\\b|\\b\\d{2}\\b(?=.*\\b(?:480|720|1080|2160)p\\b)")
     private val frenchPrefix = Regex("(?i)^\\s*(?:\\[(?:french|truefrench|vff|vfq|vfi|vf2|vfb|vf|fr|fre|fra)\\]|(?:truefrench|vff|vfq|vfi|vf2|vfb|vf|fr|fre|fra)\\s*[-:|]\\s*|french\\s+(?:dub|audio|track)\\b)")
@@ -158,6 +165,13 @@ object ReleaseName {
         "WEBRIP" in t -> RipSource.WEBRIP
         t.any { it in setOf("HDTV", "PDTV", "DSR", "TVRIP") } -> RipSource.HDTV
         else -> null
+    }
+
+    /** A language written as a word in the name: French tags, MULTI, DUAL, VO, VOSTFR or another language's label. */
+    private fun namesLanguage(text: String): Boolean {
+        val tokens = text.split(tokenSep).map { it.uppercase() }.toSet()
+        return hasFrenchTag(text, tokens) || rxMultiAudio.containsMatchIn(text) || rxDual.containsMatchIn(text) ||
+            tokens.any { it in VOSTFR_TAGS || it == "VO" } || audio(text).isNotEmpty()
     }
 
     private val rxMultiAudio = Regex("(?i)(?<![a-z0-9])multi(?![a-z0-9])(?![ ._-]?sub)")
