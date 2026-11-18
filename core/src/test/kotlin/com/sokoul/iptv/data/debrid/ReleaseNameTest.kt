@@ -27,6 +27,13 @@ class ReleaseNameTest {
         assertEquals(VideoQuality.FHD_1080, r.quality)
     }
 
+    @Test fun `episode numbers followed by an underscore are read`() {
+        assertEquals(4 to 6, ReleaseName.episodeTag("S04E006_Episode 6.mkv"))
+        assertEquals(4 to 5, ReleaseName.episodeTag("The.Handmaids.Tale.S04E05.1080p.mkv"))
+        assertEquals(4 to 5, ReleaseName.episodeTag("The Handmaid's Tale - 4X05 - Chicago.mp4"))
+        assertNull("a resolution is no episode", ReleaseName.episodeTag("Film.1920x1080.mkv"))
+    }
+
     @Test fun `DUAL avec le francais - MULTI`() {
         assertEquals(AudioLanguage.MULTI, ReleaseName.parse("Film.2020.1080p.DUAL.TRUEFRENCH.x264.mkv").language)
     }

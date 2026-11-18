@@ -194,7 +194,10 @@ class DebridTransfers(
                 return ReleaseName.pickFile(files, season, episode, q.absolute)
                     ?: byName?.takeIf { f -> com.sokoul.iptv.data.debrid.DebridStreams.episodeMatches(f.name, season, episode, q.absolute) != false }
             }
-            return ReleaseName.pickFile(files, season, episode) ?: byName?.takeIf { f -> ReleaseName.episodeTag(f.name).let { it == null || it == season to episode } }
+            // A file without a readable episode is taken only under the name the search service gave for this episode:
+            // a pack already in the account holds only the episode selected the last time, and that one is not this one.
+            return ReleaseName.pickFile(files, season, episode)?.takeIf { f -> ReleaseName.episodeTag(f.name) != null || s.filename == null || f.name.equals(s.filename, ignoreCase = true) }
+                ?: byName?.takeIf { f -> ReleaseName.episodeTag(f.name).let { it == null || it == season to episode } }
         }
         val byIndex = s.fileIdx?.let { files.sortedBy { f -> f.id }.getOrNull(it) }?.takeIf { ReleaseName.isVideo(it.path) }
         fun compatible(file: RdFile) = !com.sokoul.iptv.data.debrid.DebridStreams.wrongMovie(file.name, s.movieTitles, s.movieYear)

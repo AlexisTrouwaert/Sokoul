@@ -228,8 +228,9 @@ object ReleaseName {
 
     /** S02E05, 2x05. */
     fun episodeTag(text: String): Pair<Int, Int>? {
-        Regex("(?i)\\bS(\\d{1,2})[ ._-]?E(\\d{1,3})\\b").find(text)?.let { return it.groupValues[1].toInt() to it.groupValues[2].toInt() }
-        Regex("(?i)\\b(\\d{1,2})x(\\d{2,3})\\b").find(text)?.let { return it.groupValues[1].toInt() to it.groupValues[2].toInt() }
+        // "S04E006_Episode 6.mkv": "_" is a word character, so a "\\b" after the number would not read it.
+        Regex("(?i)(?<![a-z0-9])S(\\d{1,2})[ ._-]?E(\\d{1,3})(?![0-9])").find(text)?.let { return it.groupValues[1].toInt() to it.groupValues[2].toInt() }
+        Regex("(?i)(?<![a-z0-9])(\\d{1,2})x(\\d{2,3})(?![0-9a-z])").find(text)?.let { return it.groupValues[1].toInt() to it.groupValues[2].toInt() }
         return null
     }
 
