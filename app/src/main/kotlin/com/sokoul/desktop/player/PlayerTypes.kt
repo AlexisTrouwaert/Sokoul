@@ -18,6 +18,8 @@ data class StreamRequest(
     val externalSubtitles: List<StreamSubtitle> = emptyList(),
     /** Local extractor context; never persisted or logged. */
     val headers: Map<String, String> = emptyMap(),
+    /** The work's original language (ISO 639-1) from the catalog, to pick the original track; null when unknown. */
+    val originalLanguage: String? = null,
 )
 
 data class StreamSubtitle(val url: String, val language: String = "und", val label: String? = null, val format: String = "vtt", val default: Boolean = false)

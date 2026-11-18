@@ -224,6 +224,11 @@ class AppDeps(
     )
     /** Set by the window: full screen or not. */
     var toggleFullscreen: () -> Unit = {}
+    /** Set at startup: forgets the version searches kept in memory, next to the database copy cleared with the cache. */
+    var clearSearchCache: () -> Unit = {}
+    var forgetSourceFailures: () -> Unit = {}
+    /** Set when the language list changes the language: the interface is rebuilt in it and reopens on that list. */
+    var languageReturn = false
     /** Set by the PC window: whether it is full screen. Null where there is no window to change (TV, phone). */
     var isFullscreen: (() -> Boolean)? = null
     /** What the anime page shows, for the tools. */
@@ -242,6 +247,9 @@ class AppDeps(
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { db.tmdbPut(key, json, fetchedAt) }
         },
     )
+    private val sourceMemory = com.sokoul.pc.playback.sources.SourceMemory(
+        { db.setting("pc.source.memory") }, { db.putSetting("pc.source.memory", it) },
+    ).also { forgetSourceFailures = it::forgetFailures }
     val playback = PlaybackSession(
         engine, sources, scope,
         sourcePreferences = prefs::sourceOrder,
@@ -280,7 +288,7 @@ class AppDeps(
             }
         } },
         caps = Platform.deviceCaps(),
-        memory = com.sokoul.pc.playback.sources.SourceMemory({ db.setting("pc.source.memory") }, { db.putSetting("pc.source.memory", it) }),
+        memory = sourceMemory,
         expectedMinutes = { r ->
             if (r.kind == "movie") {
                 catalog.details("movie", r.tmdbId)?.runtimeMin
@@ -290,6 +298,7 @@ class AppDeps(
                     ?: catalog.animeIdentity?.let { a -> a.identity("tv", r.tmdbId)?.let { id -> a.episodeMinutes(a.episode(id, r.tmdbId, r.season ?: 1, r.episode ?: 1)) } }
             }
         },
+        originalLanguage = { r -> catalog.details(r.kind, r.tmdbId)?.originalLanguage },
         skipTimes = { r ->
             val a = catalog.animeIdentity
             val id = if (r.kind == "tv" && a != null) a.identity("tv", r.tmdbId) else null
@@ -386,10 +395,15 @@ private fun MainInterface(deps: AppDeps, controller: SetupController, onProfiles
         NavEntry("tv", tr(Text.MenuTv), NavIcons.Tv),
     )
     val entries = allEntries.filter { it.id !in hiddenEntries }
-    var section by remember { mutableStateOf("home") }
+    var section by remember { mutableStateOf(if (deps.languageReturn) SECTION_SETTINGS else "home") }
     var searchOrigin by remember { mutableStateOf(SECTION_HOME) }
     var editingCredentials by remember { mutableStateOf(false) }
     var editingRows by remember { mutableStateOf(false) }
+    var editingAudio by remember { mutableStateOf(false) }
+    var editingLanguage by remember { mutableStateOf(deps.languageReturn) }
+    // The settings category a sub-page was opened from, shown again when Back leaves it.
+    var settingsPane by remember { mutableStateOf(if (deps.languageReturn) "language" else "accounts") }
+    LaunchedEffect(Unit) { deps.languageReturn = false }
     var catalogRevision by remember { mutableStateOf(0) }
     val overlays = remember { mutableStateListOf<Overlay>() }
     // Pages that fill the screen: nothing below them is drawn (it stays composed, with its state and focus). The TV drew
@@ -681,8 +695,25 @@ private fun MainInterface(deps: AppDeps, controller: SetupController, onProfiles
                 }
             },
     ) {
+        // Sub-pages of Settings read with the mouse like Settings: hovering highlights, only a click takes the focus.
         if (editingRows) {
-            com.sokoul.pc.library.HomeRowsScreen(deps.prefs, onChanged = deps::uiChanged, onBack = { editingRows = false })
+            androidx.compose.runtime.CompositionLocalProvider(com.sokoul.pc.ui.LocalHoverOnly provides true) {
+                com.sokoul.pc.library.HomeRowsScreen(deps.prefs, onChanged = deps::uiChanged, onBack = { editingRows = false })
+            }
+            return@Box
+        }
+        if (editingAudio) {
+            androidx.compose.runtime.CompositionLocalProvider(com.sokoul.pc.ui.LocalHoverOnly provides true) {
+                com.sokoul.pc.library.AudioLanguagesScreen(deps.prefs, onBack = { editingAudio = false })
+            }
+            return@Box
+        }
+        if (editingLanguage) {
+            com.sokoul.pc.library.InterfaceLanguageScreen(
+                deps.prefs,
+                onChanged = { deps.languageReturn = true; deps.languageChanged() },
+                onBack = { editingLanguage = false },
+            )
             return@Box
         }
         if (editingCredentials) {
@@ -726,12 +757,14 @@ private fun MainInterface(deps: AppDeps, controller: SetupController, onProfiles
                     onBack = { setSection(SECTION_SETTINGS) },
                 )
                 section == SECTION_SETTINGS -> SettingsScreen(
-                    settingsFocus, deps.prefs, onCredentials = { editingCredentials = true }, profile = deps.profiles.current, onProfiles = onProfiles,
+                    settingsFocus, deps.prefs, onCredentials = { editingCredentials = true }, profile = deps.profiles.current, onProfiles = onProfiles, initialPane = settingsPane,
                     hooks = com.sokoul.pc.library.SettingsHooks(
                         menu = allEntries.map { it.id to it.label },
                         onChanged = deps::uiChanged,
                         onLanguage = deps::languageChanged,
-                        onHomeRows = { editingRows = true },
+                        onHomeRows = { settingsPane = "home"; editingRows = true },
+                        onAudioLanguages = { settingsPane = "playback"; editingAudio = true },
+                        onLanguages = { settingsPane = "language"; editingLanguage = true },
                         onDebridTools = { setSection("debrid-tools") },
                         services = {
                             com.sokoul.desktop.data.ProviderConfig.statuses(deps.db).map { com.sokoul.pc.library.ServiceInfo(it.label, it.configured, it.source) } +
@@ -745,7 +778,11 @@ private fun MainInterface(deps: AppDeps, controller: SetupController, onProfiles
                                     com.sokoul.desktop.data.ProviderConfig.key(deps.db, "mainapi_url") ?: com.sokoul.desktop.data.ProviderConfig.MAINAPI_DEFAULT_URL,
                                 )
                         },
-                        onClearCache = { scope.launch(kotlinx.coroutines.Dispatchers.IO) { deps.db.purgeCache("", Long.MAX_VALUE) } },
+                        onClearCache = {
+                            deps.clearSearchCache()
+                            scope.launch(kotlinx.coroutines.Dispatchers.IO) { deps.db.purgeCache("", Long.MAX_VALUE) }
+                        },
+                        onForgetSourceFailures = { deps.forgetSourceFailures() },
                         onClearHistory = {
                             scope.launch(kotlinx.coroutines.Dispatchers.IO) {
                                 deps.db.clearHistory()

@@ -96,9 +96,25 @@ data class TmdbInfo(
     val keywords: List<String>? = null,
     val videos: List<TmdbVideo> = emptyList(),
     val releaseDate: String? = null,
+    /** A film's first release outside cinemas anywhere (digital, disc or TV, "2026-11-04"); null when TMDB has none. */
+    val homeRelease: String? = null,
     /** Poster with no text on it (TMDB language null), when one exists. */
     val cleanPoster: String? = null,
 )
+
+/**
+ * A film only shown in cinemas so far: out (or coming) less than [CINEMA_DAYS] days ago, and no digital, disc or TV
+ * release on or before [today]. Its sources are then most often other films or audiobooks, not the film.
+ */
+fun TmdbInfo.cinemaOnly(today: java.time.LocalDate = java.time.LocalDate.now()): Boolean {
+    val out = releaseDate?.take(10)?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() } ?: return false
+    if (out.isBefore(today.minusDays(CINEMA_DAYS))) return false
+    val home = homeRelease?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }
+    return home == null || home.isAfter(today)
+}
+
+/** How long after its release a film without a known home release still counts as in cinemas only. */
+private const val CINEMA_DAYS = 150L
 
 /** Résultat de liste TMDB (tendances, recommandations, collection). */
 data class TmdbItem(
@@ -139,8 +155,15 @@ class TmdbClient @Inject constructor(
     private val json: Json,
     private val cache: TmdbCache,
 ) {
+    /** Where the language of requests comes from, read at each request: it follows the interface when it changes. */
+    @Volatile var languageSource: (() -> String)? = null
+
+    @Volatile private var fixedLanguage: String = "en-US"
+
     /** Language of requests; part of each cached URL, so changing it never serves older answers. */
-    @Volatile var defaultLanguage: String = "en-US"
+    var defaultLanguage: String
+        get() = languageSource?.invoke() ?: fixedLanguage
+        set(v) { fixedLanguage = v }
 
     private val languageCode get() = defaultLanguage.take(2)
 
@@ -235,6 +258,33 @@ class TmdbClient @Inject constructor(
     /** Written in the Latin alphabet (French, English, Italian…): letters of other scripts are not read by this audience. */
     private fun readable(text: String): Boolean = text.none { c ->
         c.isLetter() && Character.UnicodeScript.of(c.code) != Character.UnicodeScript.LATIN
+    }
+
+    /** A work's title in [language], its original title and every poster and backdrop path, to recognise it on a site. */
+    data class NamesAndImages(
+        val title: String?, val originalTitle: String?, val year: Int?, val imagePaths: Set<String>,
+        /** Series: first air date ("2008-01-20") and each season's (VoirDrama matches a season by its date). */
+        val firstAirDate: String? = null, val seasonDates: Map<Int, String> = emptyMap(),
+    )
+
+    /**
+     * What a streaming site's search needs to find this work (PurStream matches TMDB image paths, others titles and year).
+     * Cache 7 days, as the other details.
+     */
+    suspend fun namesAndImages(apiKey: String, kind: String, id: Int, language: String = "fr-FR"): NamesAndImages? {
+        if (apiKey.isBlank()) return null
+        return safe {
+            val o = get(apiKey, "/3/$kind/$id", mapOf("append_to_response" to "images", "include_image_language" to "fr,en,null"), language = language) ?: return@safe null
+            val title = o.str(if (kind == "movie") "title" else "name")
+            val original = o.str(if (kind == "movie") "original_title" else "original_name")
+            val year = o.str(if (kind == "movie") "release_date" else "first_air_date")?.take(4)?.toIntOrNull()
+            val images = (o["images"] as? JsonObject)
+            val paths = listOfNotNull(o.str("poster_path"), o.str("backdrop_path")) +
+                listOf("posters", "backdrops").flatMap { k -> (images?.get(k) as? JsonArray).orEmpty().mapNotNull { (it as? JsonObject)?.str("file_path") } }
+            val seasons = (o["seasons"] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
+                .mapNotNull { s -> s.int("season_number")?.let { n -> s.str("air_date")?.let { n to it } } }.toMap()
+            NamesAndImages(title, original, year, paths.toSet(), o.str("first_air_date"), seasons)
+        }
     }
 
     /** Large images without text of a film (`movie/1`) or a collection (`collection/1`), most liked first. Cache 7 days. */
@@ -389,9 +439,9 @@ class TmdbClient @Inject constructor(
 
     /** Œuvre portant exactement ce titre (français ou original), la plus populaire : sert à rapprocher un nom (TasteDive). */
     /** Recherche films et séries ensemble (une page, cache 1 jour) : rangée Real-Debrid de la recherche. */
-    suspend fun searchMulti(apiKey: String, query: String): List<TmdbItem> {
+    suspend fun searchMulti(apiKey: String, query: String, page: Int = 1): List<TmdbItem> {
         if (apiKey.isBlank() || query.trim().length < 2) return emptyList()
-        return safe { items(get(apiKey, "/3/search/multi", mapOf("query" to query.trim()), ttlMs = 24 * HOUR), "movie") } ?: emptyList()
+        return safe { items(get(apiKey, "/3/search/multi", mapOf("query" to query.trim(), "page" to page.toString()), ttlMs = 24 * HOUR), "movie") } ?: emptyList()
     }
 
     suspend fun findByName(apiKey: String, kind: String, title: String): TmdbItem? {
@@ -535,6 +585,7 @@ class TmdbClient @Inject constructor(
             trailerYoutubeKey = trailer,
             videos = videos.filter { it.str("site") == "YouTube" }.mapNotNull { v -> TmdbVideo(v.str("key") ?: return@mapNotNull null, v.str("name").orEmpty(), v.str("type").orEmpty(), v.int("size"), v["official"]?.toString() == "true", v.str("iso_639_1")) },
             releaseDate = date,
+            homeRelease = if (kind == "movie") homeRelease(o) else null,
             cleanPoster = ((o["images"] as? JsonObject)?.get("posters") as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
                 .firstOrNull { it.str("iso_639_1") == null }?.str("file_path")?.let { "$IMG/w500$it" },
             tagline = o.str("tagline")?.takeIf { it.isNotBlank() },
@@ -565,6 +616,12 @@ class TmdbClient @Inject constructor(
         )
     }
 
+    /** The earliest digital (4), physical (5) or TV (6) release date of a film, in any country. */
+    private fun homeRelease(o: JsonObject): String? =
+        ((o["release_dates"] as? JsonObject)?.get("results") as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
+            .flatMap { (it["release_dates"] as? JsonArray).orEmpty() }.mapNotNull { it as? JsonObject }
+            .filter { it.int("type") in HOME_TYPES }.mapNotNull { it.str("release_date")?.take(10) }.minOrNull()
+
     /** Classification française (« 12 », « 16 »…) si TMDB la connaît. */
     private fun certification(kind: String, o: JsonObject): String? {
         return if (kind == "movie") {
@@ -580,6 +637,8 @@ class TmdbClient @Inject constructor(
     private fun JsonArray?.orEmpty(): List<kotlinx.serialization.json.JsonElement> = this ?: emptyList()
 
     companion object {
+        /** TMDB release types outside cinemas: digital, physical, TV. */
+        private val HOME_TYPES = setOf(4, 5, 6)
         const val IMG = "https://image.tmdb.org/t/p"
 
         /** Plateformes d'abonnement (« flatrate ») de [region] dans une réponse `watch/providers`, par priorité TMDB. */

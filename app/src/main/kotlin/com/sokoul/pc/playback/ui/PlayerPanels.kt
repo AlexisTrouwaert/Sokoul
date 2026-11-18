@@ -173,11 +173,19 @@ internal fun VersionsPanel(session: PlaybackSession, modifier: Modifier = Modifi
     SourceBrowser(session, modifier, onPicked)
 }
 
+/** A failure in a few words, for a row of the versions list; the player's message keeps the whole sentence. */
+internal fun failureBrief(f: PlayFailure): String = when (f) {
+    PlayFailure.FakeFile -> com.sokoul.pc.data.L("Not the film", "Pas le film").text()
+    PlayFailure.DeadLink -> com.sokoul.pc.data.L("Dead link", "Lien mort").text()
+    is PlayFailure.Refused -> com.sokoul.pc.data.L("Refused by the host", "Refusé par l'hébergeur").text()
+    else -> failureText(f)
+}
+
 internal fun stateText(session: PlaybackSession, version: PlayVersion): String {
     val origin = tr(when (version.origin) { VersionOrigin.Debrid -> Text.SourceRealDebrid; VersionOrigin.Iptv -> Text.SourceIptv; VersionOrigin.Web -> Text.SourceWeb })
     val offer = session.upgrade?.takeIf { it.version.key == version.key }
     val state = when {
-        session.failures[version.key] != null -> failureText(session.failures.getValue(version.key))
+        session.failures[version.key] != null -> failureBrief(session.failures.getValue(version.key))
         // Its reason in the detail line, so that the title keeps the quality and size to choose by.
         version.rejected != null -> doubtText(version.rejected)
         offer?.transfer != null -> tr(Text.DownloadPercent, offer.transfer.percent)
@@ -231,7 +239,7 @@ internal fun trackLabel(raw: String): String {
 
 private val UNKNOWN_LANGUAGE_CODES = setOf("und", "mul", "zxx", "mis", "unknown")
 
-private fun languageName(code: String): String {
+internal fun languageName(code: String): String {
     val name = java.util.Locale(code).getDisplayLanguage(java.util.Locale.getDefault())
     return name.ifBlank { code }.replaceFirstChar { it.uppercase() }
 }
@@ -291,6 +299,9 @@ internal fun SubtitlesMenu(
 
 private const val SHIFT_MS = 500L
 
+/** A failure of the file itself, which the same version gives again: not the film, a dead link, a refusal. */
+internal fun retryUseless(f: PlayFailure): Boolean = com.sokoul.pc.playback.sources.SourceRules.blamesHost(f)
+
 /** The failure stays inside the player, with what can be done about it. */
 @Composable
 internal fun FailurePanel(session: PlaybackSession, failure: PlayFailure, onVersions: () -> Unit, onClose: () -> Unit, modifier: Modifier = Modifier) {
@@ -314,6 +325,16 @@ internal fun FailurePanel(session: PlaybackSession, failure: PlayFailure, onVers
                 PillButton(com.sokoul.pc.data.L("Play Anyway", "Lire quand même").text(), session::playAnyway, Modifier.testTag("failure-anyway"))
                 PillButton(com.sokoul.pc.data.L("Choose Another Version", "Choisir une autre version").text(), onVersions, Modifier.testTag("failure-versions"), first)
                 PillButton(tr(Text.Retry), session::retry, Modifier.testTag("failure-retry"))
+                PillButton(tr(Text.Close), onClose, Modifier.testTag("failure-close"))
+            } else if (failure !is PlayFailure.EngineMissing && retryUseless(failure)) {
+                // The file itself is wrong (not the film, dead link, refused): retrying it gives the same answer, so
+                // the row starts with what helps.
+                val hasNext = session.versions.size > 1
+                val listButton = remember { FocusRequester() }
+                if (hasNext) PillButton(tr(Text.NextVersion), session::nextVersion, Modifier.testTag("failure-next"), first)
+                PillButton(tr(Text.AllVersions), onVersions, Modifier.testTag("failure-versions"), if (hasNext) listButton else first)
+                PillButton(tr(Text.Retry), session::retry, Modifier.testTag("failure-retry"))
+                PillButton(tr(Text.Refresh), session::refresh, Modifier.testTag("failure-refresh"))
                 PillButton(tr(Text.Close), onClose, Modifier.testTag("failure-close"))
             } else if (failure !is PlayFailure.EngineMissing) {
                 PillButton(tr(Text.Retry), session::retry, Modifier.testTag("failure-retry"), first)
@@ -350,6 +371,29 @@ internal fun UpgradeBanner(offer: UpgradeOffer, onAccept: () -> Unit, onDismiss:
         Label(tr(Text.UpgradeReady, offer.version.summary()), com.sokoul.pc.theme.PanelType.Callout, maxLines = 1)
         PillButton(tr(Text.Switch), onAccept, Modifier.testTag("upgrade-accept"), requester)
         PillButton(tr(Text.NotNow), onDismiss, Modifier.testTag("upgrade-dismiss"))
+    }
+}
+
+/**
+ * The version playing has none of the wanted languages: the viewer is told which language plays and chooses. Nothing reopens on its
+ * own. Same glass capsule and place as [UpgradeBanner]; focus starts on keeping the film going, the likeliest wish.
+ */
+@Composable
+internal fun LanguageNoticeBanner(notice: com.sokoul.pc.playback.session.LanguageNotice, onKeep: () -> Unit, onVersions: () -> Unit, modifier: Modifier = Modifier, requester: androidx.compose.ui.focus.FocusRequester) {
+    // Inside a sentence, French, Spanish, Italian and Portuguese write language names in lower case ("en italiano").
+    val locale = java.util.Locale.getDefault()
+    val inSentence = { name: String -> if (locale.language in setOf("fr", "es", "it", "pt")) name.lowercase(locale) else name }
+    val language = inSentence(com.sokoul.desktop.player.AudioChoice.languageOf(notice.heard)?.let(::languageName) ?: trackLabel(notice.heard))
+    val wanted = inSentence(languageName(notice.wanted))
+    Row(
+        modifier.panelEnter(com.sokoul.pc.ui.PanelEntry.FromBelow).glassSurface(RoundedCornerShape(50), 40.dp).padding(start = 34.dp, end = 14.dp, top = 12.dp, bottom = 12.dp).testTag("player-language-notice"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(36.dp),
+    ) {
+        // "No Italian audio · Playing in English", for whichever language is wanted and heard.
+        Label(com.sokoul.pc.data.L("No $wanted audio · Playing in $language", "Pas de piste en $wanted · Lecture en $language").text(), com.sokoul.pc.theme.PanelType.Callout, maxLines = 1)
+        PillButton(com.sokoul.pc.data.L("Keep Watching", "Continuer").text(), onKeep, Modifier.testTag("language-keep"), requester)
+        PillButton(com.sokoul.pc.data.L("See Versions", "Voir les versions").text(), onVersions, Modifier.testTag("language-versions"))
     }
 }
 

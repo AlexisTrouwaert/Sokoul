@@ -60,6 +60,8 @@ dependencies {
     implementation(compose.material3)
     implementation(compose.materialIconsExtended)
     implementation(libs.okhttp)
+    // Streaming sites read by the app itself (Coflix…), as core already does.
+    implementation(libs.jsoup)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.swing)
@@ -183,6 +185,8 @@ tasks.register<JavaExec>("renderScreens") {
     mainClass.set("com.sokoul.pc.dev.RenderScreensKt")
     args(providers.gradleProperty("renderOutput").orElse(rootDir.resolve("renders").path).get())
     providers.gradleProperty("renderMode").orNull?.let { args(it) }
+    // -PrenderLanguage=ar renders the home and title screens in that interface language.
+    providers.gradleProperty("renderLanguage").orNull?.let { systemProperty("sokoul.renderLanguage", it) }
 }
 
 tasks.register<JavaExec>("setupCheck") {

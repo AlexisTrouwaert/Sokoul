@@ -2,9 +2,12 @@ package com.sokoul.pc
 
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.runComposeUiTest
@@ -38,14 +41,19 @@ class SettingsTest {
     private lateinit var prefs: DesktopPrefs
     private var changes = 0
     private var cleared = 0
+    private var forgotten = 0
     private var erased = 0
     private var reset = 0
     private val menu = listOf("home" to "Home", "library" to "My list", "movies" to "Movies")
+
+    private var audioOpened = 0
 
     private fun hooks() = SettingsHooks(
         menu, { changes++ },
         services = { listOf(ServiceInfo("TMDB", true, "Built-in key"), ServiceInfo("OMDb", false, null)) },
         onClearCache = { cleared++ }, onClearHistory = { erased++ }, onResetDisplay = { reset++ },
+        onForgetSourceFailures = { forgotten++ },
+        onAudioLanguages = { audioOpened++ },
     )
 
     @Before
@@ -79,6 +87,79 @@ class SettingsTest {
     private fun ComposeUiTest.click(tag: String) {
         onNodeWithTag(tag).performScrollTo().performClick()
         waitForIdle()
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun playbackShowsTheWantedLanguagesAndOpensTheirEditor() = runComposeUiTest {
+        prefs.audioIntent = com.sokoul.desktop.data.AudioIntent(listOf("nl", com.sokoul.desktop.data.AudioIntent.ORIGINAL))
+        page()
+        pane("playback")
+        onNodeWithText(com.sokoul.pc.library.audioIntentSummary(prefs.audioIntent), substring = true).assertExists()
+        click("pref-audio")
+        assertEquals(1, audioOpened)
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun searchServicesKeepAtLeastOneServiceEnabled() = runComposeUiTest {
+        com.sokoul.pc.i18n.Strings.applyLanguage("en")
+        val torrentio = com.sokoul.iptv.data.debrid.SourceAddon.TORRENTIO
+        assertEquals(com.sokoul.iptv.data.debrid.SourceAddon.entries.toSet(), prefs.searchServices)
+        page()
+        pane("playback")
+        click("pref-service-comet")
+        assertEquals(setOf(torrentio), prefs.searchServices)
+        assertEquals("TORRENTIO", db.setting(com.sokoul.desktop.data.DesktopDebrid.SERVICES))
+        click("pref-service-torrentio")
+        assertEquals(setOf(torrentio), prefs.searchServices)
+        val rowText = onNodeWithTag("pref-service-torrentio").fetchSemanticsNode().config.getOrNull(SemanticsProperties.Text).orEmpty()
+        assertTrue("the last service still reads On", rowText.any { it.text == "On" })
+        prefs.searchServices = emptySet()
+        assertEquals(setOf(torrentio), prefs.searchServices)
+        assertEquals(setOf(torrentio), DesktopPrefs(db).searchServices)
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun audioLanguagesAreAddedMovedAndRemovedLikeHomeRows() = runComposeUiTest {
+        com.sokoul.pc.i18n.Strings.applyLanguage("fr")
+        prefs.audioIntent = com.sokoul.desktop.data.AudioIntent(listOf("fr", com.sokoul.desktop.data.AudioIntent.ORIGINAL))
+        setContent { com.sokoul.pc.ui.ScaledRoot { com.sokoul.pc.library.AudioLanguagesScreen(prefs) {} } }
+        waitForIdle()
+        assertEquals(com.sokoul.desktop.data.AudioFallback.EngineDefault, prefs.audioIntent.fallback)
+        click("audio-language-fallback")
+        assertEquals(com.sokoul.desktop.data.AudioFallback.Ask, prefs.audioIntent.fallback)
+        // Spanish is added at the end, then moved to the top: the first one a version offers is played.
+        click("audio-language-add-es")
+        assertEquals(listOf("fr", "original", "es"), prefs.audioIntent.languages)
+        click("audio-language-up-es")
+        click("audio-language-up-es")
+        assertEquals(listOf("es", "fr", "original"), prefs.audioIntent.languages)
+        // Dutch too, and French removed: any language, in any order.
+        click("audio-language-add-nl")
+        click("audio-language-remove-fr")
+        assertEquals(listOf("es", "original", "nl"), prefs.audioIntent.languages)
+        // The last language cannot be removed: something must say what to play.
+        click("audio-language-remove-es")
+        click("audio-language-remove-nl")
+        click("audio-language-remove-original")
+        assertEquals(listOf("original"), prefs.audioIntent.languages)
+        assertEquals(com.sokoul.desktop.data.AudioFallback.Ask, prefs.audioIntent.fallback)
+        click("audio-language-fallback")
+        assertEquals(com.sokoul.desktop.data.AudioFallback.EngineDefault, prefs.audioIntent.fallback)
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun subtitlesAreOffAutomaticOrOneLanguage() = runComposeUiTest {
+        page()
+        pane("subtitles")
+        assertEquals("auto", prefs.audioIntent.subtitles)
+        click("pref-subtitles")
+        assertEquals("fr", prefs.audioIntent.subtitles)
+        click("pref-subtitles")
+        assertEquals("en", prefs.audioIntent.subtitles)
     }
 
     @OptIn(ExperimentalTestApi::class)
@@ -160,6 +241,10 @@ class SettingsTest {
         press("about-clear-cache")
         press("about-clear-cache")
         assertEquals(1, cleared)
+        press("about-forget-failures")
+        assertEquals(0, forgotten)
+        press("about-forget-failures")
+        assertEquals(1, forgotten)
         press("about-reset-display")
         assertEquals(0, reset)
         press("about-reset-display")

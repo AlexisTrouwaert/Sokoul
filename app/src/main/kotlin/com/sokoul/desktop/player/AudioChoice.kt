@@ -38,7 +38,8 @@ object AudioChoice {
         "hi" to "hi|hin|hindi",
     ).mapValues { (_, w) -> Regex("""\b($w)\b""", RegexOption.IGNORE_CASE) }
 
-    private fun matches(lang: String, label: String) = words[lang]?.containsMatchIn(label) == true || languageOf(label) == lang
+    /** Whether the label of a track names the language [lang] (ISO 639-1). */
+    fun matches(lang: String, label: String) = words[lang]?.containsMatchIn(label) == true || languageOf(label) == lang
 
     /** Langue des Réglages reconnue dans le nom d'une piste (« [French] » → « fr »), ou null. */
     fun languageOf(label: String): String? = words.entries.firstOrNull { it.value.containsMatchIn(label) }?.key
@@ -52,8 +53,7 @@ object AudioChoice {
 
     /** Identifiant de la piste audio à prendre parmi [tracks] (id, description), ou null pour garder celle de libVLC. */
     fun pick(tracks: List<Pair<Int, String>>, preferred: String = "fr"): Int? =
-        tracks.firstOrNull { matches(preferred, it.second) }?.first
-            ?: tracks.firstOrNull { matches("en", it.second) }?.first
+        com.sokoul.pc.playback.sources.AudioMatch.pickTrack(tracks, preferred)
 
     /**
      * Version originale (VOSTFR, VO). D'abord une piste que le fichier nomme elle-même originale (« Inglés [Original] »,
@@ -61,11 +61,8 @@ object AudioChoice {
      * MULTI, la piste qui n'est pas française : ces flux marquent souvent la française par défaut, que libVLC prend alors.
      * null = rien qui désigne l'originale : on garde le choix de libVLC.
      */
-    fun pickOriginal(tracks: List<Pair<Int, String>>): Int? =
-        tracks.firstOrNull { originalLabel.containsMatchIn(it.second) && !matches("fr", it.second) }?.first
-            ?: if (!hasFrench(tracks)) null else tracks.firstOrNull { !matches("fr", it.second) }?.first
-
-    private val originalLabel = Regex("""\b(original|originale|VO|VOST)\b""", RegexOption.IGNORE_CASE)
+    fun pickOriginal(tracks: List<Pair<Int, String>>, originalLanguage: String? = null): Int? =
+        com.sokoul.pc.playback.sources.AudioMatch.pickTrack(tracks, "", originalLanguage)
 
     /** Sous-titres par défaut : la piste de la langue choisie, sinon aucune (null = laisser tel quel). */
     fun pickSubtitle(tracks: List<Pair<Int, String>>, lang: String): Int? =

@@ -29,7 +29,9 @@ internal fun renderPanels(out: File) {
             com.sokoul.iptv.domain.AudioLanguage.entries[index % 4], com.sokoul.iptv.domain.VideoQuality.FHD_1080,
             sizeBytes = 1_600_000_000L + index * 90_000_000L,
             readiness = com.sokoul.pc.playback.session.Readiness.Ready,
-            announcedAudio = listOf(listOf("FR", "JA"), listOf("FR"), listOf("JA"), emptyList())[index % 4],
+            // The first one declares the ten languages of a real MULTI remux: none may be cut.
+            announcedAudio = if (index == 0) listOf("FR", "EN", "ES", "HI", "IT", "DE", "ZH", "RU", "TH", "UK")
+                else listOf(listOf("FR", "JA"), listOf("FR"), listOf("JA"), emptyList())[index % 4],
             rejected = com.sokoul.pc.playback.session.Doubt.OtherEpisode.takeIf { index % 10 == 9 },
             open = { _, _ -> error("Preview sources never open a stream") },
         )
@@ -65,6 +67,10 @@ internal fun renderPanels(out: File) {
         "sources" to {
             com.sokoul.pc.playback.ui.SourceBrowserContent(versions, versions[1].key, false, Modifier.align(Alignment.CenterEnd).padding(end = 40.dp), verified = { it.key == versions[1].key })
         },
+        "language" to {
+            com.sokoul.pc.playback.ui.LanguageNoticeBanner(com.sokoul.pc.playback.session.LanguageNotice("it", "Track 1 - [English]"), {}, {},
+                Modifier.align(Alignment.TopEnd).padding(top = 44.dp, end = 60.dp), androidx.compose.runtime.remember { androidx.compose.ui.focus.FocusRequester() })
+        },
         "still" to {
             com.sokoul.pc.playback.ui.StillWatchingPrompt({}, {}, androidx.compose.runtime.remember { androidx.compose.ui.focus.FocusRequester() }, Modifier.align(Alignment.Center))
         },
@@ -82,7 +88,7 @@ internal fun renderPanels(out: File) {
             }
         },
     )
-    listOf("fr", "en").forEach { language ->
+    listOf("fr", "en", "ar").forEach { language ->
         com.sokoul.pc.i18n.Strings.applyLanguage(language)
         listOf(1920 to 1080, 1280 to 720).forEach { (width, height) ->
             surfaces.forEach { (name, panel) ->

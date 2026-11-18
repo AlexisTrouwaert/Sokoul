@@ -29,6 +29,9 @@ class SourceRulesTest {
         assertNull(com.sokoul.desktop.player.AudioChoice.languageOf("Track 2 · 7.1"))
     }
     private val gb = 1_000_000_000L
+    /** French first, then the original: fixed so that no test depends on the machine's language. */
+    private val frenchFirst = PlaybackPrefs(intent = com.sokoul.desktop.data.AudioIntent(listOf("fr", com.sokoul.desktop.data.AudioIntent.ORIGINAL)))
+
     private fun v(
         key: String,
         q: VideoQuality? = VideoQuality.FHD_1080,
@@ -46,14 +49,14 @@ class SourceRulesTest {
     @Test
     fun a_tv_that_shows_hdr_prefers_the_sharpest_then_the_richest() {
         val list = listOf(v("sdr1080"), v("sdr4k", VideoQuality.UHD_4K), v("hdr4k", VideoQuality.UHD_4K, HdrFormat.HDR10), v("dv4k", VideoQuality.UHD_4K, HdrFormat.DOLBY_VISION))
-        assertEquals(listOf("dv4k", "hdr4k", "sdr4k", "sdr1080"), keys(VersionRanking.rank(list, PlaybackPrefs(), true, caps = tv)))
+        assertEquals(listOf("dv4k", "hdr4k", "sdr4k", "sdr1080"), keys(VersionRanking.rank(list, frenchFirst, true, caps = tv)))
     }
 
     @Test
     fun a_format_the_device_cannot_show_comes_after_plain_picture() {
         val list = listOf(v("dv4k", VideoQuality.UHD_4K, HdrFormat.DOLBY_VISION), v("sdr1080"))
-        assertEquals(listOf("sdr1080", "dv4k"), keys(VersionRanking.rank(list, PlaybackPrefs(), true, caps = tvHd)))
-        assertEquals("windows keeps sdr first", listOf("sdr1080", "dv4k"), keys(VersionRanking.rank(list, PlaybackPrefs(), true)))
+        assertEquals(listOf("sdr1080", "dv4k"), keys(VersionRanking.rank(list, frenchFirst, true, caps = tvHd)))
+        assertEquals("windows keeps sdr first", listOf("sdr1080", "dv4k"), keys(VersionRanking.rank(list, frenchFirst, true)))
     }
 
     @Test
@@ -61,13 +64,13 @@ class SourceRulesTest {
         val lied = v("lied", VideoQuality.UHD_4K, lang = AudioLanguage.VF)
         val honest = v("honest", lang = AudioLanguage.VF)
         val facts = mapOf("lied" to SourceFact(language = AudioLanguage.VO))
-        assertEquals(listOf("honest", "lied"), keys(VersionRanking.rank(listOf(lied, honest), PlaybackPrefs(), true, fact = { facts[it.key] })))
+        assertEquals(listOf("honest", "lied"), keys(VersionRanking.rank(listOf(lied, honest), frenchFirst, true, fact = { facts[it.key] })))
     }
 
     @Test
     fun a_version_that_failed_for_a_lasting_reason_goes_last() {
         val facts = mapOf("bad" to SourceFact(failure = PlayFailure.FakeFile, until = Long.MAX_VALUE))
-        assertEquals(listOf("good", "bad"), keys(VersionRanking.rank(listOf(v("bad"), v("good")), PlaybackPrefs(), true, fact = { facts[it.key] })))
+        assertEquals(listOf("good", "bad"), keys(VersionRanking.rank(listOf(v("bad"), v("good")), frenchFirst, true, fact = { facts[it.key] })))
     }
 
     @Test
@@ -99,6 +102,32 @@ class SourceRulesTest {
         assertNull(c.failure("x"))
         assertEquals(AudioLanguage.MULTI, c.fact("x")?.language)
         assertEquals(2160, c.fact("x")?.height)
+    }
+
+    @Test
+    fun forgetting_failures_keeps_metadata_and_saves_only_changes() {
+        var stored: String? = null
+        var writes = 0
+        val mem = SourceMemory({ stored }, { stored = it; writes++ })
+        mem.noteGood("movie|wrong", AudioLanguage.MULTI, 2160, listOf("fr"))
+        mem.noteFailure("movie|wrong", PlayFailure.WrongLanguage)
+        mem.noteFailure("other|fake", PlayFailure.FakeFile)
+        val before = writes
+
+        mem.forgetFailures()
+
+        assertNull(mem.failure("movie|wrong"))
+        assertNull(mem.failure("other|fake"))
+        assertEquals(0L, mem.fact("movie|wrong")?.until)
+        assertEquals(AudioLanguage.MULTI, mem.fact("movie|wrong")?.language)
+        assertEquals(2160, mem.fact("movie|wrong")?.height)
+        assertEquals(listOf("fr"), mem.fact("movie|wrong")?.codes)
+        assertEquals(before + 1, writes)
+        mem.forgetFailures()
+        assertEquals(before + 1, writes)
+        val restored = SourceMemory({ stored }, {})
+        assertNull(restored.failure("movie|wrong"))
+        assertEquals(listOf("fr"), restored.fact("movie|wrong")?.codes)
     }
 
     @Test
@@ -146,7 +175,7 @@ class SourceRulesTest {
         assertTrue(SourceRules.suspicious(v("fake4k", VideoQuality.UHD_4K, size = 1 * gb), 120))
         assertFalse(SourceRules.suspicious(v("real4k", VideoQuality.UHD_4K, size = 15 * gb), 120))
         assertFalse("unknown length", SourceRules.suspicious(v("x", VideoQuality.UHD_4K, size = 1 * gb), null))
-        val ranked = VersionRanking.rank(listOf(v("fake4k", VideoQuality.UHD_4K, size = 1 * gb), v("real1080", size = 6 * gb)), PlaybackPrefs(), true, caps = tv, expectedMinutes = 120)
+        val ranked = VersionRanking.rank(listOf(v("fake4k", VideoQuality.UHD_4K, size = 1 * gb), v("real1080", size = 6 * gb)), frenchFirst, true, caps = tv, expectedMinutes = 120)
         assertEquals("real1080", ranked.first().key)
     }
 
@@ -178,8 +207,8 @@ class SourceRulesTest {
     fun generic_multi_does_not_outrank_explicit_french_without_french_evidence() {
         val multi = v("multi", q = VideoQuality.UHD_4K, lang = AudioLanguage.MULTI)
         val vf = v("vf", q = VideoQuality.SD)
-        assertEquals(listOf("vf", "multi"), keys(VersionRanking.rank(listOf(multi, vf), PlaybackPrefs(), true)))
-        assertEquals(listOf("multi", "vf"), keys(VersionRanking.rank(listOf(multi, vf), PlaybackPrefs(), true,
+        assertEquals(listOf("vf", "multi"), keys(VersionRanking.rank(listOf(multi, vf), frenchFirst, true)))
+        assertEquals(listOf("multi", "vf"), keys(VersionRanking.rank(listOf(multi, vf), frenchFirst, true,
             fact = { if (it.key == "multi") SourceFact(language = AudioLanguage.MULTI) else null })))
     }
 

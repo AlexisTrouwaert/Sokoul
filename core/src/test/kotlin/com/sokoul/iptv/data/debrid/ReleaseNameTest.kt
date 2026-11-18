@@ -20,11 +20,60 @@ class ReleaseNameTest {
         assertFalse("one other language may be the original", ReleaseName.parse("Squid.Game.S01E01.1080p.WEB\n🇰🇷").dub)
     }
 
+    @Test fun `a French flag beside VOSTFR is subtitles, not a French track`() {
+        val vostfr = ReleaseName.parse("[Xspitfire911] Sousou no Frieren S01E04 BDRIP 1080p X265 10bit VOSTFR.mkv\n👤 12 💾 1.4 GB ⚙️ Nyaa\n🇯🇵 / 🇫🇷")
+        assertEquals(AudioLanguage.VOSTFR, vostfr.language)
+        assertFalse("FR" in vostfr.audio)
+        // A French word in the name still announces a French track beside the subtitles.
+        assertEquals(AudioLanguage.MULTI, ReleaseName.parse("Frieren.S01E04.VOSTFR.FRENCH.1080p.WEB\n🇯🇵 / 🇫🇷").language)
+    }
+
+    @Test fun `flags beside Dual Audio are the subtitles, not a French track`() {
+        // Torrentio's text for Frieren S01E08: fifteen subtitle flags on the "Dual Audio" line, French among them.
+        val sokudo = ReleaseName.parse(
+            "[Sokudo] Sousou no Frieren S01 P1 [1080p EAC3 AV1][dual audio] | Frieren: Beyond Journey's End\n" +
+                "[Sokudo] Sousou no Frieren S01E08 [1080p EAC3 AV1][dual audio].mkv\n👤 2 💾 302.73 MB ⚙️ NyaaSi\n" +
+                "Dubbed / Dual Audio / 🇬🇧 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇲🇽 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇸🇦 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+        )
+        assertFalse("FR" in sokudo.audio)
+        assertTrue(sokudo.dub)
+        assertTrue(sokudo.language != AudioLanguage.MULTI && sokudo.language != AudioLanguage.VF)
+        // Two flags beside "Dual Audio" are its two tracks: French with the original stays a French MULTI.
+        assertEquals(AudioLanguage.MULTI, ReleaseName.parse("Frieren.S01E08.1080p.WEB\nDual Audio / 🇫🇷 / 🇯🇵").language)
+    }
+
+    @Test fun `instant in a title is no cache label`() {
+        assertNull(ReleaseName.parse("Instant.Family.2018.1080p.BluRay.x264-DRONES").cached)
+        assertNull(ReleaseName.parse("Instant Karma 2024 2160p WEB-DL").cached)
+        assertEquals(true, ReleaseName.parse("[RD+] Instant.Family.2018.1080p.BluRay").cached)
+        assertEquals(true, ReleaseName.parse("Film.2020.1080p [INSTANT]").cached)
+        assertEquals(true, ReleaseName.parse("⚡ Film.2020.1080p").cached)
+    }
+
+    @Test fun `a small video beside a large one is a sample, a short episode alone is not`() {
+        val film = RdFile(1, "Film/Film.2020.1080p.mkv", 8_000_000_000, false)
+        val teaser = RdFile(2, "Film/teaser.mkv", 30_000_000, false)
+        assertEquals(film, ReleaseName.pickFile(listOf(teaser, film), null, null))
+        assertTrue(ReleaseName.sampleBySize(30_000_000, 8_000_000_000))
+        // A short, very compressed episode is no sample: alone, or among episodes of its size.
+        assertFalse(ReleaseName.sampleBySize(40_000_000, 40_000_000))
+        val e1 = RdFile(1, "Show/Show.S01E01.mkv", 40_000_000, false)
+        val e2 = RdFile(2, "Show/Show.S01E02.mkv", 45_000_000, false)
+        assertEquals(e1, ReleaseName.pickFile(listOf(e1, e2), 1, 1))
+    }
+
     @Test fun `DUAL sans francais - langue inconnue (version turque et anglaise)`() {
         // nom réel classé « MULTI 4K » sur le PC : le film démarrait en turc
         val r = ReleaseName.parse("Inception.2010.UHD.Bluray.1080p.DUAL.x264-HDM.mkv")
         assertNull(r.language)
         assertEquals(VideoQuality.FHD_1080, r.quality)
+    }
+
+    @Test fun `episode numbers followed by an underscore are read`() {
+        assertEquals(4 to 6, ReleaseName.episodeTag("S04E006_Episode 6.mkv"))
+        assertEquals(4 to 5, ReleaseName.episodeTag("The.Handmaids.Tale.S04E05.1080p.mkv"))
+        assertEquals(4 to 5, ReleaseName.episodeTag("The Handmaid's Tale - 4X05 - Chicago.mp4"))
+        assertNull("a resolution is no episode", ReleaseName.episodeTag("Film.1920x1080.mkv"))
     }
 
     @Test fun `DUAL avec le francais - MULTI`() {

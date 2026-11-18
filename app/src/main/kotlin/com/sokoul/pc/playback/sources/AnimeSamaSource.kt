@@ -101,13 +101,21 @@ internal object AnimeSamaParse {
     }
 }
 
-/** Uses Mainapi for catalogue lookup and host extraction; never opens embed HTML in the player. */
-class AnimeSamaSource(http: OkHttpClient, private val baseUrl: () -> String?, private val accessKey: () -> String?, private val probe: StreamProbe, private val localResolver: NativeEmbedResolver? = null) {
+/**
+ * Uses Mainapi for catalogue lookup and host extraction; never opens embed HTML in the player. When Mainapi cannot be
+ * reached, [direct] reads the site from the app and its players go to the local extractor.
+ */
+class AnimeSamaSource(http: OkHttpClient, private val baseUrl: () -> String?, private val accessKey: () -> String?, private val probe: StreamProbe, private val localResolver: NativeEmbedResolver? = null,
+                      private val direct: AnimeSamaDirect? = null) {
     data class Result(val versions: List<PlayVersion> = emptyList(), val notices: List<SourceNotice> = emptyList())
-    private val client = http.newBuilder().callTimeout(25, TimeUnit.SECONDS).build()
+    // A server that is off on the network may drop the connection instead of refusing it: 3 s to connect, so the
+    // TV turns to the site without waiting the whole call time (29 s seen on the Formuler with Docker off).
+    private val client = http.newBuilder().callTimeout(25, TimeUnit.SECONDS).connectTimeout(3, TimeUnit.SECONDS).build()
     private val json = Json { ignoreUnknownKeys = true }
     suspend fun find(request: PlayRequest, names: List<String>, absolute: Int?): Result = withTimeoutOrNull(60_000L) {
         var unavailable = false
+        val note = com.sokoul.pc.playback.session.StartClock::note
+        note("anime-sama names ${names.distinct().size}")
         for (name in names.distinct()) {
             var lookup = get(name)
             if (lookup.unavailable) unavailable = true
@@ -124,11 +132,18 @@ class AnimeSamaSource(http: OkHttpClient, private val baseUrl: () -> String?, pr
                 target = mapped(catalogue)
             }
             if (target == null && AnimeSamaParse.pending(catalogue, names)) unavailable = true
+            note("anime-sama lookup ${if (lookup.unavailable) "unavailable" else "ok"}${if (lookup.direct) " (site)" else ""}, ${if (target == null) "no match" else "matched"}")
             val selected = target ?: continue
-            val resolved = get(name, selected).payload ?: return@withTimeoutOrNull Result(notices = listOf(SourceNotice.AnimeSamaUnavailable))
+            // The episode is resolved where it was found: the server's and the site's indexes may differ.
+            val resolved = get(name, selected, lookup.direct).payload ?: run {
+                note("anime-sama resolve unavailable")
+                return@withTimeoutOrNull Result(notices = listOf(SourceNotice.AnimeSamaUnavailable))
+            }
             val work = resolved.getOrNull(selected.anime - 1) as? JsonObject
-            if (work?.let { AnimeSamaParse.text(it, "extractionStatus") } == "vip_required") return@withTimeoutOrNull Result(notices = listOf(SourceNotice.AnimeSamaVipRequired))
-            val versions = AnimeSamaParse.links(resolved, selected, baseUrl(), localResolver != null).map { link ->
+            val status = work?.let { AnimeSamaParse.text(it, "extractionStatus") }
+            note("anime-sama resolve $status")
+            if (status == "vip_required") return@withTimeoutOrNull Result(notices = listOf(SourceNotice.AnimeSamaVipRequired))
+            val versions = AnimeSamaParse.links(resolved, selected, baseUrl(), localResolver != null).filter { !lookup.direct || it.localExtraction }.map { link ->
                 PlayVersion(key = "anime-sama-${link.url.hashCode().toUInt()}", origin = VersionOrigin.Web,
                     name = "Anime-Sama \u00b7 ${link.name}", language = link.language, readiness = Readiness.Likely,
                     anime = true, announcedAudio = if (link.language == AudioLanguage.VF) listOf("FR") else emptyList(),
@@ -139,14 +154,38 @@ class AnimeSamaSource(http: OkHttpClient, private val baseUrl: () -> String?, pr
                         StreamRequest(link.url, link.headers["User-Agent"], link.headers["Referer"], request.title, live = false, mediaType = link.mediaType, externalSubtitles = link.subtitles)
                     })
             }
+            note("anime-sama links ${versions.size}")
             return@withTimeoutOrNull Result(versions, if (versions.isEmpty()) listOf(SourceNotice.AnimeSamaUnavailable) else emptyList())
         }
         Result(notices = if (unavailable) listOf(SourceNotice.AnimeSamaUnavailable) else emptyList())
-    } ?: Result(notices = listOf(SourceNotice.AnimeSamaUnavailable))
+    } ?: Result(notices = listOf(SourceNotice.AnimeSamaUnavailable)).also { com.sokoul.pc.playback.session.StartClock.note("anime-sama timed out") }
 
-    private data class Lookup(val payload: JsonArray? = null, val unavailable: Boolean = false)
+    private data class Lookup(val payload: JsonArray? = null, val unavailable: Boolean = false, val direct: Boolean = false)
 
-    private suspend fun get(name: String, target: AnimeSamaParse.Target? = null): Lookup = withContext(Dispatchers.IO) {
+    /** The server's answer; when the server cannot be reached and the app can read the site itself, the site's. */
+    private suspend fun get(name: String, target: AnimeSamaParse.Target? = null, fromSite: Boolean = false): Lookup {
+        if (!fromSite) {
+            val server = server(name, target)
+            if (!server.unavailable || direct == null || localResolver == null) return server
+            com.sokoul.pc.playback.session.StartClock.note("anime-sama server unavailable, reading the site")
+        }
+        val site = direct ?: return Lookup(unavailable = true)
+        val payload = try {
+            if (target == null) site.search(name) else site.resolve(name, target)
+        } catch (c: CancellationException) { throw c } catch (_: Exception) { null }
+        return Lookup(payload, unavailable = payload == null, direct = true)
+    }
+
+    // The search answers at once even for a new work ("pending" while the server builds it): past 8 s the server is
+    // taken as unreachable (seen on the TV: 22 s before an off server failed). Resolving an episode keeps the call time.
+    private suspend fun server(name: String, target: AnimeSamaParse.Target?): Lookup =
+        withTimeoutOrNull(if (target == null) SEARCH_MS else Long.MAX_VALUE) { serverCall(name, target) } ?: Lookup(unavailable = true)
+
+    private companion object {
+        const val SEARCH_MS = 8_000L
+    }
+
+    private suspend fun serverCall(name: String, target: AnimeSamaParse.Target?): Lookup = withContext(Dispatchers.IO) {
         val base = baseUrl()?.trim()?.trimEnd('/')?.toHttpUrlOrNull() ?: return@withContext Lookup(unavailable = true)
         val url = base.newBuilder().addPathSegments("anime/search").addPathSegment(name).apply {
             target?.let { addQueryParameter("resolve", "1"); addQueryParameter("anime", "${it.anime}"); addQueryParameter("season", "${it.season}"); addQueryParameter("episode", "${it.episode}") }

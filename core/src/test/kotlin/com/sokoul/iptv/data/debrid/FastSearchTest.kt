@@ -53,6 +53,23 @@ class FastSearchTest {
         assertEquals(listOf("FR", "EN"), multi.release.audio)
     }
 
+    @Test fun `the merge of one file reads the same whichever answer came first`() {
+        val dual = DebridStream("$hash:7", "Film.Dual.mkv", null, hash, 7, "Film.Dual.mkv", Release(dub = true, audio = listOf("ES", "EN")))
+        val french = DebridStream("$hash:7", "Film.MULTi.mkv", "https://torrentio.strem.fun/resolve/realdebrid/x/$hash/null/7/f.mkv", hash, 7, null,
+            Release(language = AudioLanguage.MULTI, audio = listOf("FR", "EN")))
+        val one = DebridStreams.combine(listOf(listOf(dual), listOf(french))).single().release
+        val other = DebridStreams.combine(listOf(listOf(french), listOf(dual))).single().release
+        assertEquals(one.language, other.language)
+        assertEquals(one.audio, other.audio)
+        assertEquals(one.dub, other.dub)
+        assertEquals(listOf("FR", "EN", "ES"), one.audio)
+        assertFalse("French announced for this file: not a foreign dub", one.dub)
+        // Without French on either side, "Dual" from either answer marks the dub.
+        val plain = french.copy(release = Release(audio = listOf("EN")))
+        assertTrue(DebridStreams.combine(listOf(listOf(plain), listOf(dual))).single().release.dub)
+        assertTrue(DebridStreams.combine(listOf(listOf(dual), listOf(plain))).single().release.dub)
+    }
+
     @Test fun `different files of one torrent stay apart`() {
         val a = DebridStream("$hash:1", "a", null, hash, 1, "a.mkv", Release())
         val b = DebridStream("$hash:2", "b", null, hash, 2, "b.mkv", Release())

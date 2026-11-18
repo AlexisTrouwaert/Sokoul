@@ -16,7 +16,14 @@ data class DeviceCaps(val hdr10: Boolean, val dolbyVision: Boolean, val maxHeigh
 }
 
 /** What was seen of a version when it was actually played. */
-data class SourceFact(val failure: PlayFailure? = null, val until: Long = 0, val language: AudioLanguage? = null, val height: Int? = null)
+data class SourceFact(
+    val failure: PlayFailure? = null,
+    val until: Long = 0,
+    val language: AudioLanguage? = null,
+    val height: Int? = null,
+    /** The track languages heard when it played (ISO 639-1); empty when unknown or recorded before they were kept. */
+    val codes: List<String> = emptyList(),
+)
 
 /** The rules that judge a source. Pure and tested: nothing here touches the network or the screen. */
 object SourceRules {
@@ -62,6 +69,12 @@ object SourceRules {
             else -> return false
         }
         return kbps(size, expectedMinutes) < floor
+    }
+
+    /** The languages of a file's tracks (ISO 639-1), only when every track names one: a partial list would prove a lack falsely. */
+    fun heardCodes(tracks: List<Pair<Int, String>>): List<String> {
+        val codes = tracks.map { AudioChoice.languageOf(it.second) }
+        return if (codes.isEmpty() || codes.any { it == null }) emptyList() else codes.filterNotNull().distinct()
     }
 
     /** What the tracks of the file say, when they say something. A track with no known language proves nothing. */
@@ -110,12 +123,14 @@ class SourceMemory(private val read: () -> String?, private val write: (String) 
         loaded = true
         read()?.lines()?.forEach { line ->
             val p = line.split('\t')
-            if (p.size == 5) facts[p[0]] = SourceFact(failureOf(p[1]), p[2].toLongOrNull() ?: 0, AudioLanguage.entries.firstOrNull { it.name == p[3] }, p[4].toIntOrNull())
+            // Five fields before the track languages were kept, six since.
+            if (p.size == 5 || p.size == 6) facts[p[0]] = SourceFact(failureOf(p[1]), p[2].toLongOrNull() ?: 0, AudioLanguage.entries.firstOrNull { it.name == p[3] }, p[4].toIntOrNull(),
+                p.getOrNull(5)?.split(',')?.filter { it.isNotBlank() }.orEmpty())
         }
     }
 
     private fun save() {
-        write(facts.entries.toList().takeLast(MAX).joinToString("\n") { (k, f) -> listOf(k, codeOf(f.failure), f.until, f.language?.name.orEmpty(), f.height ?: "").joinToString("\t") })
+        write(facts.entries.toList().takeLast(MAX).joinToString("\n") { (k, f) -> listOf(k, codeOf(f.failure), f.until, f.language?.name.orEmpty(), f.height ?: "", f.codes.joinToString(",")).joinToString("\t") })
     }
 
     fun fact(key: String): SourceFact? {
@@ -147,11 +162,24 @@ class SourceMemory(private val read: () -> String?, private val write: (String) 
         if (changed) save()
     }
 
+    /** Forget every failure while keeping the observed audio and picture metadata. */
+    fun forgetFailures() {
+        load()
+        var changed = false
+        facts.entries.toList().forEach { (key, fact) ->
+            if (fact.failure != null || fact.until != 0L) {
+                facts[key] = fact.copy(failure = null, until = 0)
+                changed = true
+            }
+        }
+        if (changed) save()
+    }
+
     /** It played: whatever was held against it is over, and what it really contains is known. */
-    fun noteGood(key: String, language: AudioLanguage?, height: Int?) {
+    fun noteGood(key: String, language: AudioLanguage?, height: Int?, codes: List<String> = emptyList()) {
         load()
         val before = facts[key]
-        val after = SourceFact(language = language ?: before?.language, height = height ?: before?.height)
+        val after = SourceFact(language = language ?: before?.language, height = height ?: before?.height, codes = codes.ifEmpty { before?.codes.orEmpty() })
         if (before != after) {
             facts[key] = after
             save()

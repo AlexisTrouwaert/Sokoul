@@ -118,6 +118,8 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation(libs.androidx.activity.compose)
     implementation(libs.okhttp)
+    // Streaming sites read by the app itself (Coflix…), as core already does.
+    implementation(libs.jsoup)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)

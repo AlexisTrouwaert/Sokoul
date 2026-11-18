@@ -39,6 +39,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.sokoul.desktop.data.AccentColor
+import com.sokoul.desktop.data.AudioIntent
 import com.sokoul.desktop.data.AudioPreference
 import com.sokoul.desktop.data.BufferProfile
 import com.sokoul.desktop.data.DesktopPrefs
@@ -80,10 +81,14 @@ class SettingsHooks(
     /** The language was changed: the whole interface is drawn again. */
     val onLanguage: () -> Unit = {},
     val onHomeRows: () -> Unit = {},
+    /** Opens the ordered list of audio languages. */
+    val onAudioLanguages: () -> Unit = {},
+    val onLanguages: () -> Unit = {},
     val onDebridTools: (() -> Unit)? = null,
     /** Every service with its state, read when the page opens. */
     val services: () -> List<ServiceInfo> = { emptyList() },
     val onClearCache: () -> Unit = {},
+    val onForgetSourceFailures: () -> Unit = {},
     val onClearHistory: () -> Unit = {},
     /** Accent, menu, home rows, subtitle style and screensaver back to what they were at first. */
     val onResetDisplay: () -> Unit = {},
@@ -274,7 +279,15 @@ internal fun SubtitlesPane(prefs: DesktopPrefs) {
         ChoiceRow(L("Position", "Position").text(), "pref-sub-position", SubtitlePosition.entries, prefs.subtitlePosition, { positionText(it) }) { prefs.subtitlePosition = it; look++ }
         ChoiceRow(L("Font", "Police").text(), "pref-sub-font", SubtitleFont.entries, prefs.subtitleFont, { it.label() }) { prefs.subtitleFont = it; look++ }
         GroupTitle(L("Automatic", "Automatiques").text())
-        ChoiceRow(tr(Text.PrefSubtitles), "pref-subtitles", SubtitlePreference.entries, prefs.subtitlePreference, { if (it == SubtitlePreference.Off) tr(Text.SubtitlesOff) else tr(Text.PrefSystem) }) { prefs.subtitlePreference = it }
+        // Off, automatic (the interface language when the audio heard is another one), or always one language.
+        ChoiceRow(
+            tr(Text.PrefSubtitles), "pref-subtitles", listOf(AudioIntent.SUBTITLES_OFF, AudioIntent.SUBTITLES_AUTO) + AUDIO_LANGUAGE_CHOICES, prefs.audioIntent.subtitles,
+            { mode -> when (mode) {
+                AudioIntent.SUBTITLES_OFF -> tr(Text.SubtitlesOff)
+                AudioIntent.SUBTITLES_AUTO -> L("Automatic", "Automatiques").text()
+                else -> com.sokoul.pc.playback.ui.languageName(mode)
+            } },
+        ) { prefs.audioIntent = prefs.audioIntent.copy(subtitles = it) }
     }
     Spacer(Modifier.height(10.dp))
     SettingsRow(
@@ -289,14 +302,26 @@ internal fun SubtitlesPane(prefs: DesktopPrefs) {
 
 /** Starting a title, which version to prefer, quality, the next episode and the picture. */
 @Composable
-internal fun PlaybackPane(prefs: DesktopPrefs) {
+internal fun PlaybackPane(prefs: DesktopPrefs, hooks: SettingsHooks = SettingsHooks()) {
     GroupTitle(L("Starting", "Démarrage").text())
     ChoiceRow(tr(Text.PrefStart), "pref-start", StartMode.entries, prefs.startMode, ::startLabel) { prefs.startMode = it }
     ChoiceRow(L("Next episode automatically", "Épisode suivant automatique").text(), "pref-auto-next", ON_OFF, prefs.autoNext, ::onOff) { prefs.autoNext = it }
     GroupTitle(L("Which version", "Quelle version").text())
-    ChoiceRow(tr(Text.PrefAudio), "pref-audio", AudioPreference.entries, prefs.audioPreference, ::audioLabel) { prefs.audioPreference = it }
+    // Any language, in order: the first one a version offers is played (book section 3).
+    SettingsRow(L("Audio languages", "Langues audio").text(), audioIntentSummary(prefs.audioIntent), true, remember { FocusRequester() }, hooks.onAudioLanguages, "pref-audio")
     ChoiceRow(tr(Text.PrefOrigin), "pref-origin", PreferredOrigin.entries, prefs.preferredOrigin, ::originLabel) { prefs.preferredOrigin = it }
     ChoiceRow(L("Remember hoster chosen for each source", "Mémoriser le lecteur choisi pour chaque source").text(), "pref-remember-hoster", ON_OFF, prefs.rememberSourceHosters, ::onOff) { prefs.rememberSourceHosters = it }
+    ChoiceRow(L("Best quality first", "Meilleure qualité d'abord").text(), "pref-best-quality", ON_OFF, prefs.bestQualityFirst, ::onOff) { prefs.bestQualityFirst = it }
+    GroupTitle(L("Search services", "Services de recherche").text())
+    var services by remember { mutableStateOf(prefs.searchServices) }
+    com.sokoul.iptv.data.debrid.SourceAddon.entries.forEach { service ->
+        // Keep the final active service on, including the choice row's own remembered value.
+        val choices = if (services.size == 1 && service in services) listOf(true) else ON_OFF
+        ChoiceRow(service.label, "pref-service-${service.name.lowercase()}", choices, service in services, ::onOff) { enabled ->
+            services = if (enabled) services + service else services - service
+            prefs.searchServices = services
+        }
+    }
     SourcePriorityRows(prefs, false)
     SourcePriorityRows(prefs, true)
     ChoiceRow(tr(Text.PrefMaxQuality), "pref-quality", MaxQuality.entries, prefs.maxQuality, { it.label }) { prefs.maxQuality = it }
@@ -333,21 +358,8 @@ private fun SourcePriorityRows(prefs: DesktopPrefs, anime: Boolean) {
 /** Language, as a choice: the system's, French or English (Movix: language). */
 @Composable
 internal fun LanguagePane(prefs: DesktopPrefs, hooks: SettingsHooks) {
-    val choices = listOf("auto", "fr", "en")
-    ChoiceRow(
-        tr(Text.SettingsLanguage), "pref-language", choices, prefs.language,
-        {
-            when (it) {
-                "fr" -> tr(Text.LanguageFrench)
-                "en" -> tr(Text.LanguageEnglish)
-                else -> L("System", "Système").text()
-            }
-        },
-    ) {
-        prefs.language = it
-        com.sokoul.pc.i18n.Strings.applyLanguage(it)
-        hooks.onLanguage()
-    }
+    // A list to choose from, each language named in itself (Español, Deutsch, العربية): see InterfaceLanguageScreen.
+    SettingsRow(tr(Text.SettingsLanguage), interfaceLanguageName(prefs.language), true, remember { FocusRequester() }, hooks.onLanguages, "pref-language")
     Label(
         L("The whole interface changes at once. Titles and descriptions follow the language too.", "Toute l'interface change aussitôt. Les titres et les descriptions suivent aussi la langue.").text(),
         Type.Body, Palette.Secondary, Modifier.padding(start = 30.dp, top = 12.dp, end = 30.dp),
@@ -361,6 +373,7 @@ internal fun AboutPane(hooks: SettingsHooks) {
     GroupTitle(L("Maintenance", "Maintenance").text())
     val done = L("Done", "Fait").text()
     ConfirmRow(L("Clear the catalogue cache", "Vider le cache du catalogue").text(), "about-clear-cache", done, hooks.onClearCache)
+    ConfirmRow(L("Forget source failures", "Oublier les échecs des sources").text(), "about-forget-failures", done, hooks.onForgetSourceFailures)
     ConfirmRow(L("Erase this profile's watch history", "Effacer l'historique de ce profil").text(), "about-clear-history", done, hooks.onClearHistory)
     ConfirmRow(L("Reset the display settings", "Réinitialiser l'affichage").text(), "about-reset-display", done, hooks.onResetDisplay)
     Label(

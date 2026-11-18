@@ -33,6 +33,12 @@ import kotlinx.coroutines.launch
 /** False while a list is scrolling: a card sliding under a still mouse must not grab focus and fight the scroll. */
 val LocalHoverFocus = androidx.compose.runtime.staticCompositionLocalOf<() -> Boolean> { { true } }
 
+/**
+ * True on pages read with the mouse resting on them (Settings): hovering highlights a row without giving it the focus,
+ * so the page neither scrolls to it nor switches category, and the mouse stays in control. A click focuses and activates.
+ */
+val LocalHoverOnly = androidx.compose.runtime.staticCompositionLocalOf { false }
+
 /** Rows only realign themselves for keyboard moves: a page must not jump because the mouse crossed a card. */
 object FocusSource {
     @Volatile var lastWasMouse = false
@@ -85,16 +91,43 @@ fun Modifier.tvFocusable(
 ): Modifier {
     val focusManager = LocalFocusManager.current
     val hoverAllowed = LocalHoverFocus.current
+    val hoverOnly = LocalHoverOnly.current
     val click = androidx.compose.runtime.rememberUpdatedState(onClick)
+    val report = androidx.compose.runtime.rememberUpdatedState(onFocusChanged)
+    // Hover and focus seen by this element, for the highlight of a hover that takes no focus.
+    val seen = remember { BooleanArray(2) }
     return this
         .onPointerEvent(PointerEventType.Enter) {
-            if (hoverAllowed() && FocusSource.pointerReallyMoved()) {
+            if (hoverOnly) {
+                if (FocusSource.pointerReallyMoved() && !seen[0]) {
+                    FocusSource.lastWasMouse = true
+                    seen[0] = true
+                    if (!seen[1]) report.value(true)
+                }
+            } else if (hoverAllowed() && FocusSource.pointerReallyMoved()) {
                 FocusSource.lastWasMouse = true
                 runCatching { requester.requestFocus() }
             }
         }
+        // A pointer already inside when it starts moving again (or entering right after a pause) still highlights.
+        .onPointerEvent(PointerEventType.Move) {
+            if (hoverOnly && !seen[0]) {
+                FocusSource.lastWasMouse = true
+                seen[0] = true
+                if (!seen[1]) report.value(true)
+            }
+        }
+        .onPointerEvent(PointerEventType.Exit) {
+            if (seen[0]) {
+                seen[0] = false
+                if (!seen[1]) report.value(false)
+            }
+        }
         .focusRequester(requester)
-        .onFocusChanged { onFocusChanged(it.isFocused) }
+        .onFocusChanged {
+            seen[1] = it.isFocused
+            report.value(it.isFocused || seen[0])
+        }
         .onKeyEvent { event ->
             when {
                 event.type == KeyEventType.KeyDown && (event.key == Key.Enter || event.key == Key.NumPadEnter) -> {
@@ -116,7 +149,16 @@ fun Modifier.tvFocusable(
         .focusable()
         // Not clickable(): it holds a second focus target, and a press on it breaks Compose's focus tree ("ActiveParent with
         // no focused child"), which closes the window.
-        .pointerInput(Unit) { detectTapGestures(onTap = { click.value() }) }
+        .pointerInput(hoverOnly) {
+            detectTapGestures(onTap = {
+                // Hovering gave no focus: the click does, so the keyboard goes on from the row the mouse chose.
+                if (hoverOnly) {
+                    FocusSource.lastWasMouse = true
+                    runCatching { requester.requestFocus() }
+                }
+                click.value()
+            })
+        }
         .semantics {
             this.onClick {
                 click.value()

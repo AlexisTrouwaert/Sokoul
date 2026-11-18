@@ -116,8 +116,13 @@ class InterfaceTest {
         com.sokoul.pc.data.PageKind.entries.forEach { kind ->
             val plan = com.sokoul.pc.data.PagePlans.of(kind)
             assertEquals(kind.name, plan.size, plan.map { it.id }.distinct().size)
-            assertTrue(plan.any { it is com.sokoul.pc.data.PageRow.Moods })
-            assertTrue(plan.last() is com.sokoul.pc.data.PageRow.Categories)
+            // The Anime page has its own genres (AnimeGenres) in place of moods and categories.
+            if (kind == com.sokoul.pc.data.PageKind.Anime) {
+                assertTrue(plan.any { it is com.sokoul.pc.data.PageRow.AnimeGenres })
+            } else {
+                assertTrue(kind.name, plan.any { it is com.sokoul.pc.data.PageRow.Moods })
+                assertTrue(kind.name, plan.last() is com.sokoul.pc.data.PageRow.Categories)
+            }
         }
         assertTrue(com.sokoul.pc.data.PagePlans.series.none { it is com.sokoul.pc.data.PageRow.Sagas })
     }
@@ -499,14 +504,15 @@ class InterfaceTest {
     @OptIn(ExperimentalTestApi::class)
     @Test
     fun menu_reaches_search_library_and_settings() = runComposeUiTest {
-        setContent { SokoulPcApp(testDeps(db, validator, FakeCatalog()), skipSplash = true) }
+        // Scaled as Main shows it: unscaled in the small test window, the centred tabs cover the avatar that opens Settings.
+        setContent { com.sokoul.pc.ui.ScaledRoot { SokoulPcApp(testDeps(db, validator, FakeCatalog()), skipSplash = true) } }
         waitUntil { onAll("menu-home") }
         onNodeWithTag("menu-library").performClick()
         waitForIdle()
         onNodeWithTag("library-empty").assertExists()
         onNodeWithTag("menu-settings").performClick()
         waitForIdle()
-        onNodeWithTag("settings-credentials").assertExists()
+        assertTrue(tagsOnScreen().toString(), onAll("settings-credentials"))
         onNodeWithTag("menu-search").performClick()
         waitForIdle()
         onNodeWithTag("search").assertExists()
@@ -647,6 +653,12 @@ class InterfaceTest {
         val all = Strings.english.values + Strings.french.values
         assertTrue(all.none { it.contains("apple", ignoreCase = true) })
     }
+
+    /** Every test tag on screen, to say what was there when an expected one is missing. */
+    @OptIn(ExperimentalTestApi::class)
+    private fun androidx.compose.ui.test.ComposeUiTest.tagsOnScreen(): List<String> =
+        onAllNodes(androidx.compose.ui.test.SemanticsMatcher("tagged") { it.config.contains(androidx.compose.ui.semantics.SemanticsProperties.TestTag) })
+            .fetchSemanticsNodes().mapNotNull { it.config.getOrElseNullable(androidx.compose.ui.semantics.SemanticsProperties.TestTag) { null } }
 
     @OptIn(ExperimentalTestApi::class)
     private fun androidx.compose.ui.test.ComposeUiTest.onAll(tag: String): Boolean =

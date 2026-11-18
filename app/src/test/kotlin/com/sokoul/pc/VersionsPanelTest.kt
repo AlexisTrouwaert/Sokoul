@@ -37,8 +37,39 @@ class VersionsPanelTest {
     ).also { it.play(PlayRequest("movie", 1, null, null, "Title", null, null, chooseFirst = true)) }
 
     @OptIn(ExperimentalTestApi::class)
-    private fun androidx.compose.ui.test.ComposeUiTest.rows() =
-        onAllNodes(SemanticsMatcher("a version row") { it.config.getOrNull(SemanticsProperties.TestTag).let { tag -> tag != null && tag.startsWith("version-") && tag.last().isDigit() } }).fetchSemanticsNodes().size
+    private fun androidx.compose.ui.test.ComposeUiTest.rowTags() =
+        onAllNodes(SemanticsMatcher("a version row") { it.config.getOrNull(SemanticsProperties.TestTag).let { tag -> tag != null && tag.startsWith("version-") && tag.last().isDigit() } })
+            .fetchSemanticsNodes().map { it.config.getOrNull(SemanticsProperties.TestTag) to it.config.getOrNull(SemanticsProperties.Text)?.joinToString { t -> t.text } }
+
+    @OptIn(ExperimentalTestApi::class)
+    private fun androidx.compose.ui.test.ComposeUiTest.rows() = rowTags().size
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun yourLanguagesFilterKeepsOnlyWantedVersions() = runComposeUiTest {
+        com.sokoul.pc.i18n.Strings.applyLanguage("en")
+        val versions = listOf("a", "b", "c").mapIndexed { index, key ->
+            PlayVersion(key, VersionOrigin.Debrid, "name $index", readiness = Readiness.Ready) { _, _ ->
+                StreamRequest("u$index", null, null, "t", live = false)
+            }
+        }
+        setContent {
+            com.sokoul.pc.playback.ui.SourceBrowserContent(
+                versions, null, false, wanted = { it.key == "a" },
+            )
+        }
+        waitForIdle()
+        assertEquals(3, rows())
+        onNodeWithTag("versions-language-wanted").performClick()
+        waitForIdle()
+        assertEquals(1, rows())
+        onNodeWithText("name 0", substring = true).assertExists()
+        onNodeWithText("name 1", substring = true).assertDoesNotExist()
+        onNodeWithText("name 2", substring = true).assertDoesNotExist()
+        onNodeWithTag("versions-language-wanted").performClick()
+        waitForIdle()
+        assertEquals(3, rows())
+    }
 
     @OptIn(ExperimentalTestApi::class)
     @Test
@@ -57,10 +88,11 @@ class VersionsPanelTest {
         onNodeWithTag("versions-filter-ready").performClick()
         waitForIdle()
         onNodeWithText("15 of 302 versions", substring = true).assertExists()
-        onNodeWithTag("versions-filter-iptv").performClick()
+        // The chips scroll sideways: "Reset filters" has appeared, so IPTV may now sit past the panel's edge.
+        onNodeWithTag("versions-filter-iptv").performScrollTo().performClick()
         waitForIdle()
-        assertEquals(0, rows())
-        onNodeWithTag("versions-filter-ready").performClick()
+        assertEquals(rowTags().toString(), 0, rows())
+        onNodeWithTag("versions-filter-ready").performScrollTo().performClick()
         waitForIdle()
         assertEquals(2, rows())
         session.close()

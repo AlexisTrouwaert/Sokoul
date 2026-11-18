@@ -18,7 +18,8 @@ import kotlin.concurrent.thread
 /**
  * Live checks without taking over the user's keyboard: when SOKOUL_DEBUG is set, commands written to debug-keys.txt in
  * the data folder go straight to this window. One command per line: UP DOWN LEFT RIGHT ENTER ESC SPACE, a single letter,
- * PINCH_IN or PINCH_OUT (Ctrl + wheel, which is what a touchpad pinch sends), CLICK:x:y or HOVER:x:y (1920-wide coordinates), or WAIT:millis.
+ * PINCH_IN or PINCH_OUT (Ctrl + wheel, which is what a touchpad pinch sends), CLICK:x:y, HOVER:x:y (moves then presses, to give focus)
+ * or MOVE:x:y (moves only, as a mouse passing by) in 1920-wide coordinates, or WAIT:millis.
  */
 object DebugDriver {
     private const val HOVER_STEPS = 8
@@ -85,6 +86,10 @@ object DebugDriver {
                     val (x, y) = command.removePrefix("CLICK:").split(':').map { it.toInt() }
                     click(c, x * c.width / 1920, y * c.width / 1920)
                 }
+                command.startsWith("MOVE:") -> {
+                    val (x, y) = command.removePrefix("MOVE:").split(':').map { it.toInt() }
+                    move(c, x * c.width / 1920, y * c.width / 1920)
+                }
                 command.startsWith("HOVER:") -> {
                     val (x, y) = command.removePrefix("HOVER:").split(':').map { it.toInt() }
                     hover(c, x * c.width / 1920, y * c.width / 1920)
@@ -133,6 +138,15 @@ object DebugDriver {
     }
 
     /** A pointer that walks in from the left, as a hand does: the page sees it move, then arrive. */
+    /** A mouse passing over a point and stopping there, with no press: what a viewer does when only looking. */
+    private fun move(c: Component, x: Int, y: Int) {
+        for (step in -HOVER_STEPS..0) {
+            com.sokoul.pc.ui.FocusSource.mouseMoved()
+            c.dispatchEvent(MouseEvent(c, MouseEvent.MOUSE_MOVED, System.currentTimeMillis(), 0, x + step * HOVER_STEP_PX, y, 0, false, MouseEvent.NOBUTTON))
+            Thread.sleep(HOVER_GAP_MS)
+        }
+    }
+
     private fun hover(c: Component, x: Int, y: Int) {
         for (step in -HOVER_STEPS..0) {
             c.dispatchEvent(MouseEvent(c, MouseEvent.MOUSE_MOVED, System.currentTimeMillis(), 0, x + step * HOVER_STEP_PX, y, 0, false, MouseEvent.NOBUTTON))

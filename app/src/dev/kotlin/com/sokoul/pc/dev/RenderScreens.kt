@@ -284,6 +284,45 @@ fun main(args: Array<String>) {
         kotlin.system.exitProcess(0)
     }
 
+    // "languages": the playback and language settings and the player's language notice in every shipped language, to see
+    // long words (German) and right to left (Arabic), in a throwaway database.
+    if (args.getOrNull(1) == "languages") {
+        val file = File.createTempFile("render-languages", ".db")
+        DesktopDb(file).use { db ->
+            val prefs = com.sokoul.desktop.data.DesktopPrefs(db)
+            prefs.audioIntent = com.sokoul.desktop.data.AudioIntent(listOf("it", com.sokoul.desktop.data.AudioIntent.ORIGINAL))
+            for (language in com.sokoul.pc.i18n.InterfaceLanguages.all) {
+                com.sokoul.pc.i18n.Strings.applyLanguage(language.code)
+                for (pane in listOf("playback", "language")) {
+                    val s = ImageComposeScene(1920, 1080, Density(1f)) {
+                        ScaledRoot { com.sokoul.pc.library.SettingsScreen(androidx.compose.ui.focus.FocusRequester(), prefs, {}, initialPane = pane) }
+                    }
+                    var t = 0L
+                    repeat(12) { s.render(t); t += 50_000_000L }
+                    save("lang_${language.code}_$pane", s, t)
+                    s.close()
+                }
+                val n = ImageComposeScene(1920, 1080, Density(1f)) {
+                    ScaledRoot {
+                        androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color(0xFF3A3F4B))) {
+                            com.sokoul.pc.playback.ui.LanguageNoticeBanner(
+                                com.sokoul.pc.playback.session.LanguageNotice("it", "Track 1 - [English]"), {}, {},
+                                Modifier.align(androidx.compose.ui.Alignment.TopEnd).padding(top = 44.dp, end = 60.dp),
+                                androidx.compose.runtime.remember { androidx.compose.ui.focus.FocusRequester() },
+                            )
+                        }
+                    }
+                }
+                var nt = 0L
+                repeat(12) { n.render(nt); nt += 50_000_000L }
+                save("lang_${language.code}_notice", n, nt)
+                n.close()
+            }
+        }
+        file.delete()
+        kotlin.system.exitProcess(0)
+    }
+
     // "rows": the home rows editor, with one row hidden and one moved, in a throwaway database.
     if (args.getOrNull(1) == "rows") {
         val file = File.createTempFile("render-rows", ".db")
@@ -296,6 +335,16 @@ fun main(args: Array<String>) {
             repeat(20) { s.render(t); t += 50_000_000L }
             save("rows_1080", s, t)
             s.close()
+            // The audio languages editor: an Italian viewer who falls back on the original, in both interface languages.
+            prefs.audioIntent = com.sokoul.desktop.data.AudioIntent(listOf("it", com.sokoul.desktop.data.AudioIntent.ORIGINAL, "en"))
+            for (lang in listOf("fr", "en")) {
+                com.sokoul.pc.i18n.Strings.applyLanguage(lang)
+                val a = ImageComposeScene(1920, 1080, Density(1f)) { ScaledRoot { com.sokoul.pc.library.AudioLanguagesScreen(prefs, {}) } }
+                var at = 0L
+                repeat(20) { a.render(at); at += 50_000_000L }
+                save("audio_languages_$lang", a, at)
+                a.close()
+            }
         }
         file.delete()
         kotlin.system.exitProcess(0)
@@ -414,6 +463,8 @@ fun main(args: Array<String>) {
     val file = File.createTempFile("render-catalog", ".db")
     DesktopDb(file).use { db ->
         StartupRoute.set(db, SetupState.Done)
+        // The app applies the saved interface language when it starts: save the one asked for (-PrenderLanguage).
+        System.getProperty("sokoul.renderLanguage")?.let { com.sokoul.desktop.data.DesktopPrefs(db).language = it }
         val deps = fakeDeps(db)
         val s = scene(deps)
         var t = 0L

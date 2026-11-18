@@ -1,5 +1,6 @@
 package com.sokoul.pc.title
 
+import com.sokoul.iptv.data.net.cinemaOnly
 import com.sokoul.pc.data.L
 import com.sokoul.pc.ui.glassSurface
 import com.sokoul.pc.ui.panelEnter
@@ -39,6 +40,8 @@ import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.NotificationsNone
@@ -146,6 +149,23 @@ private const val ENTER_MILLIS = 720
 private const val TEXT_DELAY_MILLIS = 1500L
 private const val LINK_TRIES = 4
 private const val LINK_RETRY_MS = 15_000L
+
+/**
+ * The Play button's words for a film still only in cinemas ("In cinemas" · "Not yet at home"), or one not out yet
+ * ("Coming soon" · its cinema date); null for anything that can be watched. Play still searches either way.
+ */
+internal fun cinemaLabels(kind: String, info: com.sokoul.iptv.data.net.TmdbInfo?): Pair<String, String>? {
+    if (kind != "movie" || info?.cinemaOnly() != true) return null
+    val out = info.releaseDate?.take(10)
+    val outOn = out?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+    if (outOn != null && outOn.isAfter(LocalDate.now())) {
+        val date = formatDate(out)
+        return L("Coming soon", "Prochainement").text() to L("In cinemas on $date", "Au cinéma le $date").text()
+    }
+    val home = formatDate(info.homeRelease)
+    return L("In cinemas", "Au cinéma").text() to
+        (if (home != null) L("At home on $home", "En vidéo le $home").text() else L("Not yet at home", "Pas encore en vidéo").text())
+}
 
 fun formatDate(iso: String?): String? = iso?.let {
     runCatching { LocalDate.parse(it).format(DateTimeFormatter.ofPattern("d MMM yyyy")) }.getOrNull()
@@ -444,6 +464,7 @@ internal fun HeroLayer(
     fadeTo: Color = Color(0xF2000000),
 ) {
     val density = androidx.compose.ui.platform.LocalDensity.current
+    val rtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
     fun Float.toDpValue(): Dp = with(density) { this@toDpValue.toDp() }
     val screenW = 1920.dp
     val screenH = 1080.dp
@@ -487,6 +508,13 @@ internal fun HeroLayer(
                     .testTag("neighbor-right"),
             )
         }
+        // The card says how to move: left and right to the next titles, down to open the page. Nothing told it, and
+        // the card was taken for a stuck page on the TV (2026-11-18). The glyphs fade with the neighbours.
+        if (neighborAlpha > 0.01f) {
+            val glyph = Modifier.size(40.dp).graphicsLayer { alpha = neighborAlpha * 0.85f }
+            if (neighbors.first != null) Icon(Icons.Filled.ChevronLeft, null, glyph.offset(x = x - 40.dp, y = y + h / 2 - 20.dp), tint = Palette.OnBackground)
+            if (neighbors.second != null) Icon(Icons.Filled.ChevronRight, null, glyph.offset(x = x + cardW, y = y + h / 2 - 20.dp), tint = Palette.OnBackground)
+        }
         Box(
             // Colour, image and shades rendered once into a layer and drawn in one pass, unless a trailer plays in it.
             Modifier.offset(x = x, y = y).size(w, h)
@@ -509,7 +537,10 @@ internal fun HeroLayer(
             ) { image -> Art(image, Modifier.fillMaxSize(), placeholder = Color.Transparent) }
             val engine = deps.player
             if (videoOn && engine != null) VideoFill(engine, Modifier.fillMaxSize())
-            Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to Color(0xD9000000), 0.62f to Color.Transparent)))
+            Box(Modifier.fillMaxSize().background(
+                if (rtl) Brush.horizontalGradient(0.38f to Color.Transparent, 1f to Color(0xD9000000))
+                else Brush.horizontalGradient(0f to Color(0xD9000000), 0.62f to Color.Transparent),
+            ))
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.5f to Color.Transparent, 0.82f to fadeTo.copy(alpha = 0.72f), 0.96f to fadeTo)))
         }
     }
@@ -550,7 +581,9 @@ private fun HeroText(
         value = found?.let { NextEp(it.season, it.episode, it.runtimeMin, it.airDate) }
     }
     val playKind = HeroLogic.playKind(kind == "tv", last != null, last?.finished == true, next, java.time.LocalDate.now())
-    val label = when (playKind) {
+    // A film still only in cinemas: Play still searches, but says what to expect.
+    val cinema = if (resume == null) cinemaLabels(kind, info) else null
+    val label = cinema?.first ?: when (playKind) {
         PlayKind.Resume -> if (resume?.season != null && resume.episode != null) "${tr(Text.Resume)} ${tr(Text.EpisodeShort, resume.season!!, resume.episode!!)}" else tr(Text.Resume)
         PlayKind.Next -> L("Next episode", "Épisode suivant").text()
         PlayKind.New -> L("New episode", "Nouvel épisode").text()
@@ -560,6 +593,7 @@ private fun HeroText(
     val remaining = resume?.takeIf { it.durationMs > 0 }?.let { (((it.durationMs - it.positionMs) / 60_000L).toInt()).coerceAtLeast(1) }
     val progress = resume?.takeIf { it.durationMs > 0 }?.let { it.positionMs.toFloat() / it.durationMs }
     val sub = when {
+        cinema != null -> cinema.second
         remaining != null -> L("${durationLabel(remaining)} left", "Reste ${durationLabel(remaining)}").text()
         (playKind == PlayKind.Next || playKind == PlayKind.New) && next != null ->
             listOfNotNull("S${next!!.season} E${next!!.episode}", next!!.runtimeMin?.takeIf { it > 0 }?.let { durationLabel(it) }).joinToString(" · ")

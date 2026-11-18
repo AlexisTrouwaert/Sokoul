@@ -77,7 +77,7 @@ class MultiSourceSearchTest {
     }
 
     private fun search(lookup: AnimeLookup?): List<DebridResult> = runBlocking {
-        debrid.search(query, info, refresh = true, french = true) { lookup }.toList()
+        debrid.search(query, info, refresh = true) { lookup }.toList()
     }
 
     @Test fun `without an identity only the IMDb requests leave`() {
@@ -103,6 +103,49 @@ class MultiSourceSearchTest {
         assertTrue(results.dropLast(1).any { it.streams.isNotEmpty() })
         assertTrue("took $seconds s", seconds < 3.5)
         assertFalse(paths.isEmpty())
+    }
+
+    @Test fun `a disabled service gets no call at all`() {
+        db.putSetting(DesktopDebrid.SERVICES, "COMET")
+        search(null)
+        // Torrentio's quick, French and configured requests are all gone; only Comet's path is asked.
+        assertTrue(paths.toString(), paths.none { it.startsWith("/stream/") || it.startsWith("/language=french/") || "realdebrid=" in it })
+        assertTrue(paths.toString(), paths.isNotEmpty())
+        paths.clear()
+        db.putSetting(DesktopDebrid.SERVICES, "TORRENTIO")
+        search(null)
+        // Comet's address carries its configuration, never a Torrentio path: none was asked.
+        assertTrue(paths.toString(), paths.all { it.startsWith("/stream/") || it.startsWith("/language=french/") || "realdebrid=" in it })
+    }
+
+    @Test fun `retry after is read as seconds or as a date, within bounds`() {
+        assertEquals(30_000L, DesktopDebrid.retryAfterMs("30"))
+        assertEquals(60_000L, DesktopDebrid.retryAfterMs(null))
+        assertEquals(60_000L, DesktopDebrid.retryAfterMs("soon"))
+        assertEquals(15 * 60_000L, DesktopDebrid.retryAfterMs("86400"))
+        val now = java.time.ZonedDateTime.of(2026, 11, 18, 10, 0, 0, 0, java.time.ZoneOffset.UTC).toInstant().toEpochMilli()
+        assertEquals(120_000L, DesktopDebrid.retryAfterMs("Wed, 18 Nov 2026 10:02:00 GMT", now))
+    }
+
+    @Test fun `a service that answered 429 is left alone and the others go on`() {
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                val path = request.path.orEmpty()
+                paths += path
+                val torrentio = path.startsWith("/stream/") || path.startsWith("/language=french/") || "realdebrid=" in path
+                return if (torrentio) MockResponse().setResponseCode(429).setHeader("Retry-After", "120")
+                else MockResponse().setBody("""{"streams":[${stream('c', "One.Piece.S01E01.1080p.mkv")}]}""")
+            }
+        }
+        db.putSetting(DesktopDebrid.TIMEOUT_SETTING + "comet", "10")
+        search(null)
+        val first = paths.count { it.startsWith("/stream/") || it.startsWith("/language=french/") || "realdebrid=" in it }
+        assertTrue(first > 0)
+        paths.clear()
+        val results = search(null)
+        // Torrentio asked to wait two minutes: no call to it, while Comet still answers.
+        assertEquals(paths.toString(), 0, paths.count { it.startsWith("/stream/") || it.startsWith("/language=french/") || "realdebrid=" in it })
+        assertEquals(setOf("c".repeat(40)), results.last().streams.mapNotNull { it.infoHash }.toSet())
     }
 
     @Test fun `a service's time is set per device`() {

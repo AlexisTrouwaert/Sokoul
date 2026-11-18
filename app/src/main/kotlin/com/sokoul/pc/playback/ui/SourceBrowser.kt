@@ -66,6 +66,10 @@ internal fun sourceAddonLabel(host: String?): String? = when {
     else -> host.substringBefore('/').take(36)
 }
 
+/** "FR", "EN", "ES" as "Français · Anglais · Espagnol" in the interface language; null when the name declares none. */
+internal fun audioLanguagesLabel(codes: List<String>): String? =
+    codes.distinct().map { languageName(it.lowercase()) }.takeIf { it.isNotEmpty() }?.joinToString(" · ")
+
 internal fun isAccountReady(version: PlayVersion): Boolean =
     version.origin == VersionOrigin.Debrid && version.readiness == Readiness.Ready && version.rejected == null
 
@@ -74,6 +78,7 @@ internal fun SourceBrowser(session: PlaybackSession, modifier: Modifier = Modifi
     SourceBrowserContent(session.versions, session.current?.key, session.searching, modifier,
         searchRevision = session.sourceSearchRevision, notices = session.sourceNotices,
         languageOf = session::sourceLanguage, verified = session::sourceLanguageVerified,
+        wanted = session::holdsWantedLanguage,
         stateOf = { stateText(session, it) }, onRefresh = session::refresh,
         onChoose = { session.choose(it); onPicked() })
 }
@@ -88,6 +93,7 @@ internal fun SourceBrowserContent(
     notices: List<SourceNotice> = emptyList(),
     languageOf: (PlayVersion) -> AudioLanguage? = { it.language },
     verified: (PlayVersion) -> Boolean = { false },
+    wanted: (PlayVersion) -> Boolean = { true },
     stateOf: (PlayVersion) -> String = { sourceOriginLabel(it.origin) },
     onRefresh: () -> Unit = {}, onChoose: (PlayVersion) -> Unit = {},
 ) {
@@ -95,17 +101,18 @@ internal fun SourceBrowserContent(
     var language by remember(searchRevision) { mutableStateOf(SourceLanguageFilter.All) }
     var audioCode by remember(searchRevision) { mutableStateOf<String?>(null) }
     var readyOnly by remember(searchRevision) { mutableStateOf(false) }
+    var wantedOnly by remember(searchRevision) { mutableStateOf(false) }
     var eligibility by remember(searchRevision) { mutableStateOf(SourceEligibility.Compatible) }
     val languages = versions.associateWith(languageOf)
     val eligible = versions.filter(eligibility::keeps)
     val excludedCount = versions.count { it.rejected != null }
     val accountReady = ::isAccountReady
     val byOrigin = eligible.filter { (origin == null || it.origin == origin) && (!readyOnly || accountReady(it)) }
-    val visible = byOrigin.filter { language.keeps(languages[it]) && (audioCode == null || audioCode in it.announcedAudio) }
+    val visible = byOrigin.filter { (!wantedOnly || wanted(it)) && language.keeps(languages[it]) && (audioCode == null || audioCode in it.announcedAudio) }
     val first = remember { FocusRequester() }
     val state = rememberLazyListState()
     LaunchedEffect(Unit) { withFrameNanos { }; withFrameNanos { }; runCatching { first.requestFocus() } }
-    LaunchedEffect(searchRevision, origin, language, audioCode, readyOnly, eligibility) { state.scrollToItem(0) }
+    LaunchedEffect(searchRevision, origin, language, audioCode, readyOnly, wantedOnly, eligibility) { state.scrollToItem(0) }
     TvPanel(if (eligibility == SourceEligibility.Compatible) L("Playback sources", "Sources de lecture").text() else L("Excluded sources", "Sources écartées").text(),
         L("${visible.size} of ${versions.size} versions · ${if (searching) "Searching…" else "Search complete"}",
             "${visible.size} sur ${versions.size} versions · ${if (searching) "Recherche en cours…" else "Recherche terminée"}").text(),
@@ -126,8 +133,8 @@ internal fun SourceBrowserContent(
                     readyOnly = false
                 }
             }
-            if (origin != null || language != SourceLanguageFilter.All || audioCode != null || readyOnly || eligibility == SourceEligibility.Excluded) {
-                PanelChip(L("Reset filters", "Réinitialiser").text(), icon = Icons.Filled.Close) { origin = null; language = SourceLanguageFilter.All; audioCode = null; readyOnly = false; eligibility = SourceEligibility.Compatible }
+            if (origin != null || language != SourceLanguageFilter.All || audioCode != null || readyOnly || wantedOnly || eligibility == SourceEligibility.Excluded) {
+                PanelChip(L("Reset filters", "Réinitialiser").text(), icon = Icons.Filled.Close) { origin = null; language = SourceLanguageFilter.All; audioCode = null; readyOnly = false; wantedOnly = false; eligibility = SourceEligibility.Compatible }
             }
             SourceChip(L("All providers", "Tous fournisseurs").text() + " · ${eligible.size}", origin == null, "versions-filter-all") { origin = null }
             if (eligibility == SourceEligibility.Compatible) SourceChip(L("In account", "Dans le compte").text() + " · ${eligible.count(accountReady)}", readyOnly, "versions-filter-ready") { readyOnly = !readyOnly }
@@ -137,6 +144,7 @@ internal fun SourceBrowserContent(
             }
         }
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = PanelMetrics.RowPad, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            SourceChip(L("Your languages", "Vos langues").text() + " · ${byOrigin.count(wanted)}", wantedOnly, "versions-language-wanted") { wantedOnly = !wantedOnly }
             SourceLanguageFilter.entries.forEach { item ->
                 val count = byOrigin.count { item.keeps(languages[it]) }
                 if (count > 0 || item == language || item == SourceLanguageFilter.All) {
@@ -160,7 +168,9 @@ internal fun SourceBrowserContent(
             }
             itemsIndexed(visible, key = { _, v -> "${v.origin}:${v.key}" }) { index, version ->
                 val heard = languages[version]
-                val evidence = if (heard == null) L("Audio not identified", "Audio non identifié").text() else if (verified(version)) L("Audio verified", "Audio vérifié").text() else L("Provider label", "Langue annoncée").text()
+                // Only what helps to choose: a language heard in the file, or none at all. "Announced" is the usual case
+                // and said nothing.
+                val evidence = if (heard == null) L("Audio not identified", "Audio non identifié").text() else if (verified(version)) L("Audio verified", "Audio vérifié").text() else null
                 val selected = version.key == currentKey
                 PanelCard(Modifier.testTag("version-$index"), selected = selected, onClick = { onChoose(version) }) { focused ->
                     val ink = if (focused) Palette.OnFocus else Palette.OnBackground
@@ -176,11 +186,14 @@ internal fun SourceBrowserContent(
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                             PanelBadge(heard?.name ?: "?", strong = true, onFocus = focused)
                             listOfNotNull(qualityLabel(version.quality), hdrLabel(version.hdr), "SeaDex".takeIf { version.community }).forEach { PanelBadge(it, onFocus = focused) }
-                            Label(listOfNotNull(version.announcedAudio.takeIf { it.isNotEmpty() }?.joinToString(" / "), sizeLabel(version.sizeBytes)).joinToString(" · "),
-                                com.sokoul.pc.theme.PanelType.Option, ink, maxLines = 1)
+                            sizeLabel(version.sizeBytes)?.let { Label(it, com.sokoul.pc.theme.PanelType.Option, ink, maxLines = 1) }
                         }
-                        Label(listOfNotNull(sourceAddonLabel(version.providerHost), stateOf(version), evidence).joinToString(" · "), com.sokoul.pc.theme.PanelType.Callout, soft, maxLines = 2)
-                        Label(sourceName(version.name), com.sokoul.pc.theme.PanelType.Caption.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Medium), soft, maxLines = 2)
+                        // Every audio language the name declares, in words and never cut: a MULTI may hold ten of them.
+                        audioLanguagesLabel(version.announcedAudio)?.let { Label(it, com.sokoul.pc.theme.PanelType.Option, ink, modifier = Modifier.testTag("version-$index-audio")) }
+                        // The TV shows no search service names (Comet, Torrentio): they mean nothing from the sofa.
+                        val addon = if (com.sokoul.pc.Platform.IS_TV) null else sourceAddonLabel(version.providerHost)
+                        Label(listOfNotNull(addon, stateOf(version), evidence).joinToString(" · "), com.sokoul.pc.theme.PanelType.Callout, soft, maxLines = 2)
+                        Label(sourceName(version.name), com.sokoul.pc.theme.PanelType.Caption.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Medium), soft, maxLines = if (com.sokoul.pc.Platform.IS_TV) 1 else 2)
                     }
                     if (selected) Icon(Icons.Filled.Check, L("Playing", "En lecture").text(), Modifier.size(30.dp), tint = ink)
                 }

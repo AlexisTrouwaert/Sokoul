@@ -45,8 +45,54 @@ enum class BufferProfile(val label: String, val liveMs: Int, val vodMs: Int) {
 
 /** What happens when the best version is not ready yet. */
 enum class StartMode { ReadyFirst, WaitBest, Ask }
+/** The audio choice before languages could be ordered; read once to build an [AudioIntent], never written again. */
 enum class AudioPreference { System, Vf, Multi, Vostfr, Vo }
 enum class SubtitlePreference { System, Off }
+
+/** What to do when a file has none of the wanted languages: let the engine's track play, or ask the viewer. */
+enum class AudioFallback { EngineDefault, Ask }
+
+/**
+ * The audio the viewer wants, in any language: ISO 639-1 codes in order of preference, where [ORIGINAL] stands for the
+ * work's own language (from the catalog). It only orders versions and tracks; nothing is ever hidden because of it.
+ * @property subtitles [SUBTITLES_OFF], [SUBTITLES_AUTO] (the interface language when the audio heard is another one), or a code
+ */
+data class AudioIntent(
+    val languages: List<String> = listOf(ORIGINAL),
+    val fallback: AudioFallback = AudioFallback.EngineDefault,
+    val subtitles: String = SUBTITLES_AUTO,
+) {
+    /** The codes to look for, "original" replaced by the work's language when the catalog knows it. */
+    fun resolved(workLanguage: String?): List<String> =
+        languages.map { if (it == ORIGINAL) workLanguage?.lowercase()?.take(2)?.takeIf { w -> w.isNotBlank() } ?: ORIGINAL else it }.distinct()
+
+    fun encode(): String = languages.joinToString(",")
+
+    companion object {
+        const val ORIGINAL = "original"
+        const val SUBTITLES_OFF = "off"
+        const val SUBTITLES_AUTO = "auto"
+
+        fun decode(raw: String?): List<String>? = raw?.split(',')?.map { it.trim().lowercase() }
+            ?.filter { it == ORIGINAL || Regex("[a-z]{2}").matches(it) }?.distinct()?.takeIf { it.isNotEmpty() }
+
+        /** The intent an earlier preference meant ([AudioPreference] and [SubtitlePreference]), for the migration. */
+        fun fromLegacy(audio: AudioPreference, subtitles: SubtitlePreference, systemLanguage: String): AudioIntent {
+            val system = systemLanguage.lowercase().take(2).ifBlank { "en" }
+            val languages = when (audio) {
+                AudioPreference.Vf, AudioPreference.Multi -> listOf("fr", ORIGINAL)
+                AudioPreference.Vo, AudioPreference.Vostfr -> listOf(ORIGINAL)
+                AudioPreference.System -> listOf(system, ORIGINAL)
+            }
+            val subs = when {
+                subtitles == SubtitlePreference.Off -> SUBTITLES_OFF
+                audio == AudioPreference.Vostfr -> "fr"
+                else -> SUBTITLES_AUTO
+            }
+            return AudioIntent(languages.distinct(), AudioFallback.EngineDefault, subs)
+        }
+    }
+}
 enum class MaxQuality(val height: Int) { P720(720), P1080(1080), P2160(2160) }
 enum class MaxSize(val bytes: Long) { G10(10_000_000_000L), G25(25_000_000_000L), G50(50_000_000_000L), None(Long.MAX_VALUE) }
 enum class PreferredOrigin { Automatic, Debrid, Iptv }
@@ -59,11 +105,16 @@ data class PlaybackPrefs(
     val maxQuality: MaxQuality = MaxQuality.P2160,
     val maxSize: MaxSize = MaxSize.G25,
     val origin: PreferredOrigin = PreferredOrigin.Automatic,
+    /** The languages wanted, in order; [audio] and [subtitles] only remain to read older settings. */
+    val intent: AudioIntent = AudioIntent.fromLegacy(audio, subtitles, java.util.Locale.getDefault().language),
+    /** The sharpest picture first (4K, HDR and Dolby Vision included) instead of SDR first on a PC. */
+    val bestQualityFirst: Boolean = false,
 )
 
 /** Ce que le lecteur lit des réglages au moment d'ouvrir un titre. */
 data class PlayerPrefs(
-    val audioLanguage: String = "fr",
+    /** The wanted audio languages in order; [AudioIntent.ORIGINAL] is resolved with the stream's work language. */
+    val audioLanguages: List<String> = listOf("fr", AudioIntent.ORIGINAL),
     val subtitleFont: SubtitleFont = SubtitleFont.STANDARD,
     val subtitleLanguage: String = "",
     val subtitleSize: SubtitleSize = SubtitleSize.NORMAL,
@@ -91,9 +142,6 @@ class DesktopPrefs(private val db: DesktopDb) {
     private inline fun <reified E : Enum<E>> enum(key: String, default: E): E =
         db.setting(key)?.let { v -> enumValues<E>().firstOrNull { it.name == v } } ?: default
 
-    var audioLanguage: String
-        get() = db.setting(K_AUDIO) ?: "fr"
-        set(v) = db.putSetting(K_AUDIO, v)
     var subtitleLanguage: String
         get() = db.setting(K_SUBS).orEmpty()
         set(v) = db.putSetting(K_SUBS, v.ifBlank { null })
@@ -198,7 +246,7 @@ class DesktopPrefs(private val db: DesktopDb) {
         get() = enum(K_VIDEO_FORMAT, VideoFormat.FIT)
         set(v) = db.putSetting(K_VIDEO_FORMAT, v.name)
 
-    fun player() = PlayerPrefs(audioLanguage, subtitleFont, subtitleLanguage, subtitleSize, subtitleColor, subtitleBackground, subtitlePosition, buffer)
+    fun player() = PlayerPrefs(audioIntent.languages, subtitleFont, subtitleLanguage, subtitleSize, subtitleColor, subtitleBackground, subtitlePosition, buffer)
 
     /** The sound level, kept between sessions. */
     var volume: Int
@@ -236,7 +284,35 @@ class DesktopPrefs(private val db: DesktopDb) {
         get() = enum(K_ORIGIN, PreferredOrigin.Automatic)
         set(v) = db.putSetting(K_ORIGIN, v.name)
 
-    fun playback() = PlaybackPrefs(startMode, audioPreference, subtitlePreference, maxQuality, maxSize, preferredOrigin)
+    /**
+     * The audio wanted, in any language. Read from its own settings; the first time, built from the earlier VF/VO/VOSTFR
+     * choice and saved, the earlier keys being left as they were.
+     */
+    var audioIntent: AudioIntent
+        get() {
+            val languages = AudioIntent.decode(db.setting(K_AUDIO_LANGUAGES))
+                ?: return AudioIntent.fromLegacy(audioPreference, subtitlePreference, com.sokoul.pc.i18n.Strings.language().code).also { audioIntent = it }
+            return AudioIntent(languages, enum(K_AUDIO_FALLBACK, AudioFallback.EngineDefault), db.setting(K_SUBTITLE_MODE) ?: AudioIntent.SUBTITLES_AUTO)
+        }
+        set(v) {
+            db.putSetting(K_AUDIO_LANGUAGES, v.encode())
+            db.putSetting(K_AUDIO_FALLBACK, v.fallback.name)
+            db.putSetting(K_SUBTITLE_MODE, v.subtitles)
+        }
+
+    var searchServices: Set<com.sokoul.iptv.data.debrid.SourceAddon>
+        get() = db.setting(DesktopDebrid.SERVICES)?.let(com.sokoul.iptv.data.debrid.DebridAddons::parse)
+            ?: com.sokoul.iptv.data.debrid.SourceAddon.entries.toSet()
+        set(value) {
+            if (value.isNotEmpty()) db.putSetting(DesktopDebrid.SERVICES, value.joinToString(",") { it.name })
+        }
+
+    fun playback() = PlaybackPrefs(startMode, audioPreference, subtitlePreference, maxQuality, maxSize, preferredOrigin, audioIntent, bestQualityFirst)
+
+    /** Off by default: on an SDR screen an HDR stream through libVLC looks washed out, so 1080p SDR comes first. */
+    var bestQualityFirst: Boolean
+        get() = db.setting("play.best_quality_first") == "true"
+        set(value) = db.putSetting("play.best_quality_first", value.toString())
 
     var rememberSourceHosters: Boolean
         get() = db.setting("source.rememberHosters") != "false"
@@ -270,15 +346,10 @@ class DesktopPrefs(private val db: DesktopDb) {
         db.putSetting("$prefix.remembered.$source", hoster)
     }
 
-    /** What libVLC needs: the language to pick in a MULTI file ("" keeps the original track), and subtitles only over another language. */
-    fun engine(frenchSystem: Boolean): PlayerPrefs {
-        val audio = when (audioPreference) {
-            AudioPreference.System -> if (frenchSystem) "fr" else ""
-            AudioPreference.Vf, AudioPreference.Multi -> "fr"
-            AudioPreference.Vostfr, AudioPreference.Vo -> ""
-        }
-        val subtitles = if (subtitlePreference == SubtitlePreference.Off || audio == "fr") "" else if (frenchSystem) "fr" else "en"
-        return player().copy(audioLanguage = audio, subtitleLanguage = subtitles)
+    /** What the players need: the wanted audio languages in order, and the subtitle mode ("off", "auto" or a code). */
+    fun engine(): PlayerPrefs {
+        val intent = audioIntent
+        return player().copy(audioLanguages = intent.languages, subtitleLanguage = intent.subtitles)
     }
     companion object {
         const val K_START_MODE = "play.start_mode"
@@ -286,6 +357,9 @@ class DesktopPrefs(private val db: DesktopDb) {
         private const val K_VOLUME = "pc.volume"
         const val K_AUDIO_PREF = "play.audio_pref"
         const val K_SUB_PREF = "play.sub_pref"
+        const val K_AUDIO_LANGUAGES = "play.audio_languages"
+        const val K_AUDIO_FALLBACK = "play.audio_fallback"
+        const val K_SUBTITLE_MODE = "play.subtitle_mode"
         const val K_MAX_QUALITY = "play.max_quality"
         const val K_MAX_SIZE = "play.max_size"
         const val K_ORIGIN = "play.origin"

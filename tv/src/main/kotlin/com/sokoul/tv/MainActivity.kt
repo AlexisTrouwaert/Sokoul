@@ -36,6 +36,22 @@ class MainActivity : ComponentActivity() {
     /** A title asked for by a press on the Watch Next row, opened once the interface is ready. */
     private var link by mutableStateOf<com.sokoul.pc.playback.session.PlayRequest?>(null)
 
+    private var voiceReply: ((String) -> Unit)? = null
+    /** The system's speech recogniser (the remote's microphone): it records itself, so no audio permission is needed here. */
+    private val voice = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
+        val text = result.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.trim()
+        if (!text.isNullOrEmpty()) voiceReply?.invoke(text)
+        voiceReply = null
+    }
+
+    private fun listen(onText: (String) -> Unit): Boolean {
+        val intent = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+        if (intent.resolveActivity(packageManager) == null) return false
+        voiceReply = onText
+        return runCatching { voice.launch(intent) }.isSuccess
+    }
+
     override fun onPostCreate(savedInstanceState: Bundle?) {
         super.onPostCreate(savedInstanceState)
         // After setContent: Compose's view exists, and the TV's volume-key service no longer costs it every frame.
@@ -54,6 +70,7 @@ class MainActivity : ComponentActivity() {
         })
         // The pages paint their own background: the window's was one more full-screen fill under every frame.
         window.setBackgroundDrawable(null)
+        com.sokoul.pc.Platform.voiceHook = ::listen
         link = WatchNext.requestOf(intent?.data)
         applyFormFactor(resources.configuration)
         // A phone's taps report no hover worth following: only the TV's air mouse gives focus by pointing.
@@ -66,7 +83,7 @@ class MainActivity : ComponentActivity() {
             val made = realDeps(base, future) { player }
             launch(Dispatchers.Main) { deps = made }
             val p = DesktopPlayer.create()
-            p?.prefs = { DesktopPrefs(base).engine(Strings.isFrench()) }
+            p?.prefs = { DesktopPrefs(base).engine() }
             launch(Dispatchers.Main) { player = p }
             future.complete(p)
             launch(Dispatchers.Main) { TvDebug.start(made) }

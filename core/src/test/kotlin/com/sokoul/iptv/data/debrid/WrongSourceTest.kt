@@ -68,4 +68,22 @@ class WrongSourceTest {
         assertFalse(DebridStreams.wrongEpisode(null, 1, 1))
         assertFalse(DebridStreams.wrongEpisode("Film.2021.2160p.mkv", null, null))
     }
+
+    // Real names Comet gave for "The Hunger Games: Sunrise on the Reaping" (2026) on 2026-11-18, while it was in cinemas.
+    private val reaping = listOf("The Hunger Games: Sunrise on the Reaping", "Hunger Games : Lever de soleil sur la moisson")
+
+    @Test fun `an audiobook is never a version`() {
+        assertTrue(DebridStreams.notVideo("The Hunger Games Trilogy + Prequel (Audiobook)"))
+        assertTrue(DebridStreams.notVideo("Dune.Part.Two.Original.Soundtrack.FLAC"))
+        assertFalse(DebridStreams.notVideo("Lost.S01E01.1080p.BluRay.x264"))
+        assertFalse(DebridStreams.notVideo("The.Host.2006.1080p.BluRay"))
+    }
+
+    @Test fun `a box set made before a new film does not hold it`() {
+        assertTrue(DebridStreams.packBeforeFilm("The Hunger Games Quadrilogy.UHD BDRemux 2160p Dolby Vision", reaping, 2026, thisYear = 2026))
+        // An older film can be in its franchise's box set: the file is picked by name in the pack.
+        assertFalse(DebridStreams.packBeforeFilm("The Hunger Games Quadrilogy.UHD BDRemux 2160p Dolby Vision", listOf("The Hunger Games"), 2012, thisYear = 2026))
+        // The word is part of the film's own title.
+        assertFalse(DebridStreams.packBeforeFilm("The.Twilight.Saga.New.Moon.2026.1080p", listOf("The Twilight Saga: New Moon"), 2026, thisYear = 2026))
+    }
 }

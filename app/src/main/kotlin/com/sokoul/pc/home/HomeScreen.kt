@@ -1,5 +1,6 @@
 package com.sokoul.pc.home
 
+import androidx.compose.ui.draw.blur
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateDpAsState
@@ -30,6 +31,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
@@ -516,6 +518,7 @@ private fun Hero(
         val textWidth = maxWidth * HERO_TEXT_WIDTH / heroScale
         val textBottom = maxHeight * HERO_TEXT_BOTTOM
         val density = LocalDensity.current
+        val rtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
         val engine = deps.player
         // Image and shades rendered once into a layer, then drawn in one pass: four full-screen fills a frame were more
         // than the TV's GPU could draw in time. Not while a trailer plays: the layer would be redone at every frame.
@@ -526,7 +529,10 @@ private fun Hero(
             AnimatedVisibility(trailer.playing && engine != null && rememberHasFrames(engine), Modifier.fillMaxSize(), enter = fadeIn(), exit = fadeOut()) {
                 VideoFill(engine!!, Modifier.fillMaxSize())
             }
-            Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to Color(0xD9000000), 0.62f to Color.Transparent)))
+            Box(Modifier.fillMaxSize().background(
+                if (rtl) Brush.horizontalGradient(0.38f to Color.Transparent, 1f to Color(0xD9000000))
+                else Brush.horizontalGradient(0f to Color(0xD9000000), 0.62f to Color.Transparent),
+            ))
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.5f to Color.Transparent, 0.82f to Palette.Background.copy(alpha = 0.72f), 0.96f to Palette.Background)))
         }
         val deferAnimeExtras = kind == PageKind.Anime && !com.sokoul.pc.Platform.IS_TV
@@ -575,9 +581,11 @@ private fun Hero(
                 // Off the main thread, as everything that reads the database while the page is shown.
                 val lastRead by produceState<com.sokoul.desktop.data.Resume?>(null, hero.item.id) { value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { deps.catalog.lastWatched(hero.item.kind(), hero.item.id) } }
                 val last = lastRead
+                // A film still in cinemas says so here too, as on its page.
+                val cinema = if (last == null) com.sokoul.pc.title.cinemaLabels(hero.item.kind(), hero.info) else null
                 com.sokoul.pc.title.PlayCard(
-                    if (last != null && !last.finished) tr(Text.Resume) else com.sokoul.pc.data.L("Play", "Lecture").text(),
-                    last?.takeIf { !it.finished && it.durationMs > 0 }?.let { com.sokoul.pc.data.L("${com.sokoul.pc.i18n.durationLabel(((it.durationMs - it.positionMs) / 60_000L).toInt().coerceAtLeast(1))} left", "Reste ${com.sokoul.pc.i18n.durationLabel(((it.durationMs - it.positionMs) / 60_000L).toInt().coerceAtLeast(1))}").text() },
+                    cinema?.first ?: if (last != null && !last.finished) tr(Text.Resume) else com.sokoul.pc.data.L("Play", "Lecture").text(),
+                    cinema?.second ?: last?.takeIf { !it.finished && it.durationMs > 0 }?.let { com.sokoul.pc.data.L("${com.sokoul.pc.i18n.durationLabel(((it.durationMs - it.positionMs) / 60_000L).toInt().coerceAtLeast(1))} left", "Reste ${com.sokoul.pc.i18n.durationLabel(((it.durationMs - it.positionMs) / 60_000L).toInt().coerceAtLeast(1))}").text() },
                     last?.takeIf { !it.finished && it.durationMs > 0 }?.let { it.positionMs.toFloat() / it.durationMs },
                     { onOpen(items.map { it.item }, index, null) },
                     Modifier.testTag("hero-watch"),
@@ -598,7 +606,7 @@ private fun Hero(
                     onFocused = { if (it) selectedAction.intValue = 2 },
                 )
                 com.sokoul.pc.title.LabeledRoundButton(
-                    Icons.Filled.KeyboardArrowRight,
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
                     com.sokoul.pc.data.L("Next", "Suivant").text(),
                     { index = (index + 1) % items.size },
                     Modifier.testTag("hero-next"),
@@ -660,7 +668,15 @@ fun TitleLogo(logo: String?, title: String, modifier: Modifier = Modifier) {
     }
     val bitmap = image
     if (bitmap != null) {
-        Image(bitmap, title, modifier.height(130.dp).width(430.dp), Alignment.CenterStart, ContentScale.Fit)
+        // A dark halo of the logo's own shape under it: a grey-blue logo on a blue picture ("L'Odyssée") stays readable.
+        // Without blur (older Android), the halo sits exactly under the logo and does not show.
+        Box(modifier.height(130.dp).width(430.dp)) {
+            Image(
+                bitmap, null, Modifier.matchParentSize().blur(14.dp, androidx.compose.ui.draw.BlurredEdgeTreatment.Unbounded).graphicsLayer { alpha = 0.75f },
+                Alignment.CenterStart, ContentScale.Fit, colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(Color.Black),
+            )
+            Image(bitmap, title, Modifier.matchParentSize(), Alignment.CenterStart, ContentScale.Fit)
+        }
     } else if (!waited) {
         Spacer(modifier.height(130.dp))
     } else {

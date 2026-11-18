@@ -93,7 +93,11 @@ class StreamProbe(http: OkHttpClient) {
             }.build()
             client.newCall(request).execute().use { r ->
                 val total = r.header("Content-Range")?.substringAfterLast('/')?.toLongOrNull() ?: r.header("Content-Length")?.toLongOrNull()
-                Probe(r.code, total?.takeIf { r.code == 206 })
+                // An HLS playlist is a few kilobytes whatever the film's length: its size says nothing (PurStream's
+                // master.m3u8 was taken for a fake file).
+                val playlist = r.header("Content-Type").orEmpty().contains("mpegurl", ignoreCase = true) ||
+                    url.substringBefore('?').endsWith(".m3u8", ignoreCase = true)
+                Probe(r.code, total?.takeIf { r.code == 206 && !playlist })
             }
         }.getOrNull()
     }
@@ -126,7 +130,6 @@ class RealSources(
     private val transfers: DebridTransfers,
     private val gate: ConnectionGate,
     private val probe: StreamProbe,
-    private val frenchSearch: () -> Boolean,
     /** Links anime to their ids; null leaves every title on the plain IMDb search. */
     private val anime: com.sokoul.pc.data.anime.AnimeIdentityResolver? = null,
     /** The links the Sokoul server finds on streaming sites; null leaves only Real-Debrid and IPTV. */
@@ -214,7 +217,8 @@ class RealSources(
         var fromAnimeWeb = emptyList<PlayVersion>()
         var fromAnimeSama = emptyList<PlayVersion>()
         var notices = emptyList<SourceNotice>()
-        var animeSamaDone = animeSama == null || webSearch == null
+        // Anime-Sama no longer needs the Sokoul server (the app reads the site itself); only a search ahead skips it.
+        var animeSamaDone = animeSama == null || !withIptv
         var debridDone = !debrid.configured()
         var webDone = webSearch == null
         var animeWebDone = animeWebSearch == null
@@ -225,7 +229,9 @@ class RealSources(
         }
         if (!animeSamaDone) launch {
             val identity = try { anime?.identity(request.kind, request.tmdbId, info) } catch (c: CancellationException) { throw c } catch (_: Exception) { null }
-            val result = if (identity != null || info?.originalLanguage?.take(2) in setOf("ja", "zh", "ko")) {
+            val asked = identity != null || info?.originalLanguage?.take(2) in setOf("ja", "zh", "ko")
+            com.sokoul.pc.playback.session.StartClock.note("anime-sama ${if (asked) "asked" else "skipped: not an anime"}")
+            val result = if (asked) {
                 animeSama!!.find(request, (listOf(request.title) + identity?.names.orEmpty() + listOfNotNull(info?.originalTitle)).distinct(), episodeRef(request, identity)?.absolute)
             } else AnimeSamaSource.Result()
             lock.withLock { fromAnimeSama = result.versions; notices = result.notices; animeSamaDone = true; publish() }
@@ -257,7 +263,7 @@ class RealSources(
         // The identity is looked up while the services are already asked: it never adds its time to theirs.
         val lookup = async { kotlinx.coroutines.withTimeoutOrNull(LOOKUP_MS) { animeLookup(request, info, titles, query) } }
         val account = async { transfers.account() }
-        debrid.search(query, info, refresh, frenchSearch()) { lookup.await() }.collect { found ->
+        debrid.search(query, info, refresh) { lookup.await() }.collect { found ->
             val q = lookup.await()?.query ?: query
             val held = account.await()
             lock.withLock {

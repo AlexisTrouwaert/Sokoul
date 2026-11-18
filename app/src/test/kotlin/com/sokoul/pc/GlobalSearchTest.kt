@@ -1,5 +1,7 @@
 package com.sokoul.pc
 
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.launch
 import com.sokoul.pc.search.SearchAggregator
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
@@ -56,5 +58,23 @@ class GlobalSearchTest {
             searchAnime = { emptyList() },
             searchManga = { emptyList() },
         ).search("old query")
+    }
+
+    @Test
+    fun films_show_before_a_slow_catalogue_answers() = runBlocking<Unit> {
+        val anime = kotlinx.coroutines.CompletableDeferred<List<String>>()
+        val seen = mutableListOf<List<String>>()
+        val search = SearchAggregator<String, String, String, String>(
+            searchTitles = { listOf("Dune") },
+            searchLive = { emptyList() },
+            searchAnime = { anime.await() },
+            searchManga = { emptyList() },
+        )
+        val job = launch { search.searchEach("dune") { seen += it.titles.items } }
+        // The films are there while the anime catalogue has still not answered.
+        withTimeout(5_000) { while (seen.none { it == listOf("Dune") }) kotlinx.coroutines.delay(10) }
+        assertTrue(job.isActive)
+        anime.complete(listOf("Dune (anime)"))
+        job.join()
     }
 }

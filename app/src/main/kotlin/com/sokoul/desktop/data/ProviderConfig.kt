@@ -38,7 +38,8 @@ object ProviderConfig {
         val built = builtIn()[id]?.takeIf { it.isNotBlank() }
         ProviderStatus(
             id = id, label = label, configured = override != null || built != null,
-            source = when { override != null -> "Clé saisie"; built != null -> "Clé intégrée"; else -> null },
+            // Shown in Settings: translated like the rest of the interface.
+            source = when { override != null -> com.sokoul.pc.data.L("Key entered", "Clé saisie").text(); built != null -> com.sokoul.pc.data.L("Built-in key", "Clé intégrée").text(); else -> null },
             hint = (override ?: built)?.let(::hint),
         )
     }

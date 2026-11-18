@@ -54,19 +54,24 @@ fun posterArt(item: TmdbItem, info: TmdbInfo?): PosterArt {
 /** A landscape card for a title: its image, with the logo on top, or the title in bold when it has none. */
 @Composable
 fun BoxScope.SmartLandscape(catalog: CatalogApi, item: TmdbItem) {
-    val info by produceState<TmdbInfo?>(null, item.id) { value = catalog.artwork(item.kind(), item.id) }
+    // The artwork is asked once; whatever it gives (or fails to give), the title stays readable.
+    val artwork by produceState<Pair<Boolean, TmdbInfo?>>(false to null, item.id) { value = true to runCatching { catalog.artwork(item.kind(), item.id) }.getOrNull() }
+    val info = artwork.second
     Art(info?.backdrop ?: item.backdrop ?: item.poster, Modifier.fillMaxSize())
     Box(Modifier.fillMaxSize().background(Color(0x40000000)))
     val url = info?.logo
-    val logo by produceState(url?.let(ImageLoader::cached), url) { value = url?.let { ImageLoader.load(it) } }
-    val bitmap = logo
+    val logo by produceState<Pair<Boolean, androidx.compose.ui.graphics.ImageBitmap?>>(url?.let(ImageLoader::cached).let { (it != null) to it }, url) {
+        value = true to url?.let { runCatching { ImageLoader.load(it) }.getOrNull() }
+    }
+    val bitmap = logo.second
+    val logoSettled = url == null || logo.first
     if (bitmap != null) {
         Image(
             bitmap, item.title,
             Modifier.align(Alignment.Center).fillMaxWidth(0.72f).height(110.dp),
             Alignment.Center, ContentScale.Fit,
         )
-    } else if (info != null) {
+    } else if (artwork.first && logoSettled) {
         BasicText(
             item.title,
             Modifier.align(Alignment.Center).fillMaxWidth(0.84f),

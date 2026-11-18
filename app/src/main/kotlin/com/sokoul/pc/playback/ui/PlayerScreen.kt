@@ -378,6 +378,8 @@ fun PlayerScreen(
         onDispose { com.sokoul.pc.Platform.playerFullscreen(false) }
     }
     val offerOnScreen = session.upgrade?.stream != null && playingNow
+    // The language notice waits behind the upgrade offer: one prompt at a time in the top corner.
+    val languageOnScreen = session.languageNotice != null && !offerOnScreen && playingNow
     val nextOnScreen = next != null && status != null && playingNow && EpisodeOrder.cardShown(status.timeMs, status.lengthMs)
     // At 80 % of an episode, the next one is searched for: its versions are known when it starts.
     val nearEnd = status != null && status.lengthMs > 0 && status.timeMs >= status.lengthMs * PREFETCH_AT
@@ -468,7 +470,7 @@ fun PlayerScreen(
                         controls -> NavMode.Controls
                         else -> NavMode.Watching
                     }
-                    val prompt = offerOnScreen || nextOnScreen || skipOnScreen
+                    val prompt = offerOnScreen || languageOnScreen || nextOnScreen || skipOnScreen
                     return@onPreviewKeyEvent when (PlayerNav.decide(mode, navKey, session.live != null, playingNow, bannerShown, prompt, replay = session.isLiveReplay, toolbarNavigation = toolbarHasFocus)) {
                         NavAction.LetFocusMove -> menu == PlayerMenu.Details
                         NavAction.None -> true
@@ -834,6 +836,17 @@ fun PlayerScreen(
         val offer = session.upgrade
         if (offer?.stream != null && playingNow && menu == PlayerMenu.None) {
             UpgradeBanner(offer, session::acceptUpgrade, session::dismissUpgrade, Modifier.align(Alignment.TopEnd).padding(top = 44.dp, end = 60.dp), promptFocus)
+        }
+        val heard = session.languageNotice
+        if (heard != null && languageOnScreen && menu == PlayerMenu.None) {
+            LanguageNoticeBanner(
+                heard,
+                onKeep = { session.listenAnyway(); askFocus(focus) },
+                onVersions = { session.dismissLanguageNotice(); menu = PlayerMenu.Versions },
+                modifier = Modifier.align(Alignment.TopEnd).padding(top = 44.dp, end = 60.dp),
+                // Up from the film reaches the prompt; the next-episode card or the skip button keep it when they show.
+                requester = if (nextOnScreen || skipOnScreen) remember { FocusRequester() } else promptFocus,
+            )
         }
     }
 }

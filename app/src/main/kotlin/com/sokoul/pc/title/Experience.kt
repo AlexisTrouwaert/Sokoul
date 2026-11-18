@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Animation
-import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.HighQuality
 import androidx.compose.material.icons.filled.Movie
@@ -93,8 +92,7 @@ fun ExperienceBlock(deps: AppDeps, item: TmdbItem, info: TmdbInfo?, extras: com.
         f?.image?.takeIf { it.isNotEmpty() }?.let { Tile(Icons.Filled.HighQuality, L("PICTURE", "IMAGE"), it.joinToString(" · ")) },
         f?.audio?.takeIf { it.isNotEmpty() }?.let { Tile(Icons.Filled.SurroundSound, L("SOUND", "AUDIO"), it.joinToString(" · ")) },
         f?.languages?.takeIf { it.isNotEmpty() }?.let { Tile(Icons.Filled.Translate, L("LANGUAGES", "LANGUES"), it.joinToString(" · ")) },
-        f?.sources?.takeIf { it > 0 }?.let { n -> Tile(Icons.Filled.Dns, L("AVAILABLE", "DISPONIBLE"), "$n source" + if (n > 1) "s" else "") },
-        (o?.oscarsWon?.takeIf { it > 0 }?.let { "$it Oscar" + if (it > 1) "s" else "" } ?: o?.awardsWon?.takeIf { it > 0 }?.let { L("$it awards", "$it récompenses").text() })?.let { Tile(Icons.Filled.EmojiEvents, L("AWARDS", "RÉCOMPENSES"), it) },
+        (o?.oscarsWon?.takeIf { it > 0 }?.let { if (it == 1) com.sokoul.pc.i18n.tr(com.sokoul.pc.i18n.Text.OneOscar) else com.sokoul.pc.i18n.tr(com.sokoul.pc.i18n.Text.OscarsCount, it) } ?: o?.awardsWon?.takeIf { it > 0 }?.let { L("$it awards", "$it récompenses").text() })?.let { Tile(Icons.Filled.EmojiEvents, L("AWARDS", "RÉCOMPENSES"), it) },
     )
     Column(Modifier.fillMaxWidth().testTag("title-experience"), verticalArrangement = Arrangement.spacedBy(18.dp)) {
         RowHeading(L("The experience", "L'expérience").text(), false)
@@ -106,7 +104,7 @@ fun ExperienceBlock(deps: AppDeps, item: TmdbItem, info: TmdbInfo?, extras: com.
                 ) {
                     Icon(t.icon, null, Modifier.size(38.dp), tint = Palette.OnBackground)
                     Spacer(Modifier.weight(1f))
-                    Label(t.label.text(), Type.Body.copy(fontSize = 16.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 2.sp), Palette.Secondary, maxLines = 1)
+                    Label(t.label.text(), Type.Body.copy(fontSize = 25.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.5.sp), Palette.Secondary, maxLines = 1)
                     Label(t.value, Type.Body.copy(fontWeight = FontWeight.SemiBold), maxLines = 2)
                 }
             }

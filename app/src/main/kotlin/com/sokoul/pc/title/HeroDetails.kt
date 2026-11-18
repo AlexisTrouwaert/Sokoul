@@ -81,6 +81,26 @@ import java.util.Locale
 
 private val LETTER = 4.sp
 
+/** Below this mean luminance (0 black, 1 white), an opaque logo does not show on the page. */
+private const val DARK_LOGO = 0.22f
+
+/** The mean luminance of a grid of points across [image], cheap enough to run once per logo. */
+private fun meanLuminance(image: androidx.compose.ui.graphics.ImageBitmap): Float {
+    val w = image.width
+    val h = image.height
+    if (w < 2 || h < 2) return 1f
+    val px = IntArray(1)
+    var sum = 0f
+    var n = 0
+    for (i in 1..8) for (j in 1..4) {
+        image.readPixels(px, (w * i / 9).coerceIn(0, w - 1), (h * j / 5).coerceIn(0, h - 1), 1, 1)
+        val c = px[0]
+        sum += (0.2126f * ((c shr 16) and 0xFF) + 0.7152f * ((c shr 8) and 0xFF) + 0.0722f * (c and 0xFF)) / 255f
+        n++
+    }
+    return sum / n
+}
+
 /** "A24 PRESENTS", with the studio's own logo in white when the catalog has it. */
 @Composable
 fun PresentedBy(brands: List<TmdbBrand>) {
@@ -92,7 +112,9 @@ fun PresentedBy(brands: List<TmdbBrand>) {
             // Painted white, a logo on an opaque background would be a white rectangle: it is shown as it is.
             image?.let {
                 val clear = remember(it) { IntArray(1).also { px -> it.readPixels(px, 0, 0, 1, 1) }[0] ushr 24 < OPAQUE }
-                Image(it, b.name, Modifier.height(36.dp).width(76.dp).clip(RoundedCornerShape(6.dp)), Alignment.CenterStart, ContentScale.Fit, colorFilter = if (clear) ColorFilter.tint(Palette.OnBackground) else null)
+                // An opaque dark logo (Syncopy's black box) is a black patch on the dark page: left out.
+                val dark = remember(it) { !clear && meanLuminance(it) < DARK_LOGO }
+                if (!dark) Image(it, b.name, Modifier.height(36.dp).width(76.dp).clip(RoundedCornerShape(6.dp)), Alignment.CenterStart, ContentScale.Fit, colorFilter = if (clear) ColorFilter.tint(Palette.OnBackground) else null)
             }
         }
         Label(
@@ -204,7 +226,7 @@ fun ScoreChips(omdb: OmdbFacts?) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(Icons.Filled.EmojiEvents, null, Modifier.size(24.dp), tint = Palette.OnBackground)
-                Label(if (oscars == 1) "1 Oscar" else "$oscars Oscars", Type.Body.copy(fontWeight = FontWeight.Bold), maxLines = 1)
+                Label(if (oscars == 1) com.sokoul.pc.i18n.tr(com.sokoul.pc.i18n.Text.OneOscar) else com.sokoul.pc.i18n.tr(com.sokoul.pc.i18n.Text.OscarsCount, oscars), Type.Body.copy(fontWeight = FontWeight.Bold), maxLines = 1)
             }
         }
         if (prizes != null) {

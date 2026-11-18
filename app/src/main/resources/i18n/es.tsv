@@ -1,0 +1,1051 @@
+# Español — english<TAB>translation, keyed by app/src/main/resources/i18n/source.tsv
+"One more episode" is your motto.	«Un episodio más» es tu lema.
+%1$d h %2$d min	%1$d h %2$d min
+%1$d min	%1$d min
+%1$s Originals	Originales de %1$s
+%d awards	%d premios
+%d channels	%d canales
+%d films	%d películas
+%d hours	%d horas
+%d min left	quedan %d min
+%d Oscar nominations	%d nominaciones al Óscar
+%d Oscars	%d Óscar
+%d s left	quedan %d s
+%d versions found…	%d versiones encontradas…
+%s Collection	Colección %s
+%s is ready	%s está lista
+%s is unavailable	%s no está disponible
+%s starts soon on %s	%s empieza pronto en %s
+1 award	1 premio
+1 channel	1 canal
+1 channel in this group	1 canal en este grupo
+1 film	1 película
+1 Oscar	1 Óscar
+1 Oscar nomination	1 nominación al Óscar
+1 screen at a time	1 pantalla a la vez
+1 screen watching right now	1 pantalla reproduciendo ahora
+30 minutes earlier	30 minutos antes
+30 minutes later	30 minutos después
+A film, not this episode	Una película, no este episodio
+A kids profile cannot start titles rated 16 or 18.	Un perfil infantil no puede reproducir títulos para mayores de 16 o 18 años.
+A Real-Debrid limit was reached. Try again shortly.	Se alcanzó un límite de Real-Debrid. Vuelve a intentarlo en un momento.
+A single provider connection is shared between playback and DVR	La reproducción y la grabación comparten una sola conexión del proveedor
+About	Acerca de
+Accent colour	Color de acento
+Account status, formats and guide time offset	Estado de la cuenta, formatos y desfase de la guía
+Action	Acción
+Action & Adventure	Acción y aventura
+Actions	Acciones
+Active	Activo
+Active collection	Colección activa
+Adaptations	Adaptaciones
+Add	Añadir
+Add a language	Añadir un idioma
+Add channel to favorites	Añadir el canal a favoritos
+Add channels	Añadir canales
+Add channels from any group. Your provider's groups stay as they are.	Añade canales de cualquier grupo. Los grupos de tu proveedor no cambian.
+Add channels from any provider group. Your provider categories remain unchanged.	Añade canales de cualquier grupo del proveedor. Sus categorías no cambian.
+Add to collection	Añadir a una colección
+Add your IPTV account in Settings to see your channels.	Añade tu cuenta IPTV en Ajustes para ver tus canales.
+Added to downloads. Open Recordings to follow progress.	Añadido a las descargas. Abre Grabaciones para seguir el progreso.
+Adrenaline	Adrenalina
+After {1} min	Tras {1} min
+Airing today	Se emiten hoy
+Alert on	Alerta activada
+All	Todo
+ALL\nCOLLECTIONS	TODAS LAS\nCOLECCIONES
+All channels	Todos los canales
+All formats	Todos los formatos
+All groups	Todos los grupos
+All languages	Todos los idiomas
+All providers	Todos los proveedores
+All sports	Todos los deportes
+All the Feels	A flor de piel
+All titles	Todos los títulos
+All Versions	Todas las versiones
+All-Time Essentials	Imprescindibles de siempre
+Already seen	Ya visto
+Also by {1}	También de {1}
+Also directed by {1}	También dirigida por {1}
+Also on	También en
+Also on %s	También en %s
+Always hunting for the next gem.	Siempre a la caza de la próxima joya.
+An adult profile manages source settings.	Un perfil adulto gestiona los ajustes de la fuente.
+An episode before coffee.	Un episodio antes del café.
+Animation	Animación
+Anime	Anime
+Anime only	Solo del anime
+Anime source priorities	Prioridades de las fuentes de anime
+Anime sources	Fuentes de anime
+Anime-Sama: no resolved stream available	Anime-Sama: no hay ninguna emisión disponible
+Anime-Sama: server key requires VIP access	Anime-Sama: la clave del servidor requiere acceso VIP
+AniProject backend URL	Dirección del backend de AniProject
+Another episode	Otro episodio
+Another work with the same name	Otra obra con el mismo nombre
+Any length	Cualquier duración
+Any status	Cualquier estado
+API keys	Claves de API
+Application	Aplicación
+Applied the next time a channel is opened. Local live recording currently requires MPEG-TS.	Se aplica la próxima vez que se abra un canal. La grabación local del directo requiere MPEG-TS por ahora.
+Are you still watching?	¿Sigues viendo?
+Arts and music	Arte y música
+Ask at start	Preguntar al iniciar
+Ask me	Preguntarme
+at %s	a las %s
+Audience	Público
+Audio	Audio
+Audio language	Idioma del audio
+Audio languages	Idiomas del audio
+Audio not identified	Audio no identificado
+Audio verified	Audio verificado
+Audio: {1}	Audio: {1}
+Auto scroll off	Desplazamiento automático desactivado
+Auto scroll {1}	Desplazamiento automático {1}
+Automatic	Automáticos
+Automatic trailers	Tráileres automáticos
+Average IMDb rating	Nota media en IMDb
+AWARDS	PREMIOS
+Awards won	Premios ganados
+Back	Atrás
+Back 10 s	Retroceder 10 s
+Back closes · Menu opens actions · Info shows details	Atrás cierra · Menú abre las acciones · Info muestra los detalles
+Back returns to the guide. Your provider credentials stay in the existing protected source profile.	Atrás vuelve a la guía. Tus credenciales siguen en el perfil de fuente protegido.
+Back to collection	Volver a la colección
+Back to guide	Volver a la guía
+Back to live	Volver al directo
+Back to My TV	Volver a Mi TV
+Back to series	Volver a la serie
+Back to the catalogue	Volver al catálogo
+Background	Fondo
+Because you watched	Porque has visto
+Because You Watched %1$s	Porque has visto %1$s
+Behaviour	Comportamiento
+Behind the Scenes	Entre bastidores
+Best rated	Mejor valorados
+Big Emotions	Grandes emociones
+Biggest hit	Mayor éxito
+Black outline	Contorno negro
+Bottom	Abajo
+Brightness {1} %	Brillo {1} %
+Bring your channels together across provider groups: sport, family, an evening selection…	Reúne canales de varios grupos: deporte, familia, una selección para la noche…
+Browse	Explorar
+Browse by Category	Explorar por categoría
+Browse the IPTV catalogue and resume playback	Explora el catálogo IPTV y reanuda la reproducción
+Buffer	Búfer
+Calendar	Calendario
+Cancel	Cancelar
+Cancelled	Cancelado
+Cast & Crew	Reparto y equipo
+CATALOG	CATÁLOGO
+Categories	Categorías
+Categories could not be refreshed. Stored titles remain available.	No se pudieron actualizar las categorías. Los títulos guardados siguen disponibles.
+Channel	Canal
+Channel preview	Vista previa de canales
+Channel up / down	Canal siguiente / anterior
+Channels	Canales
+channels	canales
+Channels by name or number · Programmes from your guide	Canales por nombre o número · Programas de tu guía
+Channels could not be loaded. Try refreshing.	No se pudieron cargar los canales. Prueba a actualizar.
+Chapter	Capítulo
+Chapter {1}	Capítulo {1}
+Chapters	Capítulos
+Chapters of volume {1}	Capítulos del tomo {1}
+Chapters {1}	Capítulos {1}
+Characters	Personajes
+Checking PIN…	Comprobando el PIN…
+Checking…	Comprobando…
+Chills	Escalofríos
+China	China
+Choose a category, then a title · Back to close	Elige una categoría y luego un título · Atrás para cerrar
+Choose a collection in the group column, then Menu › Use for zapping.	Elige una colección en la columna de grupos y luego Menú › Usar para zapear.
+Choose a private 4–8 digit PIN to protect your TV groups.	Elige un PIN privado de 4 a 8 cifras para proteger tus grupos de TV.
+Choose a season	Elegir una temporada
+Choose a unique name, 1–40 characters.	Elige un nombre único de 1 a 40 caracteres.
+Choose an adult profile to browse these external sports sources.	Elige un perfil adulto para consultar estas fuentes deportivas externas.
+Choose an export destination. The original recording is kept.	Elige un destino de exportación. La grabación original se conserva.
+Choose another group	Elegir otro grupo
+Choose Another Version	Elegir otra versión
+Choose Channels and enter a name or number, or explore Programmes.	Elige Canales e introduce un nombre o número, o explora Programas.
+Choose folder…	Elegir carpeta…
+Clear	Borrar
+CLEAR	BORRAR
+Clear the catalogue cache	Vaciar la caché del catálogo
+Forget source failures	Olvidar los fallos de las fuentes
+Your languages	Tus idiomas
+Search services	Servicios de búsqueda
+If no language matches	Si no coincide ningún idioma
+Play the file's own track	Reproducir la pista del archivo
+Close	Cerrar
+Code	Código
+Collection	Colección
+COLLECTION	COLECCIÓN
+Collections	Colecciones
+Colour	Color
+Colours the progress of what you watch: the player's bar and the cards of Continue Watching.	Colorea el progreso de lo que ves: la barra del reproductor y las tarjetas de Seguir viendo.
+Comedy	Comedia
+Coming up	A continuación
+Compatible · {1}	Compatibles · {1}
+Configure later	Configurar más tarde
+Configure your Sokoul server and access key in Credentials.	Configura tu servidor Sokoul y su clave en Credenciales.
+Confirm delete	Confirmar eliminación
+Connecting…	Conectando…
+Continue	Continuar
+Continue Watching	Seguir viendo
+Could not reach the source server.	No se pudo conectar con el servidor de origen.
+Could not start the download.	No se pudo iniciar la descarga.
+Counting…	Contando…
+Create a collection	Crear una colección
+Create and add	Crear y añadir
+CREATED BY	CREADA POR
+Created by	Creada por
+Credentials and API keys	Credenciales y claves de API
+Credits	Créditos
+Crime	Crimen
+Crime & Thriller	Crimen y suspense
+Cult Sagas	Sagas de culto
+Current group	Grupo actual
+Cyan	Cian
+D-pad to type and browse · Back returns to your selection	Flechas para escribir y explorar · Atrás vuelve a tu selección
+Dark box	Fondo oscuro
+days in a row, at best	días seguidos, como máximo
+days in front of the screen	días frente a la pantalla
+Default folder	Carpeta predeterminada
+delayed %d min	en diferido %d min
+Delete	Eliminar
+Delete collection	Eliminar la colección
+Delete “{1}”?	¿Eliminar «{1}»?
+DETAILS	DETALLES
+DIRECTED BY	DIRIGIDA POR
+Directed by	Dirigida por
+Director	Dirección
+Directors	Directores
+Discover	Descubrir
+Dismiss	Descartar
+Done	Hecho
+Double page	Doble página
+Double page, right to left	Doble página, de derecha a izquierda
+Download started.	Descarga iniciada.
+downloading %d %%	descargando %d %%
+Drama	Drama
+Drama & Romance	Drama y romance
+Edit profiles	Editar perfiles
+Edit search	Editar la búsqueda
+ends	fin
+Ends at 	Termina a las 
+ends at %s	termina a las %s
+English	Inglés
+Enter a name or number	Introduce un nombre o número
+Enter a public HTTP or HTTPS host link.	Introduce un enlace público HTTP o HTTPS de un alojamiento.
+Enter a title	Introduce un título
+Enter a valid HTTP or HTTPS XMLTV address, or off to clear it.	Introduce una dirección XMLTV HTTP o HTTPS válida, u off para borrarla.
+Enter a valid HTTPS address, or a local HTTP address.	Introduce una dirección HTTPS válida o una dirección HTTP local.
+Enter your adult PIN to manage protected groups.	Introduce tu PIN de adulto para gestionar los grupos protegidos.
+Enter your IPTV credentials or a TMDB key, or choose Configure later.	Introduce tus credenciales IPTV o una clave de TMDB, o elige Configurar más tarde.
+Ep. {1}	Ep. {1}
+EPISODE	EPISODIO
+Episode {1}	Episodio {1}
+Episodes	Episodios
+Episodes could not be loaded.	No se pudieron cargar los episodios.
+Episodes {1}	Episodios {1}
+ERA	ÉPOCA
+Erase this profile's watch history	Borrar el historial de este perfil
+ESSENTIALS	IMPRESCINDIBLES
+Every day	Cada día
+Every week	Cada semana
+Everyone plays the title with their own sources; play, pause and jumps stay in step.	Cada uno reproduce el título con sus fuentes; reproducir, pausar y saltar se mantienen sincronizados.
+Everything	Todo
+Everywhere	En todas partes
+Excluded sources	Fuentes descartadas
+Excluded · {1}	Descartadas · {1}
+Exit full screen	Salir de pantalla completa
+Expires {1}	Caduca: {1}
+Explore	Explorar
+Export	Exportar
+Export failed. Check available space, folder access and existing files.	Error al exportar. Comprueba el espacio disponible, el acceso a la carpeta y los archivos existentes.
+Exporting recording…	Exportando la grabación…
+Extend 15 minutes	Ampliar 15 minutos
+Failed	Error
+Failing stream	Emisión con fallos
+Family	Familia
+Fantasy	Fantasía
+Fast	Rápido
+Favorite	Añadir a favoritos
+Favorites	Favoritos
+Favorites first	Favoritos primero
+Favorites only	Solo favoritos
+Featured	Destacado
+Fill (crop)	Rellenar (recortar)
+Filler	Relleno
+Fillers hidden	Rellenos ocultos
+Film	Película
+Film Page	Ficha de la película
+Films	Películas
+Films and series	Películas y series
+Films and series: you take it all.	Películas y series: te lo llevas todo.
+Films are your religion.	El cine es tu religión.
+Films That Twist Your Mind	Películas que te vuelan la cabeza
+Films, OVAs and more	Películas, OVA y más
+Find something to watch	Encuentra algo que ver
+Finding a source…	Buscando una fuente…
+Finished	Terminados
+First page	Primera página
+Fit	Ajustar
+Fit height	Página entera
+Fit width	Ancho completo
+Follow the system	Según el sistema
+Font	Tipo de letra
+For the Whole Family	Para toda la familia
+FOR YOU	PARA TI
+For You	Para ti
+Forward 30 s	Avanzar 30 s
+fps	fps
+Fragile stream	Emisión inestable
+Fragile stream. Try %s?	Emisión inestable. ¿Probar %s?
+French	Francés
+From the youngest to the oldest, everyone follows.	De los más pequeños a los mayores, todos se enganchan.
+From your guide, in your channels' order	De tu guía, en el orden de tus canales
+Full guide duration	Duración completa de la guía
+Full programme capture, schedules and saved files	Grabación completa, programaciones y archivos guardados
+Full screen	Pantalla completa
+Gallery	Galería
+Generate a download or playable link with a host service enabled on your Sokoul server.	Genera un enlace de descarga o reproducción con un servicio activado en tu servidor Sokoul.
+Generate link	Generar enlace
+Generated link	Enlace generado
+Generating…	Generando…
+GENRE	GÉNERO
+Genres	Géneros
+Give it a short name	Ponle un nombre corto
+Go on after the anime	Seguir después del anime
+Green	Verde
+Groups	Grupos
+Guaranteed Chills	Escalofríos garantizados
+Guide	Guía
+Guide adjustment	Ajuste de la guía
+Guide refresh failed. The stored guide is preserved.	No se pudo actualizar la guía. Se conserva la guía guardada.
+Guide times are given in {1}	Los horarios de la guía están en {1}
+Guide updated {1}	Guía actualizada el {1}
+Hearing impaired	Para personas con discapacidad auditiva
+Hidden	Oculta
+Hidden categories are removed from browsing and playback. Protected categories require an adult PIN session.	Las categorías ocultas se retiran del catálogo y de la reproducción. Las protegidas requieren una sesión de adulto desbloqueada.
+Hidden from guide	Oculto en la guía
+Hide	Ocultar
+Hide fillers	Ocultar rellenos
+Hide group	Ocultar el grupo
+Hide, order, parental code	Ocultar, ordenar, código parental
+Hide, protect and reorder groups	Ocultar, proteger y reordenar grupos
+High Tension	Alta tensión
+Highest rated manga	Los mangas mejor valorados
+Hold OK	Mantener OK
+Hold OK on a channel to add it to favorites or a collection.	Mantén pulsado OK en un canal para añadirlo a favoritos o a una colección.
+Home	Inicio
+Home rows	Filas de Inicio
+Horror	Terror
+Host link	Enlace del alojamiento
+Host link tools	Herramientas de enlaces alojados
+Hoster {1}	Alojamiento {1}
+If you liked this	Si te gustó
+If You Liked This Saga	Si te gustó esta saga
+In %d min	En %d min
+In account	En la cuenta
+In My List	En Mi lista
+In the Same Universe	En el mismo universo
+Inactive	Inactivo
+Information	Información
+Internal storage	Almacenamiento interno
+IPTV	IPTV
+Its length is not this episode's	Su duración no es la de este episodio
+Japan	Japón
+Join	Unirse
+Just Released	Recién estrenados
+Keep collection	Conservar la colección
+Keep reading	Seguir leyendo
+Keep the tissues close.	Ten los pañuelos a mano.
+Keep this channel and time	Mismo canal y misma hora
+Keep Watching	Seguir viendo
+Kids profile: off	Perfil infantil: no
+Kids profile: on	Perfil infantil: sí
+Korea	Corea
+Language	Idioma
+LANGUAGES	IDIOMAS
+Languages	Idiomas
+Large	Grande
+Last year	El año pasado
+Later	Próximamente
+Laughs, smiles and nothing else.	Risas, sonrisas y nada más.
+Leave the watch party	Salir de la watch party
+Left to right	De izquierda a derecha
+LESS	MENOS
+Library	Biblioteca
+Light Hearted	Para desconectar
+Light novels	Novelas ligeras
+Link entered	Enlace introducido
+LIVE	EN DIRECTO
+Live	En directo
+Live action	Imagen real
+Live and upcoming events	Eventos en directo y próximos
+Live preview	Vista previa en directo
+Live stream format	Formato del directo
+Live TV	TV en directo
+loading %d %%	cargando %d %%
+Loading channels…	Cargando canales…
+Loading groups…	Cargando grupos…
+Loading provider information…	Cargando información del proveedor…
+Loading sports…	Cargando deportes…
+Loading titles…	Cargando títulos…
+Loading your guide…	Cargando tu guía…
+Loading…	Cargando…
+Lock now	Bloquear ahora
+Long strip	Tira continua
+Look	Aspecto
+Lost frames	Fotogramas perdidos
+M3U source	Fuente M3U
+Made for you	Hecho para ti
+Maintenance	Mantenimiento
+Manga	Manga
+Manga of the moment	Los mangas del momento
+Manga sources	Fuentes del manga
+Manga still coming out	Mangas en publicación
+Prefer quality up to	Preferir calidad hasta
+Prefer size up to	Preferir tamaño hasta
+MB/s	MB/s
+Measuring the stream	Midiendo la emisión
+Menu · edit	Menú · editar
+Message	Mensaje
+Metacritic	Metacritic
+Mind Games	Juegos mentales
+Monday to Friday	De lunes a viernes
+Moods	Estados de ánimo
+MOODS	AMBIENTES
+More	Más
+More options	Más opciones
+Move down	Bajar
+Move group down	Bajar el grupo
+Move group up	Subir el grupo
+Move up	Subir
+Move with ↑ ↓ · OK saves · Back cancels	Mueve con ↑ ↓ · OK guarda · Atrás cancela
+Movie	Película
+Movie and series source priorities	Prioridades de las fuentes de películas y series
+Movies	Películas
+Movies, shows, cast and more	Películas, series, reparto y más
+Music	Música
+Must-See Series	Series imprescindibles
+Must-sees this week.	Lo imprescindible de la semana.
+My channels	Mis canales
+My List	Mi lista
+My reminders	Mis recordatorios
+My series	Mis series
+My space	Mi espacio
+My TV	Mi TV
+Name	Nombre
+Name your collection	Ponle nombre a tu colección
+NEW	NOVEDADES
+New chapters every week or month	Nuevos capítulos cada semana o cada mes
+New collection	Nueva colección
+New collection…	Nueva colección…
+New episode	Nuevo episodio
+New Episodes	Nuevos episodios
+New in cinemas, just arrived.	Recién llegadas de los cines.
+Newest	Más recientes
+Next	Siguiente
+Next channel	Canal siguiente
+Next chapter	Capítulo siguiente
+Next episode	Próximo episodio
+Next episode automatically	Siguiente episodio automático
+Next episode in {1} s	Siguiente episodio en {1} s
+Next episode: S%dE%d on %s	Próximo episodio: T%dE%d el %s
+Next page	Página siguiente
+Next Version	Versión siguiente
+No accessible result. Try a shorter name or switch to Programmes.	No hay resultados accesibles. Prueba un nombre más corto o cambia a Programas.
+No accessible titles match. Try another category or page.	Ningún título accesible coincide. Prueba otra categoría u otra página.
+No channels here.	No hay canales aquí.
+No channels in this group.	No hay canales en este grupo.
+No channels in this zapping list. Choose a list in My TV.	No hay canales en esta lista de zapeo. Elige una lista en Mi TV.
+No chapter can be read here: its publisher holds it.	No se puede leer ningún capítulo aquí: la editorial conserva los derechos.
+No chapter can be read here: its publisher holds it. Read it on {1}	No se puede leer ningún capítulo aquí: la editorial conserva los derechos. Léelo en {1}
+No episodes were returned by this provider.	El proveedor no devolvió ningún episodio.
+No events are listed right now.	No hay eventos anunciados por ahora.
+No groups are available. Add or refresh your IPTV source in Settings.	No hay grupos disponibles. Añade o actualiza tu fuente IPTV en Ajustes.
+No guide for this channel	Sin guía para este canal
+No host service is enabled on the server.	No hay ningún servicio de alojamiento activado en el servidor.
+No limit	Sin límite
+No matching group. Back clears the search.	Ningún grupo coincide. Atrás borra la búsqueda.
+No matching groups. Back clears the search.	Ningún grupo coincide. Atrás borra la búsqueda.
+No messages yet.	Aún no hay mensajes.
+No new programmes were received. The stored guide was preserved.	No se recibieron programas nuevos. Se conservó la guía guardada.
+No programme description is available.	No hay descripción disponible para este programa.
+No provider replay available for this channel	El proveedor no ofrece replay para este canal
+No provider source is configured.	No hay ninguna fuente de proveedor configurada.
+No recordings yet. Schedule a programme from its guide entry.	Aún no hay grabaciones. Programa una desde la guía.
+No reminder yet. In the guide, choose a programme to come and press OK.	Aún no hay recordatorios. En la guía, elige un programa próximo y pulsa OK.
+No results.	Sin resultados.
+No screen watching right now	Ninguna pantalla reproduciendo ahora
+No server is available for this event yet.	Aún no hay servidor disponible para este evento.
+No source configured	Ninguna fuente configurada
+No source is available for this title.	No hay ninguna fuente disponible para este título.
+No subtitles found online.	No se encontraron subtítulos en línea.
+No upcoming programmes. Choose a future programme in the guide and select Remind me.	No hay programas próximos. Elige uno en la guía y selecciona Recordármelo.
+No version matches these filters. Reset them or refresh the sources.	Ninguna versión coincide con estos filtros. Restablécelos o actualiza las fuentes.
+No {1} audio · Playing in {2}	Sin audio en {1} · Reproduciendo en {2}
+Normal	Normal
+Not a single day off.	Ni un solo día libre.
+Not available	No disponible
+Not available on a kids profile ({1})	No disponible en un perfil infantil ({1})
+Not available to read here	No se puede leer aquí
+Not Now	Ahora no
+Not set	Sin configurar
+Nothing announced this week.	Nada anunciado esta semana.
+Nothing beats a good film.	Nada supera a una buena película.
+Nothing found.	No se encontró nada.
+Nothing in your guide for this period. Try another tab.	No hay nada en tu guía para este periodo. Prueba otra pestaña.
+Nothing is what it seems.	Nada es lo que parece.
+Nothing matches. Widen the filters.	Nada coincide. Amplía los filtros.
+Nothing watched this year yet.	Aún no has visto nada este año.
+Notify me	Avisarme
+Now	Ahora
+Now available	Ya disponible
+Off	Desactivado
+OK  Apply group   ·   Back  Cancel	OK  Aplicar el grupo   ·   Atrás  Cancelar
+OK  Watch · Menu  Actions · F  Favorite	OK  Ver · Menú  Acciones · F  Favorito
+OK  Watch · Menu  Favorite	OK  Ver · Menú  Favorito
+OK opens in the guide · Back to guide	OK abre en la guía · Volver a la guía
+OK shows or hides a row; the arrows beside it change its place.	OK muestra u oculta una fila; las flechas de al lado cambian su posición.
+OK to change · Back to guide	OK para cambiar · Volver a la guía
+OK to choose · Back to guide	OK para elegir · Volver a la guía
+On	Activado
+On now	En emisión
+On the air right now.	En antena ahora mismo.
+One page	Una página
+One page, right to left	Una página, de derecha a izquierda
+One shots	One shots
+Ongoing	En curso
+Online	En línea
+Only this collection is removed. Channels and favorites are kept.	Solo se elimina esta colección. Los canales y favoritos se conservan.
+Open	Ver ficha
+Open a comic file	Abrir un archivo de cómic
+Open a file	Abrir un archivo
+Open download	Abrir la descarga
+Open group controls	Abrir los ajustes del grupo
+Open in guide	Abrir en la guía
+Open the TV workspace on the app window to manage downloads.	Abre el espacio de TV en la ventana de la app para gestionar las descargas.
+Open website	Abrir el sitio web
+Open your other groups	Abrir tus otros grupos
+Opening the chapter…	Abriendo el capítulo…
+Opening…	Abriendo…
+Optional · enter off to disable	Opcional · escribe off para desactivar
+Optional · use provider default	Opcional · usar la guía del proveedor
+Options	Opciones
+Order and hiding	Orden y ocultación
+Organize channels	Organizar los canales
+Organize groups and channels	Organizar grupos y canales
+Organize your TV	Organizar tu TV
+Original audio	Audio original
+Original language	Idioma original
+Oscars won	Óscar ganados
+Other streams of this channel	Otras emisiones de este canal
+OVA	OVA
+Page {1}	Página {1}
+Pages	Páginas
+Part of the Collection	Forma parte de la colección
+Partly filler	Relleno en parte
+Password	Contraseña
+Picked from what you watch.	Elegidas según lo que ves.
+PICTURE	IMAGEN
+Picture	Imagen
+Picture and sound	Imagen y sonido
+Picture format	Formato de imagen
+PIN	PIN
+PIN could not be saved or checked. Try again.	No se pudo guardar ni comprobar el PIN. Vuelve a intentarlo.
+PIN protected	Protegido con PIN
+PIN saved.	PIN guardado.
+Platforms	Plataformas
+PLATFORMS	PLATAFORMAS
+Play	Reproducir
+Play Anyway	Reproducir igualmente
+Play episode	Reproducir el episodio
+Play in Sokoul	Reproducir en Sokoul
+Play or pause	Reproducir o pausar
+Playback failed.	Falló la reproducción.
+Playback paused after several episodes in a row without any action.	La reproducción se ha detenido tras varios episodios seguidos sin ninguna acción.
+Playback sources	Fuentes de reproducción
+Playing	Reproduciendo
+Popular	Populares
+Popular Films	Películas populares
+Popular Series	Series populares
+Position	Posición
+Preferred source	Fuente preferida
+Preparing recording	Preparando la grabación
+Preparing the selected server…	Preparando el servidor elegido…
+PRESENTS	PRESENTA
+Press + on a film or series page to keep it here.	Pulsa + en la ficha de una película o serie para guardarla aquí.
+Press again to confirm	Pulsa de nuevo para confirmar
+Press OK to enter a link	Pulsa OK para introducir un enlace
+Previous	Anterior
+Previous chapter	Capítulo anterior
+Previous page	Página anterior
+Private channel order, visibility and parental controls	Orden privado de canales, visibilidad y control parental
+probably ready	probablemente lista
+Profile	Perfil
+Programme actions	Acciones del programa
+Programme guide unavailable for this channel.	Guía no disponible para este canal.
+Programme information unavailable	Información del programa no disponible
+Programmes	Programas
+Protect with PIN	Proteger con PIN
+Provider	Proveedor
+Provider information is unavailable. You can retry below.	La información del proveedor no está disponible. Puedes reintentarlo abajo.
+Provider link	Enlace del proveedor
+Provider movies	Películas del proveedor
+Provider refresh failed. Try again.	No se pudo actualizar el proveedor. Vuelve a intentarlo.
+Provider series	Series del proveedor
+Raised	Más alto
+Rating	Clasificación
+Read	Leer
+READ MORE	LEER MÁS
+Read the chapter	Leer el capítulo
+Ready	Disponible
+ready	lista
+Real-Debrid	Real-Debrid
+Real-Debrid refused your key. Check it in Settings.	Real-Debrid rechazó tu clave. Compruébala en Ajustes.
+Recent	Recientes
+Recent channels	Canales recientes
+Record once	Grabar una vez
+Record programme	Grabar el programa
+Record this programme to its end	Grabar este programa hasta el final
+Recording	Grabando
+Recording could not be exported. Try another destination.	No se pudo exportar la grabación. Prueba otro destino.
+Recording deleted.	Grabación eliminada.
+Recording exported.	Grabación exportada.
+Recording extended.	Grabación ampliada.
+Recording now	Grabando ahora
+Recording saved.	Grabación guardada.
+Recording scheduled through the programme end.	Grabación programada hasta el final del programa.
+Recording scheduled.	Grabación programada.
+Recording starts now and continues through the programme end, with a 5 minute safety margin. The provider’s Replay remains separate for the part already aired.	La grabación empieza ahora y sigue hasta el final del programa, con 5 minutos de margen. El replay del proveedor sigue aparte para la parte ya emitida.
+Recordings	Grabaciones
+Recordings could not be loaded. Reopen this panel to retry.	No se pudieron cargar las grabaciones. Vuelve a abrir este panel para reintentarlo.
+Recurring Cast	Reparto habitual
+Refresh	Actualizar
+Refresh servers	Actualizar los servidores
+Refresh subscription	Actualizar la suscripción
+Refresh TV guide	Actualizar la guía de TV
+Release calendar	Calendario de estrenos
+Release Order	Orden de estreno
+Released	Estreno
+Reload services	Recargar los servicios
+Remember hoster chosen for each source	Recordar el alojamiento elegido para cada fuente
+Remind me	Recordármelo
+Reminder set	Recordatorio activado
+Reminders	Recordatorios
+Remove	Quitar
+Remove channel from favorites	Quitar el canal de favoritos
+Remove from collection	Quitar de la colección
+Remove protection	Quitar la protección
+Remove reminder	Quitar el recordatorio
+Rename	Cambiar nombre
+Rename collection	Cambiar el nombre de la colección
+Reorder channel	Mover el canal
+Replay	Replay
+Reset filters	Restablecer filtros
+Reset guide adjustment	Restablecer el ajuste de la guía
+Reset the default style	Restablecer el estilo predeterminado
+Reset the display settings	Restablecer la visualización
+Restore the default order	Restablecer el orden predeterminado
+Resume	Reanudar
+Resume chapter {1}	Reanudar el capítulo {1}
+Resumed at {1}	Reanudado en {1}
+Retry	Reintentar
+Return on budget	Rentabilidad
+Right to left	De derecha a izquierda
+Romance	Romance
+Rotten Tomatoes	Rotten Tomatoes
+Roulette	Ruleta
+Roulette: let chance choose	Ruleta: deja que el azar elija
+Runtime	Duración
+S%1$d, E%2$d	T%1$d, E%2$d
+Sagas	Sagas
+SAGAS	SAGAS
+Same actors	Con los mismos actores
+Same day and time	Mismo día y misma hora
+Same team	Mismo equipo
+Save	Guardar
+Save collection	Guardar la colección
+Save episode offline	Guardar el episodio sin conexión
+Save location	Ubicación
+Save offline	Guardar sin conexión
+Saved	Guardado
+Saved library	Biblioteca guardada
+Saving schedule…	Guardando la programación…
+Schedule cancelled.	Programación cancelada.
+Scheduled	Programado
+Scheduled, active and saved programmes	Programas programados, en curso y guardados
+Scheduled. This account allows one connection, so another live stream will be stopped.	Programado. Esta cuenta solo permite una conexión: se detendrá cualquier otro directo.
+Scheduling…	Programando…
+Sci-fi	Ciencia ficción
+Science fiction	Ciencia ficción
+Science Fiction	Ciencia ficción
+Screensaver	Salvapantallas
+Search	Buscar
+Search could not be loaded. Edit your query to retry.	No se pudo cargar la búsqueda. Edita la consulta para reintentarlo.
+Search titles	Buscar títulos
+Search {1} categories	Buscar en {1} categorías
+Searching available catalogs…	Buscando en los catálogos disponibles…
+Searching…	Buscando…
+Season	Temporada
+Season {1}	Temporada {1}
+Season {1} · 	Temporada {1} · 
+Season {1} · Episode {2}	Temporada {1} · Episodio {2}
+Seasons and episodes	Temporadas y episodios
+Seasons and episodes from the source	Temporadas y episodios de la fuente
+See All	Ver todo
+See Versions	Ver versiones
+See you tomorrow at dawn.\nAnd this time, don't be late.	Nos vemos mañana al amanecer.\nY esta vez, no llegues tarde.
+Select	Seleccionar
+SELECTION	SELECCIÓN
+Send	Enviar
+Series	Series
+Series are your second family.	Las series son tu segunda familia.
+Series set the pace of your days.	Las series marcan el ritmo de tus días.
+Series That Twist Your Mind	Series que te vuelan la cabeza
+Server	Servidor
+Server, username and password are all required.	Se necesitan el servidor, el usuario y la contraseña.
+Service	Servicio
+Services	Servicios
+Set adult PIN	Definir un PIN de adulto
+Set up	Configurado
+Set up the Sokoul server in Settings > Credentials.	Configura el servidor Sokoul en Ajustes > Credenciales.
+Settings	Ajustes
+Settings always stays: it is how you get back here.	Ajustes siempre se queda: es por donde vuelves aquí.
+Setup	Configuración
+Shadow only	Solo sombra
+Share this code	Comparte este código
+Show	Mostrar
+Show 0.5 s earlier	Mostrar 0,5 s antes
+Show 0.5 s later	Mostrar 0,5 s después
+Show group	Mostrar el grupo
+Show in guide	Mostrar en la guía
+Show results	Mostrar resultados
+Showing saved information; the provider could not be reached. Its connection counter may be delayed.	Se muestra información guardada: no se pudo contactar con el proveedor. Su contador de conexiones puede ir con retraso.
+Showing {1}+ titles	Mostrando {1}+ títulos
+Shown	Visible
+Size	Tamaño
+Skip Credits	Saltar créditos
+Skip Intro	Saltar intro
+Sleep timer	Temporizador
+Slice of life	Vida cotidiana
+Small	Pequeña
+Society and more	Sociedad y más
+Sort anime by category	Ordenar los animes por categoría
+SOUND	SONIDO
+Sound	Sonido
+Sound off	Sin sonido
+Sound on	Con sonido
+Source health	Estado de la fuente
+Source preferences updated.	Preferencias de la fuente actualizadas.
+Source status and playback preferences	Estado de la fuente y preferencias de reproducción
+Source {1}	Fuente {1}
+Source: %s	Fuente: %s
+Sources are still arriving…	Las fuentes siguen llegando…
+Space	Espacio
+SPACE	ESPACIO
+Speed	Velocidad
+Spin again	Volver a girar
+Spinning…	Girando…
+Sports	Deportes
+Sports and games	Deportes y juegos
+Stable	Estable
+Start	Empezar
+Start a watch party	Iniciar una watch party
+Start what is ready	Iniciar la versión lista
+Starting	Inicio
+Starting playback	Inicio de la reproducción
+Status, stream format, guide offset, refresh	Estado, formato de emisión, desfase de la guía, actualización
+Steady stream	Emisión estable
+Still coming out	Aún en publicación
+Stop	Detener
+Stop and save	Detener y guardar
+Stop recording before opening another IPTV stream	Detén la grabación antes de abrir otra emisión IPTV
+Stop recording before opening another stream	Detén la grabación antes de abrir otra emisión
+Stop Trailer	Detener el tráiler
+Storage	Almacenamiento
+Story Order	Orden de la historia
+Stream details	Detalles de la emisión
+Stream errors	Errores de la emisión
+Stream formats: {1}	Formatos de emisión: {1}
+Stream lost, moved to %s	Emisión perdida, cambio a %s
+Stretch	Estirar
+Studios	Estudios
+Subscription	Suscripción
+Subscription and guide	Suscripción y guía
+Subtitle style	Estilo de los subtítulos
+Subtitles	Subtítulos
+Subtitles of the stream itself take this style from the next title.	Los subtítulos de la propia emisión adoptan este estilo desde el siguiente título.
+Superheroes	Superhéroes
+Switch	Cambiar
+Sync: %s s	Sincronización: %s s
+Synchronization: Classic	Sincronización: clásica
+Synchronization: Pro	Sincronización: Pro
+System	Sistema
+S{1} · E{2}	T{1} · E{2}
+That PIN was not accepted.	Ese PIN no se aceptó.
+The address of the computer running the watch party server, for instance http://192.168.0.20:25566	La dirección del ordenador que ejecuta el servidor de watch party, por ejemplo http://192.168.0.20:25566
+The All-Rounder	El Todoterreno
+The anime	El anime
+The Binge-Watcher	El Maratonero
+The change could not be saved. Try again.	No se pudo guardar el cambio. Vuelve a intentarlo.
+The channel remains available to watch.	El canal sigue disponible para ver.
+The Cinephile	El Cinéfilo
+The collection changed. Cancel and try again.	La colección ha cambiado. Cancela y vuelve a intentarlo.
+The complete programme is scheduled, with a 2 minute lead-in and a 5 minute safety margin.	El programa completo está programado, con 2 minutos de antelación y 5 minutos de margen.
+The connection was interrupted.	La conexión se interrumpió.
+The Early Bird	El Madrugador
+The experience	La experiencia
+The Explorer	El Explorador
+The Faces	Los rostros
+The Films	Las películas
+The films everyone is watching.	Las películas que todo el mundo está viendo.
+The highest rated of all time.	Las mejor valoradas de todos los tiempos.
+The Honors	El palmarés
+The IPTV provider just refused a connection. Try again in %d s.	El proveedor IPTV acaba de rechazar una conexión. Vuelve a intentarlo en %d s.
+The IPTV server refused these credentials or did not respond.	El servidor IPTV rechazó estas credenciales o no respondió.
+The Machine	La Máquina
+The manga	El manga
+The Movie Lover	El Amante del cine
+The Night Owl	El Noctámbulo
+The only version left is not as long as this episode.	La única versión que queda no dura lo mismo que este episodio.
+The only version left seems to be a film, not this episode.	La única versión que queda parece una película, no este episodio.
+The only version left seems to be another episode.	La única versión que queda parece otro episodio.
+The only version left seems to be another work with the same name.	La única versión que queda parece otra obra con el mismo nombre.
+The playback engine was not found.	No se encontró el motor de reproducción.
+The provider stream could not be opened. Try again.	No se pudo abrir la emisión del proveedor. Vuelve a intentarlo.
+The recording could not be started.	No se pudo iniciar la grabación.
+The recording is still growing	La grabación sigue en curso
+The Series Addict	El Adicto a las series
+The series everyone is talking about.	Las series de las que todo el mundo habla.
+The Series Fan	El Fan de las series
+The server refused this version (error %d).	El servidor rechazó esta versión (error %d).
+The server requires an active VIP key.	El servidor requiere una clave VIP activa.
+The server took too long to answer.	El servidor tardó demasiado en responder.
+The service is unavailable. Try again later.	El servicio no está disponible. Vuelve a intentarlo más tarde.
+The source refused this stream.	La fuente rechazó esta emisión.
+The sports server did not provide a playable native stream.	El servidor deportivo no ofreció una emisión nativa reproducible.
+The stream stopped before the end of the film.	La emisión se detuvo antes del final de la película.
+The stream was interrupted.	La emisión se interrumpió.
+The whole interface changes at once. Titles and descriptions follow the language too.	Toda la interfaz cambia al instante. Los títulos y las descripciones también siguen el idioma.
+The Work	La obra
+The worlds of Studio Ghibli	Los mundos de Studio Ghibli
+THEME	TEMA
+These controls are unavailable on a kids profile.	Estos ajustes no están disponibles en un perfil infantil.
+This category is restricted for this profile.	Esta categoría está restringida para este perfil.
+This channel is no longer available.	Este canal ya no está disponible.
+This channel is restricted for this profile	Este canal está restringido para este perfil
+This channel is restricted for this profile.	Este canal está restringido para este perfil.
+This entry is not a direct video file and cannot be saved offline.	Esta entrada no es un archivo de vídeo directo y no se puede guardar sin conexión.
+This episode adapts	Este episodio adapta
+This file does not have the language wanted.	Este archivo no tiene el idioma deseado.
+This key was refused.	Se rechazó esta clave.
+This name is empty, too long or already used.	Este nombre está vacío, es demasiado largo o ya existe.
+This provider entry has no playable stream.	Esta entrada del proveedor no tiene ninguna emisión reproducible.
+This recording is no longer available.	Esta grabación ya no está disponible.
+This recording is not ready to play yet.	Esta grabación aún no se puede reproducir.
+This recording is restricted for this profile.	Esta grabación está restringida para este perfil.
+This server requires a VIP account for native sports playback.	Este servidor requiere una cuenta VIP para la reproducción nativa de deportes.
+This service could not unlock the link.	Este servicio no pudo desbloquear el enlace.
+This service did not respond. Try again.	Este servicio no respondió. Vuelve a intentarlo.
+This source does not expose a local recording stream.	Esta fuente no ofrece una emisión grabable localmente.
+This sports source is unavailable. Try another server or refresh later.	Esta fuente deportiva no está disponible. Prueba otro servidor o actualiza más tarde.
+This title could not be opened.	No se pudo abrir este título.
+This title is restricted for this profile.	Este título está restringido para este perfil.
+This TV cannot play this video format.	Este televisor no puede reproducir este formato de vídeo.
+This version is not ready yet (%d %%).	Esta versión aún no está lista (%d %%).
+This version is not ready yet.	Esta versión aún no está lista.
+This version is not the film: its file is a short clip or not a video.	Esta versión no es la película: su archivo es un clip corto o no es un vídeo.
+This version no longer exists.	Esta versión ya no existe.
+This version takes too long to respond.	Esta versión tarda demasiado en responder.
+This week	Esta semana
+This week's calendar	Calendario de la semana
+This week's releases	Estrenos de la semana
+This year	Este año
+Thriller	Suspense
+titles	títulos
+to download	por descargar
+to try	por probar
+To Unwind	Para relajarse
+To watch it all	Para verlo todo
+Today	Hoy
+Tomorrow	Mañana
+Tonight	Esta noche
+Tonight: like {1}	Esta noche: como {1}
+Too many attempts. Try again in one minute.	Demasiados intentos. Vuelve a intentarlo en un minuto.
+Top 10 Films This Week	Top 10 de películas esta semana
+Top 10 Series This Week	Top 10 de series esta semana
+Top Results	Mejores resultados
+Torrent ready in Real-Debrid	Torrent listo en Real-Debrid
+Total budget	Presupuesto total
+Trailer	Tráiler
+Trailers	Tráileres
+Translate to	Traducir al
+Translating…	Traduciendo…
+Trending	Tendencias
+TRENDING	TENDENCIA
+TV	TV
+TV & Shows	TV y series
+TV guide	Guía de TV
+TV settings	Ajustes de TV
+TV Show	Serie
+TYPE	TIPO
+Type with your remote	Escribe con el mando
+Unable to load this page. Try refreshing.	No se pudo cargar esta página. Prueba a actualizar.
+Unavailable	No disponible
+Unavailable for now, the daily limit may be reached	No disponible por ahora, puede que se haya alcanzado el límite diario
+Unavailable · manage or remove this channel	No disponible · gestiona o quita este canal
+Under 1h40	Menos de 1 h 40
+Under 2h	Menos de 2 h
+Unfavorite	Quitar de favoritos
+Unknown language	Idioma desconocido
+Unlock a download link	Desbloquear un enlace de descarga
+Unlock IPTV controls in Organization to change source settings.	Desbloquea los controles IPTV en Organización para cambiar la fuente.
+Unlocked for 15 minutes.	Desbloqueado durante 15 minutos.
+Unspecified	Sin especificar
+Up for playback controls	Arriba para los controles de reproducción
+Upcoming	Próximamente
+Updating…	Actualizando…
+USB storage	Almacenamiento USB
+Use 4–8 digits and unlock before changing an existing PIN.	Usa de 4 a 8 cifras y desbloquea antes de cambiar un PIN existente.
+Use a unique name from 1 to 40 characters.	Usa un nombre único de 1 a 40 caracteres.
+Use for zapping	Usar para zapear
+Use your deployed website backend address. Sokoul's Mainapi address is separate.	Usa la dirección del backend de tu sitio desplegado. La dirección Mainapi de Sokoul es aparte.
+Username	Usuario
+Uses the provider connection and recording storage	Usa la conexión del proveedor y el almacenamiento de grabaciones
+Version %d of %d	Versión %d de %d
+Versions	Versiones
+Very large	Muy grande
+Volume {1}	Tomo {1}
+Volumes	Tomos
+Wait for the best	Esperar la mejor
+War, History & Western	Guerra, historia y western
+Watch	Ver
+Watch again	Volver a ver
+Watch Again from the Start	Volver a ver desde el principio
+Watch channel	Ver el canal
+Watch from the beginning	Ver desde el principio
+Watch party	Watch party
+Watch with the lights on.	Para ver con la luz encendida.
+watched	vistas
+Watched	Visto
+Watchlist	Por ver
+Web	Web
+Weekdays	Entre semana
+What's Next	Y después
+What's on	En emisión
+Where to watch	Dónde ver
+Which version	Qué versión
+White	Blanco
+Who is watching	Quién está viendo
+Who is watching?	¿Quién está viendo?
+With Family	En familia
+With {1}	Con {1}
+WORLD CINEMA	CINE DEL MUNDO
+Worlds and places	Mundos y lugares
+Worldwide box office	Taquilla mundial
+XMLTV guide URL	Dirección de la guía XMLTV
+Yellow	Amarillo
+You haven't added any movies or shows.	No has añadido ninguna película ni serie.
+You joined	Te has unido
+You stopped at episode {1}: the story goes on at chapter {2}	Te quedaste en el episodio {1}: la historia sigue en el capítulo {2}
+Your best sessions start after 10 pm.	Tus mejores sesiones empiezan después de las 22:00.
+your busiest month	tu mes con más actividad
+Your channels, in your order	Tus canales, en tu orden
+Your eras	Tus épocas
+Your favorite channels belong here	Tus canales favoritos van aquí
+your favourite hour	tu hora favorita
+Your genres	Tus géneros
+Your heart won't slow down.	El corazón no baja el ritmo.
+Your IPTV account is in use elsewhere (%d of %d connections). Close the other device, then retry.	Tu cuenta IPTV se está usando en otro lugar (%d de %d conexiones). Cierra el otro dispositivo y vuelve a intentarlo.
+Your IPTV catalogue, with its own categories	Tu catálogo IPTV, con sus propias categorías
+Your live service, recordings and personal channel layout	Tu servicio de TV, tus grabaciones y la organización de tus canales
+Your most watched	Lo que más has visto
+Your name	Tu nombre
+Your next binge starts here.	Tu próximo maratón empieza aquí.
+Your viewer profile	Tu perfil de espectador
+Your year in review	Tu año en resumen
+Zapping, guide order, preview and your provider	Zapeo, orden de la guía, vista previa y proveedor
+Zoom in {1} %	Ampliar {1} %
+Zoom out	Reducir
+{1}  ·  5 min safety margin	{1}  ·  5 min de margen
+{1} awards	{1} premios
+{1} catalog	Catálogo {1}
+{1} channels	{1} canales
+{1} channels in this group	{1} canales en este grupo
+{1} channels · {2} programmes in the guide\n{3} films · {4} series	{1} canales · {2} programas en la guía\n{3} películas · {4} series
+{1} chapters	{1} capítulos
+{1} entries	{1} entradas
+{1} episodes	{1} episodios
+{1} free	{1} libres
+{1} left	Quedan {1}
+{1} min	{1} min
+{1} min left	Quedan {1} min
+{1} Originals	Originales de {1}
+{1} programmes imported.	{1} programas importados.
+{1} screens at a time	{1} pantallas a la vez
+{1} screens watching right now	{1} pantallas reproduciendo ahora
+{1} seasons	{1} temporadas
+{1} to read here	{1} para leer aquí
+{1} volumes	{1} tomos
+{1} · play/pause, next	{1} · reproducir/pausar, siguiente
+A second life	Una segunda vida
+Accounts	Cuentas
+Anime films	Películas de animación
+Another world	Otro mundo
+Anti-heroes	Antihéroes
+Appearance	Apariencia
+At war	En guerra
+Atkinson Hyperlegible	Atkinson Hyperlegible
+Blue	Azul
+Chinese animation	Animación china
+Death games	Juegos mortales
+Finished, to read in one go	Terminados, para leer de un tirón
+Food on screen	Gastronomía
+Found family	Una familia elegida
+Hide the entries you never use.	Oculta las entradas que nunca usas.
+Highest rated	Mejor valorados
+How a title starts and which version comes first.	Cómo empieza un título y qué versión va primero.
+How subtitles look, for every video.	Cómo se ven los subtítulos, en todos los vídeos.
+Led by women	Protagonizadas por mujeres
+Manhua from China	Manhua de China
+Manhwa from Korea	Manhwa de Corea
+Menu	Menú
+Monospace	Monoespaciada
+Most popular of all time	Los más populares de siempre
+Next season	La próxima temporada
+Orange	Naranja
+Pink	Rosa
+Playback	Reproducción
+Playing with time	Jugando con el tiempo
+Purple	Morado
+Red	Rojo
+Serif	Serif
+Soft and soothing	Dulce y relajante
+Standard	Estándar
+Still being published	En publicación
+Superpowers	Superpoderes
+The colour of what shows your progress.	El color de lo que muestra tu progreso.
+The language of the interface.	El idioma de la interfaz.
+The rows of the home page and what moves by itself.	Las filas de Inicio y lo que se mueve solo.
+This app, its credits and a little housekeeping.	Esta app, sus créditos y un poco de limpieza.
+This season	Esta temporada
+Top 10 Anime	Top 10 de anime
+Trending now	Tendencias ahora
+Tsundere alert	Alerta tsundere
+Who is watching, and the services Sokoul draws on.	Quién está viendo y los servicios que usa Sokoul.
+Best quality first	La mejor calidad primero
+At home on {1}	En casa el {1}
+Built-in key	Clave integrada
+Dead link	Enlace muerto
+In cinemas	En cines
+Key entered	Clave introducida
+Not the film	No es la película
+Not yet at home	Aún no en casa
+Refused by the host	Rechazado por el servidor
+Coming soon	Próximamente
+In cinemas on {1}	En cines el {1}
+Recent searches	Búsquedas recientes
+Speak	Dictar

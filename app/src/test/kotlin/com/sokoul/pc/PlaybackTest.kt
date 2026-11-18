@@ -61,7 +61,7 @@ import org.junit.Test
 class PlaybackTest {
     private fun scope() = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val request = PlayRequest("movie", 1, null, null, "Title", null, null)
-    private val fast = PlaybackBudgets(firstChoiceMs = 200, searchMs = 300, firstImageMs = 400, stallMs = 300, tickMs = 20)
+    private val fast = PlaybackBudgets(firstChoiceMs = 200, searchMs = 300, firstImageMs = 400, trackMs = 150, stallMs = 300, tickMs = 20)
 
     private fun waitUntil(what: String, check: () -> Boolean) = runBlocking {
         val end = System.currentTimeMillis() + 5_000
@@ -71,7 +71,10 @@ class PlaybackTest {
         }
     }
 
-    private fun session(engine: com.sokoul.pc.playback.session.PlayerEngine?, finder: SourceFinder, prefs: PlaybackPrefs = PlaybackPrefs(), read: (String) -> Resume? = { null }) =
+    /** French first, then the original: fixed here so that no test depends on the machine's language. */
+    private val frenchFirst = PlaybackPrefs(intent = com.sokoul.desktop.data.AudioIntent(listOf("fr", com.sokoul.desktop.data.AudioIntent.ORIGINAL)))
+
+    private fun session(engine: com.sokoul.pc.playback.session.PlayerEngine?, finder: SourceFinder, prefs: PlaybackPrefs = frenchFirst, read: (String) -> Resume? = { null }) =
         PlaybackSession(engine, finder, scope(), prefs = { prefs }, frenchSystem = { true }, readResume = read, budgets = fast)
 
     // --- The session
@@ -526,36 +529,111 @@ class PlaybackTest {
     private fun tracks(vararg names: String) = names.mapIndexed { i, n -> i to "Track ${i + 1} - [$n]" }
 
     @Test
-    fun a_multi_file_without_french_gives_way_on_a_french_system_at_the_same_position() {
+    fun ask_fallback_holds_sound_until_the_viewer_chooses_to_listen() {
+        val engine = FakeEngine(tracks = mapOf("a" to tracks("English")))
+        val prefs = PlaybackPrefs(intent = com.sokoul.desktop.data.AudioIntent(listOf("fr"), com.sokoul.desktop.data.AudioFallback.Ask))
+        val s = session(engine, finder(testVersion("v0", "a")), prefs)
+        try {
+            s.play(request)
+            waitUntil("muted playback and language notice") { s.phase is Phase.Playing && s.languageNotice != null }
+            assertEquals("fr", s.languageNotice?.wanted)
+            assertTrue(s.languageNotice!!.heard.contains("English"))
+            assertFalse("sound stays held", "endPreview" in engine.calls)
+            s.listenAnyway()
+            assertEquals(1, engine.calls.count { it == "endPreview" })
+            runBlocking { delay(fast.tickMs * 3) }
+            assertNull("the watch loop must not repeat the accepted notice", s.languageNotice)
+            assertEquals(listOf("a"), engine.played.map { it.url })
+        } finally { s.close() }
+    }
+
+    @Test
+    fun engine_default_releases_sound_when_the_wanted_language_is_missing() {
+        val engine = FakeEngine(tracks = mapOf("a" to tracks("English")))
+        val prefs = PlaybackPrefs(intent = com.sokoul.desktop.data.AudioIntent(listOf("fr"), com.sokoul.desktop.data.AudioFallback.EngineDefault))
+        val s = session(engine, finder(testVersion("v0", "a")), prefs)
+        try {
+            s.play(request)
+            waitUntil("playing with language notice") { s.phase is Phase.Playing && s.languageNotice != null }
+            assertEquals(1, engine.calls.count { it == "endPreview" })
+        } finally { s.close() }
+    }
+
+    @Test
+    fun ask_fallback_releases_sound_when_a_wanted_language_is_available() {
+        val engine = FakeEngine(tracks = mapOf("a" to tracks("French")))
+        val prefs = PlaybackPrefs(intent = com.sokoul.desktop.data.AudioIntent(listOf("fr"), com.sokoul.desktop.data.AudioFallback.Ask))
+        val s = session(engine, finder(testVersion("v0", "a")), prefs)
+        try {
+            s.play(request)
+            waitUntil("wanted audio plays") { s.phase is Phase.Playing }
+            assertEquals(1, engine.calls.count { it == "endPreview" })
+            assertNull(s.languageNotice)
+        } finally { s.close() }
+    }
+
+    @Test
+    fun a_multi_file_without_french_gives_way_before_it_starts_with_the_sound_held() {
+        val engine = FakeEngine(tracks = mapOf("a" to tracks("English", "Spanish"), "b" to tracks("French", "English")))
+        val s = session(engine, finder(testVersion("v0", "a", language = AudioLanguage.MULTI), testVersion("v1", "b", language = AudioLanguage.MULTI)))
+        s.play(request)
+        waitUntil("second plays") { s.current?.key == "v1" && s.phase is Phase.Playing }
+        assertEquals(PlayFailure.WrongLanguage, s.failures["v0"])
+        assertEquals("each version opened once", listOf("a", "b"), engine.played.map { it.url })
+        runBlocking { delay(150) }
+        assertEquals("it has French: it stays", "v1", s.current?.key)
+        assertNull(s.languageNotice)
+        s.close()
+    }
+
+    @Test
+    fun an_active_version_is_never_replaced_for_its_language() {
         val engine = FakeEngine()
         val s = session(engine, finder(testVersion("v0", "a", language = AudioLanguage.MULTI), testVersion("v1", "b", language = AudioLanguage.MULTI)))
         s.play(request)
         waitUntil("first plays") { s.current?.key == "v0" && s.phase is Phase.Playing }
-        engine.report(PlayerStatus(playing = true, timeMs = 200_000, lengthMs = 10_000_000, audio = tracks("English", "Spanish"), session = engine.currentSession))
-        waitUntil("second plays") { s.current?.key == "v1" && s.phase is Phase.Playing }
-        assertEquals(PlayFailure.WrongLanguage, s.failures["v0"])
-        assertEquals(200_000, engine.played.last().startMs)
-        engine.report(PlayerStatus(playing = true, timeMs = 200_500, lengthMs = 10_000_000, audio = tracks("French", "English"), session = engine.currentSession))
-        runBlocking { delay(150) }
-        assertEquals("it has French: it stays", "v1", s.current?.key)
+        // Tracks described only after the start: the viewer is told, nothing reopens.
+        engine.report(PlayerStatus(playing = true, timeMs = 200_000, lengthMs = 10_000_000, audio = tracks("English", "Spanish"), audioId = 0, session = engine.currentSession))
+        waitUntil("notice") { s.languageNotice != null }
+        runBlocking { delay(200) }
+        assertEquals("v0", s.current?.key)
+        assertEquals(listOf("a"), engine.played.map { it.url })
+        // French first in this session's preference (a French system): the notice names it and the track heard.
+        assertEquals("fr", s.languageNotice!!.wanted)
+        assertTrue(s.languageNotice!!.heard.contains("English"))
         s.close()
     }
 
     @Test
     fun a_version_left_for_its_language_comes_back_when_every_other_fails() {
-        val engine = FakeEngine()
+        val engine = FakeEngine(tracks = mapOf("a" to tracks("Japanese", "English")))
         val s = session(engine, finder(
             testVersion("v0", "a", language = AudioLanguage.MULTI),
             testVersion("v1", "b", language = AudioLanguage.MULTI, failure = PlayFailure.DeadLink),
         ))
         s.play(request)
-        waitUntil("first plays") { s.current?.key == "v0" && s.phase is Phase.Playing }
-        engine.report(PlayerStatus(playing = true, timeMs = 5_000, lengthMs = 10_000_000, audio = tracks("Japanese", "English"), session = engine.currentSession))
         // v1 is dead: the Japanese one plays again rather than nothing.
         waitUntil("back to the first") { s.current?.key == "v0" && s.phase is Phase.Playing && engine.played.size >= 2 }
-        engine.report(PlayerStatus(playing = true, timeMs = 5_500, lengthMs = 10_000_000, audio = tracks("Japanese", "English"), session = engine.currentSession))
-        runBlocking { delay(150) }
+        runBlocking { delay(200) }
         assertEquals("it stays this time", "v0", s.current?.key)
+        assertTrue(s.phase is Phase.Playing)
+        s.close()
+    }
+
+    @Test
+    fun two_plays_then_another_episode_open_only_the_last_one() {
+        val engine = FakeEngine()
+        val s = session(engine, finder(testVersion("v0", "a")))
+        s.play(request)
+        s.play(request)
+        val other = PlayRequest("tv", 2, 1, 2, "Other", null, null)
+        s.play(other)
+        waitUntil("plays") { s.phase is Phase.Playing && s.request == other }
+        val opened = engine.played.size
+        runBlocking { delay(200) }
+        assertEquals("no late opening from the earlier requests", opened, engine.played.size)
+        assertEquals(engine.currentSession, engine.status.value.session)
+        assertEquals(other, s.request)
         assertTrue(s.phase is Phase.Playing)
         s.close()
     }
@@ -779,7 +857,8 @@ class PlaybackTest {
         assertEquals("plain", VersionRanking.rank(all, PlaybackPrefs(audio = AudioPreference.Vostfr), frenchSystem = true).first().key)
         assertEquals("one other language may be the original", "en-only",
             VersionRanking.rank(listOf(rel("en-only", listOf("EN"), Readiness.Ready), rel("plain", emptyList(), Readiness.Likely)), PlaybackPrefs(audio = AudioPreference.Vo), true).first().key)
-        assertEquals("French wanted: unchanged, ready first", "spa-eng", VersionRanking.rank(all, PlaybackPrefs(audio = AudioPreference.Vf), true).first().key)
+        // French wanted: a release that names Spanish and English declares no French, so it goes after one that may have it.
+        assertEquals("French wanted: declared without French goes after unknown", "plain", VersionRanking.rank(all, PlaybackPrefs(audio = AudioPreference.Vf), true).first().key)
         val dual = PlayVersion("dual", VersionOrigin.Debrid, "S04E005_Episode 5.mkv", null, VideoQuality.FHD_1080, readiness = Readiness.Ready, foreignDub = true) { _, _ -> StreamRequest("dual", null, null, "t", live = false) }
         assertEquals("a Dual Audio release names no language yet is a dub", "plain",
             VersionRanking.rank(listOf(dual, rel("plain", emptyList(), Readiness.Likely)), PlaybackPrefs(audio = AudioPreference.Vo), true).first().key)
@@ -810,19 +889,25 @@ class PlaybackTest {
     }
 
     @Test
-    fun language_follows_the_system_unless_a_preference_says_otherwise() {
+    fun language_follows_the_wanted_languages_whatever_the_system() {
+        // The wanted languages decide, not the system's: the same French system can want French, the original or English.
         val all = listOf(v("vo", AudioLanguage.VO, VideoQuality.FHD_1080), v("vf", AudioLanguage.VF, VideoQuality.FHD_1080))
-        assertEquals("vf", VersionRanking.rank(all, PlaybackPrefs(), frenchSystem = true).first().key)
-        assertEquals("vo", VersionRanking.rank(all, PlaybackPrefs(), frenchSystem = false).first().key)
+        fun intent(vararg l: String) = PlaybackPrefs(intent = com.sokoul.desktop.data.AudioIntent(l.toList()))
+        val original = com.sokoul.desktop.data.AudioIntent.ORIGINAL
+        assertEquals("vf", VersionRanking.rank(all, intent("fr", original), frenchSystem = true).first().key)
+        assertEquals("vo", VersionRanking.rank(all, intent(original), frenchSystem = true).first().key)
+        assertEquals("an English film, English wanted", "vo", VersionRanking.rank(all, intent("en", original), frenchSystem = true, workLanguage = "en").first().key)
         assertEquals("vo", VersionRanking.rank(all, PlaybackPrefs(audio = AudioPreference.Vo), frenchSystem = true).first().key)
     }
 
     @Test
     fun a_multi_file_counts_as_the_language_wanted_and_a_sharper_one_wins() {
         val all = listOf(v("sd-vf", AudioLanguage.VF, VideoQuality.SD), v("4k-multi", AudioLanguage.MULTI, VideoQuality.UHD_4K), v("hd-vo", AudioLanguage.VO, VideoQuality.FHD_1080))
-        assertEquals(listOf("4k-multi", "sd-vf", "hd-vo"), VersionRanking.rank(all, PlaybackPrefs(), frenchSystem = true).map { it.key })
+        assertEquals(listOf("4k-multi", "sd-vf", "hd-vo"), VersionRanking.rank(all, frenchFirst, frenchSystem = true).map { it.key })
+        // A MULTI naming French and English holds the French wanted and the original after it: at equal picture it is as
+        // good as the VF and says more of itself.
         val same = listOf(v("multi", AudioLanguage.MULTI, VideoQuality.FHD_1080), v("vf", AudioLanguage.VF, VideoQuality.FHD_1080))
-        assertEquals("at equal picture, the exact language", "vf", VersionRanking.rank(same, PlaybackPrefs(), frenchSystem = true).first().key)
+        assertEquals("at equal picture, the release that declares the most wanted languages", "multi", VersionRanking.rank(same, frenchFirst, frenchSystem = true).first().key)
     }
 
     @Test
@@ -1024,6 +1109,65 @@ class PlaybackTest {
         assertEquals(1, requests.count { it.startsWith("/torrents/addMagnet") })
         assertEquals(1, requests.count { it.startsWith("/torrents?limit=5000") })
         assertFalse(requests.any { it.startsWith("/torrents/delete") })
+        server.shutdown()
+    }
+
+    @Test
+    fun a_pack_already_in_the_account_never_plays_the_episode_selected_last_time() = runBlocking {
+        // The Handmaid's Tale S04E06 played the S04E005 file kept from an earlier viewing (2026-11-17).
+        val pack = """{"id":"T1","filename":"pack","hash":"abc","status":"downloaded","progress":100,"bytes":1000,"speed":0,"seeders":0,""" +
+            """"files":[{"id":5,"path":"/S04/S04E005_Episode 5.mkv","bytes":1000,"selected":1},{"id":6,"path":"/S04/S04E006_Episode 6.mkv","bytes":1000,"selected":0}],"links":["https://real-debrid.com/d/5"]}"""
+        val server = MockWebServer()
+        val requests = mutableListOf<String>()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                val path = request.path.orEmpty()
+                requests += path
+                return when {
+                    path.startsWith("/torrents?limit=100") -> MockResponse().setBody("[]")
+                    path.startsWith("/torrents/addMagnet") -> MockResponse().setResponseCode(403).setBody("""{"error":"magnet already active","error_code":33}""")
+                    path.startsWith("/torrents?limit=5000") -> MockResponse().setBody("[$pack]")
+                    path.startsWith("/torrents/info/T1") -> MockResponse().setBody(pack)
+                    path.startsWith("/unrestrict/link") -> MockResponse().setBody("""{"download":"https://x.download.real-debrid.com/e5.mkv","filename":"e5.mkv","filesize":1}""")
+                    else -> MockResponse().setResponseCode(404)
+                }
+            }
+        }
+        server.start()
+        val episode6 = DebridStream("abc:6", "pack", null, "abc", 6, "S04E006_Episode 6.mkv", Release())
+        val failure = runCatching {
+            DebridTransfers(RealDebridApi(OkHttpClient(), { "token" }, server.url("/").toString().trimEnd('/'), spacingMs = 0))
+                .link(episode6, DebridQuery(1, true, 4, 6), keep = false) { }
+        }.exceptionOrNull()
+        assertTrue("no link to episode 5", failure is PlayFailureException)
+        assertFalse(requests.any { it.startsWith("/unrestrict/link") })
+        server.shutdown()
+    }
+
+    @Test
+    fun a_file_real_debrid_names_as_another_episode_is_never_played() = runBlocking {
+        // The pack's file has no readable episode, but the link Real-Debrid gives for it is S04E05 while S04E06 was asked.
+        val pack = """{"id":"T2","filename":"pack","hash":"def","status":"downloaded","progress":100,"bytes":1000,"speed":0,"seeders":0,""" +
+            """"files":[{"id":1,"path":"/S04/episode.mkv","bytes":1000,"selected":1}],"links":["https://real-debrid.com/d/1"]}"""
+        val server = MockWebServer()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                val path = request.path.orEmpty()
+                return when {
+                    path.startsWith("/torrents?limit=") -> MockResponse().setBody("[$pack]")
+                    path.startsWith("/torrents/info/T2") -> MockResponse().setBody(pack)
+                    path.startsWith("/unrestrict/link") -> MockResponse().setBody("""{"download":"https://x.download.real-debrid.com/e5.mkv","filename":"The.Handmaids.Tale.S04E05.1080p.mkv","filesize":1}""")
+                    else -> MockResponse().setResponseCode(404)
+                }
+            }
+        }
+        server.start()
+        val episode6 = DebridStream("def:1", "pack", null, "def", 1, "episode.mkv", Release())
+        val failure = runCatching {
+            DebridTransfers(RealDebridApi(OkHttpClient(), { "token" }, server.url("/").toString().trimEnd('/'), spacingMs = 0))
+                .link(episode6, DebridQuery(1, true, 4, 6), keep = false) { }
+        }.exceptionOrNull()
+        assertEquals(PlayFailure.Doubtful(Doubt.OtherEpisode), (failure as? PlayFailureException)?.failure)
         server.shutdown()
     }
 

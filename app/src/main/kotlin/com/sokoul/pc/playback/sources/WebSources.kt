@@ -262,8 +262,9 @@ internal object WebRoutes {
 }
 
 /**
- * The versions the Sokoul server (Mainapi) finds for a title: each source route is asked at once, one that fails or is
- * slow is simply missing, and the others are listed as they come.
+ * The versions the web sources give for a title: each source is asked at once, one that fails or is slow is simply
+ * missing, and the others are listed as they come. A source in [direct] is read by the app itself (no Sokoul server),
+ * in the server's answer shape; the others are still asked of the Sokoul server (Mainapi) when one is set.
  */
 class WebSources(
     http: OkHttpClient,
@@ -271,28 +272,37 @@ class WebSources(
     private val accessKey: () -> String?,
     private val probe: StreamProbe,
     private val localResolver: NativeEmbedResolver? = null,
+    private val direct: Map<String, suspend (PlayRequest) -> JsonElement?> = emptyMap(),
 ) {
-    private val client = http.newBuilder().callTimeout(CALL_SECONDS, TimeUnit.SECONDS).build()
+    // A server that is off on the network may drop the connection instead of refusing it: 3 s to connect.
+    private val client = http.newBuilder().callTimeout(CALL_SECONDS, TimeUnit.SECONDS).connectTimeout(3, TimeUnit.SECONDS).build()
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
-    /** True when a server address is set: without it the sources are not even asked. */
-    fun configured(): Boolean = base() != null
+    /** True when some source can be asked: one the app reads itself, or a server address. */
+    fun configured(): Boolean = direct.isNotEmpty() || base() != null
 
     private fun base(): String? = baseUrl()?.trim()?.trimEnd('/')?.takeIf { it.isNotEmpty() && (it.startsWith("http://") || it.startsWith("https://")) }
 
     /** One list per source, in the order they answer. */
     suspend fun find(request: PlayRequest, onSource: suspend (List<PlayVersion>) -> Unit) {
-        val base = base() ?: return
-        val routes = WebRoutes.of(request)
+        val base = base()
+        val routes = WebRoutes.of(request).filter { it.source in direct || base != null }
         coroutineScope {
             routes.map { route ->
                 async {
-                    val versions = runCatching { withTimeoutOrNull(SOURCE_MS) { ask(base, route, request) } }
+                    val versions = runCatching { withTimeoutOrNull(SOURCE_MS) { direct[route.source]?.let { read(it, route, request, base) } ?: ask(base!!, route, request) } }
                         .getOrElse { if (it is CancellationException) throw it else null }.orEmpty()
                     if (versions.isNotEmpty()) onSource(versions)
                 }
             }.awaitAll()
         }
+    }
+
+    /** A source the app reads itself: its answer is parsed as the server's would be. */
+    private suspend fun read(source: suspend (PlayRequest) -> JsonElement?, route: WebRoute, request: PlayRequest, base: String?): List<PlayVersion> {
+        val payload = source(request) ?: return emptyList()
+        com.sokoul.pc.playback.session.StartClock.note("${route.source.lowercase()} read by the app")
+        return WebParse.links(route.source, payload, request.episode, base.orEmpty(), localResolver != null).mapIndexed { i, link -> version(link, i, request) }
     }
 
     private suspend fun ask(base: String, route: WebRoute, request: PlayRequest): List<PlayVersion> = withContext(Dispatchers.IO) {
@@ -316,7 +326,9 @@ class WebSources(
         val release = ReleaseName.parse(link.name)
         val host = runCatching { URI(link.url).host }.getOrNull()
         val referrer = link.headers["Referer"] ?: REFERRERS[link.source]
-        val userAgent = link.headers["User-Agent"]
+        // Without the server's relay the CDN sees the app itself: a browser's User-Agent, as the site's own player sends
+        // (PurStream's CDN answers 403 to OkHttp's).
+        val userAgent = link.headers["User-Agent"] ?: BROWSER_USER_AGENT
         return PlayVersion(
             key = "web-${link.source.lowercase()}-$index-${link.url.hashCode().toUInt()}", origin = VersionOrigin.Web,
             name = "${link.source} · ${link.name}", language = link.language, quality = release.quality, hdr = release.hdr,
@@ -339,6 +351,7 @@ class WebSources(
         const val WEB_RIP_RANK = 3
         /** The CDN of PurStream refuses a request without the site as Referer (Movix sends the same header). */
         val REFERRERS = mapOf("PurStream" to "https://purstream.mx/")
+        const val BROWSER_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
     }
 }
 
