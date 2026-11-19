@@ -73,7 +73,9 @@ object VersionRanking {
             // Anime, at the same language: a file that says it is the episode, then one that cannot be read, then a doubtful one.
             .thenBy { it.confidence }
             .thenBy { if (SourceRules.suspicious(it, expectedMinutes)) 1 else 0 }
-        // IPTV is always there but counts on the account's connections: it comes after what Real-Debrid has ready.
+        // IPTV is always there but counts on the account's connections and its picture is often poor (720x406 for a
+        // Spartacus episode, 2026-11-19): it comes after every Real-Debrid and web version that may still play, as a last
+        // resort. "Preferred source: IPTV" puts it first again.
         val byReady = compareBy<PlayVersion> { if (it.origin == VersionOrigin.Iptv) IPTV_READY_RANK else readyRank(it.readiness) }
         // Windows wants SDR first. A TV that shows HDR wants the sharpest, then the richest; a format it cannot show goes after SDR.
         // The viewer's choice "best quality first": the sharpest first, then the richest picture, whatever the screen.
@@ -107,14 +109,14 @@ object VersionRanking {
         PreferredOrigin.Iptv -> if (v.origin == VersionOrigin.Iptv) 0 else 1
     }
 
-    private const val IPTV_READY_RANK = 2
+    private const val IPTV_READY_RANK = 4
 
     private fun readyRank(r: Readiness) = when (r) {
         Readiness.Ready -> 0
         Readiness.Likely -> 1
         Readiness.Unknown -> 3
-        Readiness.Preparing -> 4
-        Readiness.NotCached -> 5
+        Readiness.Preparing -> 5
+        Readiness.NotCached -> 6
     }
 
     private fun qualityRank(q: VideoQuality?) = when (q) {

@@ -11,8 +11,8 @@ enum class AudioProof { Observed, Declared, Implied, Unknown }
 /**
  * What a version's audio is worth against the viewer's wanted languages.
  * @property codes the languages the version may hold (ISO 639-1), as far as [proof] goes
- * @property heard twice the place in the wanted list of the first language it holds, plus one when that language is only
- *   probable (French in a MULTI that does not name it); then twice the list's size when nothing tells, and one more when
+ * @property heard twice the place in the wanted list of the first language it holds (a probable French, in a MULTI that
+ *   does not name it, counts as French); then twice the list's size when nothing tells, and one more when
  *   it says what it holds and nothing wanted is in it
  * @property matches whether it holds, or probably holds, a wanted language
  * @property original whether it holds the work's language, when that can be told
@@ -75,11 +75,6 @@ object AudioMatch {
         val (codes, proof) = languagesOf(v, fact, work)
         val dub = foreignDub(v)
         val label = (fact?.language ?: v.language)
-        // A MULTI that does not name French (nor was heard) probably holds it, as the French scene names them, but an
-        // English and Turkish MULTI exists: that French counts after a French that is declared or heard.
-        // A past viewing that heard French with another track (recorded as MULTI before the codes were kept) is evidence.
-        val probableOnly = label == AudioLanguage.MULTI && proof != AudioProof.Observed && fact?.language == null &&
-            "fr" !in v.announcedAudio.map(String::lowercase)
         fun holds(entry: String): Boolean = when {
             entry != ORIGINAL -> entry in codes
             // The work's language unknown: the labels that promise the original, never a dub.
@@ -90,7 +85,11 @@ object AudioMatch {
         // Without the work's language, a release naming one language that is no dub may well be the original.
         val mayBeOriginal = work == null && ORIGINAL in wanted && !dub && proof != AudioProof.Unknown
         val heard = when {
-            index >= 0 -> 2 * index + if (probableOnly && wanted[index] == "fr") 1 else 0
+            // A probable French (a MULTI that does not name it) ranks as French: the picture decides between them, and
+            // the declared one only wins at the same picture (proof, in the ranking's last steps). Ranked after, a 442 MB
+            // SD VF played before a 1080p Blu-ray MULTI, then IPTV at 720x406 (Spartacus on the TV, 2026-11-19). A MULTI
+            // without French is still left before it starts, its tracks heard with the sound held.
+            index >= 0 -> 2 * index
             proof == AudioProof.Unknown || mayBeOriginal -> unknownRank
             // It says what it holds, and nothing wanted is in it: after those that may still have it.
             else -> unknownRank + 1

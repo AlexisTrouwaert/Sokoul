@@ -232,7 +232,9 @@ class DebridTransfers(
     companion object {
         private const val POLL_MS = 2_000L
         private const val STALL_MS = 180_000L
-        private const val NOBODY_MS = 25_000L
+        // Real-Debrid finds a file's peers within seconds when there are any: 25 s held each dead version on screen in the
+        // "wait for the best" start, twice in a row for a Spartacus episode (2026-11-19).
+        private const val NOBODY_MS = 12_000L
         private const val QUICK_POLL_MS = 1_000L
         private const val ACCOUNT_LIMIT = 100
         private const val RECONCILE_LIMIT = 5000
