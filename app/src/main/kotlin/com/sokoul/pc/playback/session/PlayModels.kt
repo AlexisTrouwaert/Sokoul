@@ -107,8 +107,9 @@ sealed interface PlayFailure {
     /** The link no longer exists. */
     data object DeadLink : PlayFailure
     /**
-     * Real-Debrid refuses this very file for good (HTTP 451, "infringing_file"): a rights holder had it blocked. Remembered
-     * for a month, so that it is not tried again at each start (three or four of them cost 2 s for Teen Titans Go!).
+     * Real-Debrid refuses this very file (HTTP 451, "infringing_file"). Not proof of a rights holder for good: a paused
+     * account answers the same, which DebridTransfers tells apart by asking for a free film. Hidden as a dead link
+     * (SourceRules.dead) for a few hours, behind the "dead links" counter of the versions.
      */
     data object Blocked : PlayFailure
     data class Refused(val code: Int) : PlayFailure

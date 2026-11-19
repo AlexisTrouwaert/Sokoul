@@ -128,7 +128,10 @@ object SourceRules {
     }
 
     /** A failure of the link itself says the service is the problem: the next attempt comes from another one. */
-    fun blamesHost(f: PlayFailure) = f === PlayFailure.FakeFile || f === PlayFailure.DeadLink || f is PlayFailure.Refused
+    fun blamesHost(f: PlayFailure) = f === PlayFailure.FakeFile || dead(f) || f is PlayFailure.Refused
+
+    /** A link that is gone leaves the list of versions while it is remembered: it can come back, so it is hidden, not dropped. */
+    fun dead(f: PlayFailure?) = f === PlayFailure.DeadLink || f === PlayFailure.Blocked
 }
 
 /** What is known of each version from one launch to the next. A version that lied or broke does not get to do it twice. */
@@ -167,16 +170,23 @@ class SourceMemory(private val read: () -> String?, private val write: (String) 
         save()
     }
 
-    private val LASTING = setOf(PlayFailure.FakeFile, PlayFailure.WrongLanguage, PlayFailure.Blocked, PlayFailure.Unknown)
+    /**
+     * A fresh search clears temporary link trouble while keeping proven audio/quality and stable content errors.
+     * Dead links (a dead file, a Real-Debrid refusal) keep their own memory: they stay hidden until then, or until
+     * [clearDeadLinks]; a file this player cannot open stays as well (Les Infiltrés: 12 s lost at each start).
+     */
+    fun clearTransientFailures(prefix: String) = clear(prefix) {
+        it != PlayFailure.FakeFile && it != PlayFailure.WrongLanguage && it != PlayFailure.Unknown && !SourceRules.dead(it)
+    }
 
-    /** A fresh search clears temporary link trouble while keeping proven audio/quality and stable content errors. */
-    fun clearTransientFailures(prefix: String) {
+    /** The viewer asks to try the dead links of a title again. */
+    fun clearDeadLinks(prefix: String) = clear(prefix, SourceRules::dead)
+
+    private fun clear(prefix: String, which: (PlayFailure) -> Boolean) {
         load()
         var changed = false
         facts.entries.toList().filter { it.key.startsWith(prefix) }.forEach { (key, fact) ->
-            // What a new try cannot change stays: a fake file, a missing language, a file its rights holder blocked, a
-            // file this player cannot open. Cleared at each start, they were tried again every time (Les Infiltrés: 12 s).
-            if (fact.failure != null && fact.failure !in LASTING) {
+            if (fact.failure != null && which(fact.failure)) {
                 facts[key] = fact.copy(failure = null, until = 0)
                 changed = true
             }

@@ -191,9 +191,13 @@ class SourceRulesTest {
         mem.noteFailure("other|dead", PlayFailure.DeadLink)
         mem.noteFailure("movie|blocked", PlayFailure.Blocked)
 
+        mem.noteFailure("movie|cut", PlayFailure.Cut)
+
         mem.clearTransientFailures("movie|")
 
-        assertNull(mem.failure("movie|dead"))
+        assertNull(mem.failure("movie|cut"))
+        // A dead link stays hidden for its day, even through a fresh search.
+        assertEquals(PlayFailure.DeadLink, mem.failure("movie|dead"))
         assertEquals(PlayFailure.WrongLanguage, mem.failure("movie|wrong"))
         assertEquals(AudioLanguage.VO, mem.fact("movie|wrong")?.language)
         assertEquals(PlayFailure.DeadLink, mem.failure("other|dead"))
@@ -212,6 +216,44 @@ class SourceRulesTest {
         assertEquals(PlayFailure.Blocked, mem.failure("movie|new"))
         clock += 7 * 3_600_000L
         assertNull(mem.failure("movie|new"))
+    }
+
+    @Test
+    fun retrying_dead_links_clears_only_them_for_the_title() {
+        var now = 0L
+        var stored: String? = null
+        val mem = SourceMemory({ stored }, { stored = it }, { now })
+        mem.noteFailure("movie|dead", PlayFailure.DeadLink)
+        mem.noteFailure("movie|copy", PlayFailure.Blocked)
+        mem.noteFailure("movie|fake", PlayFailure.FakeFile)
+        mem.noteFailure("other|dead", PlayFailure.DeadLink)
+
+        // Read back from disk: Real-Debrid's refusal keeps its own cause.
+        assertEquals(PlayFailure.Blocked, SourceMemory({ stored }, { }, { now }).failure("movie|copy"))
+        // A fresh search keeps the dead links hidden (Alexis, PR #10).
+        mem.clearTransientFailures("movie|")
+        assertEquals(PlayFailure.DeadLink, mem.failure("movie|dead"))
+        assertEquals(PlayFailure.Blocked, mem.failure("movie|copy"))
+
+        mem.clearDeadLinks("movie|")
+
+        assertNull(mem.failure("movie|dead"))
+        assertNull(mem.failure("movie|copy"))
+        assertEquals(PlayFailure.FakeFile, mem.failure("movie|fake"))
+        assertEquals(PlayFailure.DeadLink, mem.fact("other|dead")?.failure)
+    }
+
+    @Test
+    fun dead_links_only_show_among_the_dead() {
+        val ok = v("ok")
+        val doubtful = PlayVersion("doubt", VersionOrigin.Debrid, "Another work", rejected = com.sokoul.pc.playback.session.Doubt.OtherWork, open = { _, _ -> error("not opened") })
+        val eligibility = com.sokoul.pc.playback.ui.SourceEligibility.entries
+        assertEquals(listOf(com.sokoul.pc.playback.ui.SourceEligibility.Compatible), eligibility.filter { it.keeps(ok) })
+        assertEquals(listOf(com.sokoul.pc.playback.ui.SourceEligibility.Excluded), eligibility.filter { it.keeps(doubtful) })
+        assertEquals(listOf(com.sokoul.pc.playback.ui.SourceEligibility.Dead), eligibility.filter { it.keeps(ok, dead = true) })
+        assertEquals(listOf(com.sokoul.pc.playback.ui.SourceEligibility.Dead), eligibility.filter { it.keeps(doubtful, dead = true) })
+        assertTrue(SourceRules.dead(PlayFailure.Blocked))
+        assertFalse(SourceRules.dead(PlayFailure.Cut))
     }
 
     @Test

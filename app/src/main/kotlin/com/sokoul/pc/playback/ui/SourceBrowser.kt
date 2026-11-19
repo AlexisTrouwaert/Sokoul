@@ -43,8 +43,13 @@ internal enum class SourceLanguageFilter(val audio: AudioLanguage?) {
 }
 
 internal enum class SourceEligibility {
-    Compatible, Excluded;
-    fun keeps(version: PlayVersion) = (version.rejected != null) == (this == Excluded)
+    Compatible, Excluded, Dead;
+    /** A dead link shows only among the dead ones, whatever else is said of it. */
+    fun keeps(version: PlayVersion, dead: Boolean = false) = when (this) {
+        Dead -> dead
+        Excluded -> !dead && version.rejected != null
+        Compatible -> !dead && version.rejected == null
+    }
 }
 
 internal fun sourceName(name: String): String = name.replace(Regex("https?://\\S+"), "")
@@ -79,6 +84,7 @@ internal fun SourceBrowser(session: PlaybackSession, modifier: Modifier = Modifi
         languageOf = session::sourceLanguage, verified = session::sourceLanguageVerified,
         wanted = session::holdsWantedLanguage,
         stateOf = { stateText(session, it) }, onRefresh = session::refresh,
+        dead = session::deadLink, onRetryDead = session::retryDeadLinks,
         onChoose = { session.choose(it); onPicked() })
 }
 
@@ -141,17 +147,26 @@ internal fun SourceBrowserContent(
     wanted: (PlayVersion) -> Boolean = { true },
     stateOf: (PlayVersion) -> String = { sourceOriginLabel(it.origin) },
     onRefresh: () -> Unit = {}, onChoose: (PlayVersion) -> Unit = {},
+    dead: (PlayVersion) -> Boolean = { false }, onRetryDead: () -> Unit = {},
 ) {
     var chosenView by remember(searchRevision) { mutableStateOf<VersionsView?>(null) }
     var origin by remember(searchRevision) { mutableStateOf<VersionOrigin?>(null) }
     var excludedView by remember(searchRevision) { mutableStateOf(false) }
+    // Alexis, PR #10: a link found dead leaves the list while it is remembered, behind a counter; it can play again later
+    // (The Handmaid's Tale 4x05), so it is hidden, not dropped, and "Retry" puts them all back in the running.
+    var deadView by remember(searchRevision) { mutableStateOf(false) }
+    // Read at each recomposition: a link found dead while the panel is open leaves the list at once. One map lookup each.
+    val deadKeys = versions.mapNotNullTo(HashSet()) { v -> v.key.takeIf { dead(v) } }
+    val deadCount = deadKeys.size
+    LaunchedEffect(deadCount) { if (deadCount == 0) deadView = false }
+    val aside = excludedView || deadView
     // Worked out once per list, not at every recomposition: the panel recomposes with the player, and filtering 548
     // versions several times over made the list stutter on the TV (53 ms frames, 2026-11-18). Identity maps: a
     // version's hash walks all its fields.
     val languages = remember(versions, currentKey) { identityMap(versions, languageOf) }
     val wantedOf = remember(versions, currentKey) { identityMap(versions, wanted) }
-    val eligible = remember(versions) { versions.filter { it.rejected == null } }
-    val excludedCount = versions.size - eligible.size
+    val eligible = remember(versions, deadKeys) { versions.filter { it.rejected == null && it.key !in deadKeys } }
+    val excludedCount = remember(versions, deadKeys) { versions.count { it.rejected != null && it.key !in deadKeys } }
     val inOrigin = remember(eligible, origin) { eligible.filter { origin == null || it.origin == origin } }
     val originCounts = remember(eligible) { eligible.groupingBy { it.origin }.eachCount() }
     val counts = remember(inOrigin, languages, wantedOf) {
@@ -159,16 +174,20 @@ internal fun SourceBrowserContent(
     }
     // "For you" when something is in the wanted languages; a film only found in English opens on all of them.
     val view = chosenView ?: if ((counts[VersionsView.ForYou] ?: 0) > 0) VersionsView.ForYou else VersionsView.All
-    val shown = remember(inOrigin, versions, view, excludedView, languages, wantedOf) {
-        if (excludedView) versions.filter { it.rejected != null } else inOrigin.filter { view.keeps(languages[it], wantedOf[it] == true, it.quality) }
+    val shown = remember(inOrigin, versions, view, excludedView, deadView, deadKeys, languages, wantedOf) {
+        when {
+            deadView -> versions.filter { it.key in deadKeys }
+            excludedView -> versions.filter { it.rejected != null && it.key !in deadKeys }
+            else -> inOrigin.filter { view.keeps(languages[it], wantedOf[it] == true, it.quality) }
+        }
     }
-    val entries = remember(shown, currentKey, excludedView, wantedOf) {
+    val entries = remember(shown, currentKey, aside, wantedOf) {
         buildList<VersionEntry> {
             var index = 0
-            val current = if (excludedView) null else shown.firstOrNull { it.key == currentKey }
+            val current = if (aside) null else shown.firstOrNull { it.key == currentKey }
             val rest = shown.filter { it !== current }
             if (current != null) { add(VersionEntry.Head(L("PLAYING", "EN LECTURE").text())); add(VersionEntry.Item(current, index++)) }
-            val recommended = if (excludedView) null else rest.firstOrNull { wantedOf[it] == true }
+            val recommended = if (aside) null else rest.firstOrNull { wantedOf[it] == true }
             if (recommended != null) { add(VersionEntry.Head(L("RECOMMENDED", "RECOMMANDÉE").text())); add(VersionEntry.Item(recommended, index++)) }
             val others = rest.filter { it !== recommended }.groupBy { it.quality }
             QUALITY_ORDER.forEach { q ->
@@ -178,7 +197,7 @@ internal fun SourceBrowserContent(
             }
         }
     }
-    val outside = if (excludedView) 0 else inOrigin.size - shown.size
+    val outside = if (aside) 0 else inOrigin.size - shown.size
     val first = remember { FocusRequester() }
     val playing = remember { FocusRequester() }
     val state = rememberLazyListState()
@@ -187,9 +206,13 @@ internal fun SourceBrowserContent(
         withFrameNanos { }; withFrameNanos { }
         if (runCatching { playing.requestFocus() }.isFailure) runCatching { first.requestFocus() }
     }
-    LaunchedEffect(searchRevision, view, excludedView, origin) { state.scrollToItem(0) }
+    LaunchedEffect(searchRevision, view, excludedView, deadView, origin) { state.scrollToItem(0) }
     TvPanel(
-        if (excludedView) L("Excluded versions", "Versions écartées").text() else L("Versions", "Versions").text(),
+        when {
+            deadView -> L("Dead links", "Liens morts").text()
+            excludedView -> L("Excluded versions", "Versions écartées").text()
+            else -> L("Versions", "Versions").text()
+        },
         L("${versions.size} versions · ${if (searching) "searching…" else "search complete"}",
             "${versions.size} versions · ${if (searching) "recherche en cours…" else "recherche terminée"}").text(),
         modifier.testTag("player-versions"), width = 900.dp, height = 1000.dp,
@@ -203,7 +226,7 @@ internal fun SourceBrowserContent(
                 SourceNotice.DebridUnavailable -> L("Real-Debrid search is temporarily unavailable", "La recherche Real-Debrid est temporairement indisponible").text()
             })
         }
-        if (!excludedView) {
+        if (!aside) {
             // 4K always has a target, including before the first result arrives.
             Row(
                 Modifier.padding(horizontal = PanelMetrics.RowPad, vertical = 8.dp).clip(RoundedCornerShape(50)).background(androidx.compose.ui.graphics.Color(0x14FFFFFF))
@@ -251,7 +274,7 @@ internal fun SourceBrowserContent(
         }
         // What is left out, in one line: first the other languages, then the excluded versions.
         val more = when {
-            excludedView -> L("Back to the compatible versions", "Revenir aux versions compatibles").text()
+            aside -> L("Back to the compatible versions", "Revenir aux versions compatibles").text()
             outside > 0 || excludedCount > 0 -> listOfNotNull(
                 outside.takeIf { it > 0 }?.let {
                     when (view) {
@@ -268,11 +291,21 @@ internal fun SourceBrowserContent(
             Spacer(Modifier.height(8.dp))
             PanelOption(more, Modifier.testTag("versions-more"), chevron = true, restFill = androidx.compose.ui.graphics.Color(0x14FFFFFF)) {
                 when {
-                    excludedView -> excludedView = false
+                    aside -> { excludedView = false; deadView = false }
                     outside > 0 -> chosenView = VersionsView.All
                     else -> excludedView = true
                 }
             }
+        }
+        if (deadView) {
+            PanelOption(L("Retry the $deadCount dead links", "Réessayer les $deadCount liens morts").text(), Modifier.testTag("versions-retry-dead"),
+                chevron = true, restFill = androidx.compose.ui.graphics.Color(0x14FFFFFF)) {
+                onRetryDead()
+                deadView = false
+            }
+        } else if (deadCount > 0 && !excludedView) {
+            PanelOption(if (deadCount == 1) L("1 dead link", "1 lien mort").text() else L("$deadCount dead links", "$deadCount liens morts").text(),
+                Modifier.testTag("versions-dead"), chevron = true, restFill = androidx.compose.ui.graphics.Color(0x14FFFFFF)) { deadView = true }
         }
     }
 }
