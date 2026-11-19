@@ -143,6 +143,23 @@ class AudioMatchTest {
         assertEquals(listOf(uhd, hd), VersionRanking.rank(listOf(hd, uhd), prefs("fr", original).copy(bestQualityFirst = true), true, caps = DeviceCaps.Pc, workLanguage = "en"))
     }
 
+    @Test fun aProbableFrenchMultiInBetterPictureBeatsADeclaredVfInSd() {
+        // Spartacus S01E01 on the TV (2026-11-19): a 442 MB SD VF and IPTV at 720x406 played before a 1080p Blu-ray MULTI
+        // that does not name French. At the same picture, the declared French still wins.
+        fun v(key: String, name: String, language: AudioLanguage, quality: com.sokoul.iptv.domain.VideoQuality?, origin: VersionOrigin = VersionOrigin.Debrid, audio: List<String> = emptyList()) =
+            PlayVersion(key, origin, name, language = language, quality = quality, readiness = if (origin == VersionOrigin.Iptv) Readiness.Ready else Readiness.Unknown,
+                announcedAudio = audio, open = { _, _ -> StreamRequest("https://fixture.test/$key.mkv", null, null, "Fixture") })
+        val sdVf = v("sd", "Spartacus.2010.S01E01.FRENCH.WEBRiP.x264-KiRa.mkv", AudioLanguage.VF, com.sokoul.iptv.domain.VideoQuality.SD, audio = listOf("FR"))
+        val multi = v("multi", "Spartacus.S01E01.(Blood And Sand).Bluray.1080p.Multi.AC3.x264", AudioLanguage.MULTI, com.sokoul.iptv.domain.VideoQuality.FHD_1080)
+        val iptv = v("iptv", "FR| Spartacus", AudioLanguage.VF, null, origin = VersionOrigin.Iptv, audio = listOf("FR"))
+        for (best in listOf(false, true)) {
+            val ranked = VersionRanking.rank(listOf(sdVf, iptv, multi), prefs("fr", original).copy(bestQualityFirst = best), true, caps = DeviceCaps.Pc, workLanguage = "en")
+            assertEquals("best quality first = $best", multi, ranked.first())
+        }
+        val multiVf = v("multivf", "Spartacus.S01E01.MULTi.VFF.1080p.BluRay", AudioLanguage.MULTI, com.sokoul.iptv.domain.VideoQuality.FHD_1080, audio = listOf("FR", "EN"))
+        assertEquals(multiVf, VersionRanking.rank(listOf(multi, multiVf), prefs("fr", original), true, caps = DeviceCaps.Pc, workLanguage = "en").first())
+    }
+
     @Test fun aVersionWithoutSizeRanksBesideOnesWithASize() {
         // Same language, picture and readiness: only the size tells them apart, and one has none (a web source).
         val sized = version("sized", "Frieren S01E07 VF.mkv", AudioLanguage.VF, audio = listOf("FR"), size = 1_400_000_000L)
