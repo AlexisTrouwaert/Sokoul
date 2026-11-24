@@ -31,18 +31,21 @@ function parseSeasonPanels(html, catalogueUrl) {
   const slug = base.split('/').pop();
   const panels = [];
   const seen = new Set();
-  const re = /panneauAnime\(\s*"([^"]+)"\s*,\s*"([^"]+?)\/?(?:vostfr|vf\d*|vosteng|vostspa|vj|va|vkr)?"\s*\)/g;
+  const re = /panneauAnime\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*\)/g;
   for (const match of stripComments(html).matchAll(re)) {
     const name = match[1].trim();
     let link = match[2].trim().replace(/\/+$/, '');
     if (!name || !link || name === 'nom' || link === 'url') continue;
     if (slug && link.startsWith(slug + '/')) link = link.slice(slug.length + 1);
     link = link.replace(/^\/+/, '');
+    const suffix = link.includes('/') ? link.split('/').pop() : '';
+    const language = knownLanguages.includes(suffix) || numberedFrench.test(suffix) ? suffix : null;
+    if (language !== null) link = link.slice(0, link.lastIndexOf('/'));
     const url = `${base}/${link}`;
     if (seen.has(url)) continue;
     seen.add(url);
     const numbered = /^saison(\d+)$/i.exec(link);
-    panels.push({ name, url, number: numbered ? Number(numbered[1]) : null });
+    panels.push({ name, url, number: numbered ? Number(numbered[1]) : null, language });
   }
   return panels;
 }
@@ -57,6 +60,17 @@ function parseAvailableLanguages(html) {
   } catch {
     return null;
   }
+}
+
+const knownLanguages = ['vostfr', 'vf', 'vosteng', 'vostspa', 'vj', 'va', 'vf1', 'vf2', 'vkr'];
+const numberedFrench = /^vf[0-9]{1,2}$/;
+
+function seasonLanguages(declared, panelLanguage = null) {
+  const known = [...new Set([...knownLanguages, ...(panelLanguage ? [panelLanguage] : [])])];
+  if (declared === null) return known;
+  const editions = [...new Set(declared.filter((lang) => numberedFrench.test(lang)))].slice(0, 6);
+  const available = new Set(['vostfr', panelLanguage, ...declared]);
+  return [...new Set([...known, ...editions])].filter((lang) => available.has(lang));
 }
 
 function parseMeta(source) {
@@ -261,6 +275,7 @@ async function resolveEpisodeReferences(episode, request) {
 module.exports = {
   parseSeasonPanels,
   parseAvailableLanguages,
+  seasonLanguages,
   parseEpisodePlayers,
   resolveEpisodeReferences,
   parseReference,
