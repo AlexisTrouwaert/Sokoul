@@ -946,8 +946,24 @@ fun PlayerScreen(
                 com.sokoul.pc.ui.PillButton(com.sokoul.pc.data.L("See Versions", "Voir les versions").text(), { session.dismissSwitchNotice(); menu = PlayerMenu.Versions }, Modifier.testTag("switch-versions"))
             }
         }
+        // Real-Debrid paused: the source the film plays from is said, for a few seconds.
+        val fallback = session.fallbackNotice
+        LaunchedEffect(fallback) { if (fallback != null) { kotlinx.coroutines.delay(SUBTITLE_NOTICE_MS); session.dismissFallbackNotice() } }
+        if (fallback != null && switched == null && session.languageNotice == null && playingNow && menu == PlayerMenu.None) {
+            val via = if (fallback == com.sokoul.pc.playback.session.VersionOrigin.Iptv) com.sokoul.pc.data.L("your IPTV", "votre IPTV").text()
+                else com.sokoul.pc.data.L("the web", "le web").text()
+            Row(
+                Modifier.align(Alignment.TopEnd).padding(top = 44.dp, end = 60.dp)
+                    .panelEnter(com.sokoul.pc.ui.PanelEntry.FromBelow).glassSurface(RoundedCornerShape(50), 40.dp)
+                    .padding(horizontal = 34.dp, vertical = 16.dp).testTag("player-fallback-notice"),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Label(com.sokoul.pc.data.L("Real-Debrid is pausing · playing from ", "Real-Debrid fait une pause · lecture via ").text() + via,
+                    com.sokoul.pc.theme.PanelType.Callout, maxLines = 1)
+            }
+        }
         val subtitled = subtitleNotice
-        if (subtitled != null && session.languageNotice == null && switched == null && playingNow && menu == PlayerMenu.None) {
+        if (subtitled != null && session.languageNotice == null && switched == null && fallback == null && playingNow && menu == PlayerMenu.None) {
             LanguageNoticeBanner(
                 subtitled,
                 subtitled = true,

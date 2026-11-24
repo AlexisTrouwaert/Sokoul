@@ -199,6 +199,14 @@ class PlaybackSession(
     var switchNotice by mutableStateOf<PlayFailure?>(null)
         private set
     fun dismissSwitchNotice() { switchNotice = null }
+
+    /**
+     * Real-Debrid paused the account (or limited it) and the film plays from a site or IPTV instead: said once on screen,
+     * never a silent change of source (owner, 2026-11-24). The origin that plays, or null.
+     */
+    var fallbackNotice by mutableStateOf<VersionOrigin?>(null)
+        private set
+    fun dismissFallbackNotice() { fallbackNotice = null }
     /** The failure of a version that had played, waiting for the next one to show. */
     private var switchedFrom: PlayFailure? = null
 
@@ -225,9 +233,11 @@ class PlaybackSession(
         cancelWork()
         leaveLive()
         request = target
-        StartClock.start("play " + target.kind + " " + target.tmdbId + (target.season?.let { " S${it}E${target.episode}" } ?: ""))
+        StartClock.start("play " + target.kind + " " + target.tmdbId + (target.season?.let { " S${it}E${target.episode}" } ?: ""),
+            title = target.title + (target.season?.let { " · S${it}E${target.episode}" } ?: ""))
         switchNotice = null
         switchedFrom = null
+        fallbackNotice = null
         resetAttempts()
         memory?.clearTransientFailures("${target.resumeKey}|")
         versions = emptyList()
@@ -1211,6 +1221,10 @@ class PlaybackSession(
         }
         phase = Phase.Playing(version)
         switchedFrom?.let { cause -> switchNotice = cause; switchedFrom = null; StartClock.note("switched after: " + cause.javaClass.simpleName) }
+        if (version.origin != VersionOrigin.Debrid && failures.values.any { it is PlayFailure.DebridLimit }) {
+            fallbackNotice = version.origin
+            StartClock.note("real-debrid limited: playing from ${version.origin}")
+        }
         StartClock.note("first image")
         offerUpgrade(version)
         return watch(e, id, version, opening, automatic)
@@ -1381,7 +1395,8 @@ class PlaybackSession(
         /** Waiting videos and error clips are short; no film is. */
         const val MIN_FILM_MS = 180_000L
         const val END_RATIO = 0.9
-        const val MAX_LANGUAGE_MOVES = 4
+        // Matrix, 2026-11-24: four "MULTI" remuxes in English only used the moves up, and an English one played.
+        const val MAX_LANGUAGE_MOVES = 6
         const val TRACK_SETTLE_MS = 400L
         val READY_TO_TRY = setOf(Readiness.Ready, Readiness.Likely, Readiness.Unknown)
     }
