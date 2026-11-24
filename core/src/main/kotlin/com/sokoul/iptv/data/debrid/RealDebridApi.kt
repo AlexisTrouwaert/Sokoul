@@ -101,7 +101,8 @@ class RealDebridApi(
                 RdFile((fo.long("id") ?: return@mapNotNull null).toInt(), fo.str("path").orEmpty(), fo.long("bytes") ?: 0, fo.long("selected") == 1L)
             },
             links = (o["links"] as? JsonArray).orEmpty().mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content },
-            addedAt = 0,
+            // "2026-10-28T12:34:56.000Z": read, the daily cleanup can tell an old torrent from a new one.
+            addedAt = o.str("added")?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() } ?: 0,
             speedBps = o.long("speed") ?: 0,
             seeders = (o.long("seeders") ?: 0).toInt(),
         )

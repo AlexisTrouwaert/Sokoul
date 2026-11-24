@@ -14,6 +14,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
@@ -46,6 +50,26 @@ object EpisodeOrder {
     /** The next one of [season], else null: the caller then looks at the first of the following season. */
     fun nextIn(season: List<TmdbEpisode>, episode: Int): TmdbEpisode? =
         season.filter { it.episode > episode }.minByOrNull { it.episode }
+
+    suspend fun next(
+        season: Int,
+        episode: Int,
+        lastSeason: Int? = null,
+        loadSeason: suspend (Int) -> List<TmdbEpisode>,
+    ): TmdbEpisode? {
+        suspend fun load(number: Int): List<TmdbEpisode>? = try {
+            loadSeason(number).filter { it.season == number && it.episode > 0 }
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            null
+        }
+
+        val current = load(season) ?: return null
+        return nextIn(current, episode) ?: if (lastSeason == null || season < lastSeason) {
+            load(season + 1)?.minByOrNull { it.episode }
+        } else null
+    }
 
     /** At the very end of an episode, or close to it, the card offering the next one is shown. */
     fun cardShown(timeMs: Long, lengthMs: Long): Boolean = lengthMs > MIN_LENGTH_MS && lengthMs - timeMs in 1..CARD_BEFORE_END_MS
@@ -114,20 +138,64 @@ internal fun NextEpisodeCard(
     requester: androidx.compose.ui.focus.FocusRequester,
     secondsLeft: Int? = null,
     onCancel: (() -> Unit)? = null,
+    /** What the catalog says of that episode: its picture, its name, its length. */
+    episode: com.sokoul.iptv.data.net.TmdbEpisode? = null,
 ) {
-    Row(
-        modifier.glassSurface(RoundedCornerShape(36.dp), 36.dp).padding(horizontal = 28.dp, vertical = 18.dp).testTag("player-next-episode"),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(24.dp),
+    // As on the mock-up: the next episode's picture, the countdown, its name large, then Watch and Cancel.
+    Column(
+        modifier.width(NEXT_CARD_WIDTH).glassSurface(RoundedCornerShape(36.dp), 36.dp).padding(20.dp).testTag("player-next-episode"),
     ) {
-        Column {
+        com.sokoul.pc.ui.Art(
+            episode?.still ?: next.image,
+            Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(22.dp)),
+        )
+        Column(Modifier.padding(start = 12.dp, end = 12.dp, top = 18.dp, bottom = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             val heading = secondsLeft?.let { com.sokoul.pc.data.L("Next episode in $it s", "Épisode suivant dans $it s").text() } ?: tr(Text.NextEpisode)
             Label(heading, Type.Body, Palette.Secondary, maxLines = 1, modifier = Modifier.testTag("player-next-heading"))
-            Label(next.kicker.orEmpty(), Type.Meta, maxLines = 1, modifier = Modifier.width(520.dp))
+            val name = episode?.name?.takeIf { it.isNotBlank() } ?: next.kicker?.substringAfter(" · ")?.takeIf { it.isNotBlank() } ?: next.title
+            Label(name, Type.RowTitle.copy(fontSize = 38.sp), maxLines = 1)
+            val line = listOfNotNull(
+                next.season?.let { "S$it" },
+                next.episode?.let { com.sokoul.pc.data.L("E$it", "É$it").text() },
+                episode?.runtimeMin?.let { "$it min" },
+            ).joinToString(" · ")
+            if (line.isNotEmpty()) Label(line, Type.Body, Palette.Secondary, maxLines = 1)
+            Spacer(Modifier.height(16.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                PillButton(tr(Text.Watch), onPlay, Modifier.testTag("player-next-play"), requester)
+                if (secondsLeft != null && onCancel != null) {
+                    PillButton(com.sokoul.pc.data.L("Cancel", "Annuler").text(), onCancel, Modifier.testTag("player-next-cancel"))
+                }
+            }
         }
-        PillButton(tr(Text.Watch), onPlay, Modifier.testTag("player-next-play"), requester)
-        if (secondsLeft != null && onCancel != null) {
-            PillButton(com.sokoul.pc.data.L("Cancel", "Annuler").text(), onCancel, Modifier.testTag("player-next-cancel"))
-        }
+    }
+}
+
+private val NEXT_CARD_WIDTH = 640.dp
+
+/**
+ * A short question over the picture, low on the right, as on the mock-ups ("Skip Intro", "Are you still watching?"): its
+ * title, the episode, and one button.
+ */
+@Composable
+internal fun PromptCard(
+    title: String,
+    line: String?,
+    action: String,
+    onAction: () -> Unit,
+    requester: androidx.compose.ui.focus.FocusRequester,
+    modifier: Modifier = Modifier,
+    tag: String,
+    actionTag: String,
+) {
+    Column(
+        modifier.widthIn(min = 560.dp, max = 760.dp).glassSurface(RoundedCornerShape(com.sokoul.pc.theme.Corners.Modal), com.sokoul.pc.theme.Corners.Modal)
+            .padding(horizontal = 40.dp, vertical = 34.dp).testTag(tag),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Label(title, com.sokoul.pc.theme.PanelType.Title, maxLines = 1)
+        line?.let { Label(it, Type.Body, Palette.Secondary, maxLines = 1) }
+        Spacer(Modifier.height(14.dp))
+        PillButton(action, onAction, Modifier.testTag(actionTag), requester)
     }
 }

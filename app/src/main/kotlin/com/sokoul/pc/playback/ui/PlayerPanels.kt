@@ -66,6 +66,7 @@ import com.sokoul.pc.ui.tvFocusable
 /** The sentence for each cause of failure. */
 fun failureText(f: PlayFailure): String = when (f) {
     PlayFailure.DeadLink -> tr(Text.FailDeadLink)
+    PlayFailure.Blocked -> com.sokoul.pc.data.L("Real-Debrid refuses this file: its rights holder had it blocked.", "Real-Debrid refuse ce fichier : ses ayants droit l'ont fait bloquer.").text()
     is PlayFailure.Refused -> tr(Text.FailRefused, f.code)
     is PlayFailure.ConnectionsFull -> tr(Text.FailConnectionsFull, f.active, f.max)
     is PlayFailure.Cooldown -> tr(Text.FailCooldown, f.seconds)
@@ -95,15 +96,28 @@ private fun etaLabel(seconds: Long?): String? = seconds?.let { if (it < 60) tr(T
 /** What is happening, in one line, and how far along it is (0 to 1, null when it cannot be told). */
 internal fun phaseLine(phase: Phase, bufferPercent: Int, videoReady: Boolean = false): Pair<String, Float?>? = when (phase) {
     is Phase.Searching -> (if (phase.found > 0) tr(Text.FoundVersions, phase.found) else tr(Text.FindingSource)) to null
-    is Phase.Preparing -> "${tr(Text.VersionOf, phase.position, phase.total)} · ${phase.version.summary()}" to null
+    // One steady line while versions are tried: "Version 2 of 793", then "Version 13 of 793" read as the app changing its
+    // mind (2026-11-22). Which version plays shows once it plays; the list stays one button away.
+    is Phase.Preparing -> preparingText() to null
     is Phase.Downloading -> listOfNotNull(
-        tr(Text.VersionOf, phase.position, phase.total), phase.version.summary(), tr(Text.DownloadPercent, phase.transfer.percent),
+        preparingText(), tr(Text.DownloadPercent, phase.transfer.percent),
         speedLabel(phase.transfer.speedBps), etaLabel(phase.transfer.etaSeconds),
     ).joinToString(" · ") to phase.transfer.percent / 100f
     is Phase.Tuning -> if (videoReady) null else "${phase.title} · ${tr(Text.LoadingPercent, bufferPercent)}" to bufferPercent / 100f
-    is Phase.Opening -> if (videoReady) null else "${tr(Text.VersionOf, phase.position, phase.total)} · ${phase.version.summary()} · ${tr(Text.LoadingPercent, bufferPercent)}" to bufferPercent / 100f
+    is Phase.Opening -> if (videoReady) null else "${preparingText()} · ${tr(Text.LoadingPercent, bufferPercent)}" to bufferPercent / 100f
     else -> null
 }
+
+private fun preparingText() = com.sokoul.pc.data.L("Getting the film ready…", "Préparation de la lecture…").text()
+
+/** Why the film went on with another version, in a few words, for the notice that says so. */
+internal fun switchReason(f: PlayFailure): String = when (f) {
+    PlayFailure.TimedOut -> com.sokoul.pc.data.L("the stream had frozen", "le flux s'était figé")
+    PlayFailure.Network, PlayFailure.Cut -> com.sokoul.pc.data.L("the stream was cut", "le flux a été coupé")
+    PlayFailure.FakeFile -> com.sokoul.pc.data.L("the file was not the film", "le fichier n'était pas le film")
+    is PlayFailure.Doubtful -> com.sokoul.pc.data.L("the file was not the right length", "le fichier n'avait pas la bonne durée")
+    else -> com.sokoul.pc.data.L("the previous one failed", "la précédente a échoué")
+}.text()
 
 /** What the episode panel reads: seasons, episodes and what was watched of a series. */
 interface EpisodeSource {
@@ -158,6 +172,7 @@ internal fun EpisodesPanel(source: EpisodeSource, request: PlayRequest, modifier
                 "${e.episode}. ${e.name ?: com.sokoul.pc.data.L("Episode ${e.episode}", "Épisode ${e.episode}").text()}", detail, "episode-$i",
                 rows.getOrPut(e.episode) { if (i == 0) first else FocusRequester() },
                 selected = isCurrent,
+                image = e.still,
                 onClick = {
                     if (!isCurrent) onPick(request.copy(season = season, episode = e.episode, kicker = "S${season}E${e.episode} · ${e.name.orEmpty()}", chooseFirst = false))
                 },
@@ -177,6 +192,7 @@ internal fun VersionsPanel(session: PlaybackSession, modifier: Modifier = Modifi
 internal fun failureBrief(f: PlayFailure): String = when (f) {
     PlayFailure.FakeFile -> com.sokoul.pc.data.L("Not the film", "Pas le film").text()
     PlayFailure.DeadLink -> com.sokoul.pc.data.L("Dead link", "Lien mort").text()
+    PlayFailure.Blocked -> com.sokoul.pc.data.L("Blocked by its rights holder", "Bloqué par les ayants droit").text()
     is PlayFailure.Refused -> com.sokoul.pc.data.L("Refused by the host", "Refusé par l'hébergeur").text()
     else -> failureText(f)
 }
@@ -192,7 +208,6 @@ internal fun stateText(session: PlaybackSession, version: PlayVersion): String {
         offer?.stream != null -> tr(Text.StateReady)
         version.preparingPercent != null -> tr(Text.DownloadPercent, version.preparingPercent)
         version.readiness == Readiness.Ready && version.origin == VersionOrigin.Iptv -> com.sokoul.pc.data.L("Provider link", "Lien fournisseur").text()
-        version.readiness == Readiness.Ready && version.origin == VersionOrigin.Debrid -> com.sokoul.pc.data.L("Torrent ready in Real-Debrid", "Torrent prêt dans Real-Debrid").text()
         version.readiness == Readiness.Ready -> tr(Text.StateReady)
         version.readiness == Readiness.Likely -> tr(Text.StateLikely)
         version.readiness == Readiness.NotCached -> tr(Text.StateToDownload)
@@ -209,10 +224,20 @@ private fun PanelRow(
     requester: FocusRequester,
     selected: Boolean = false,
     failed: Boolean = false,
+    image: String? = null,
     onClick: () -> Unit,
 ) {
-    com.sokoul.pc.ui.PanelOption(title, Modifier.testTag(tag), subtitle = detail, selected = selected, subtitleError = failed, requester = requester, onClick = onClick)
+    com.sokoul.pc.ui.PanelOption(
+        title, Modifier.testTag(tag), subtitle = detail, selected = selected, subtitleError = failed, requester = requester,
+        leadingWidth = if (image != null) EPISODE_THUMB_W else 40.dp, leadingHeight = if (image != null) EPISODE_THUMB_H else 40.dp,
+        leading = image?.let { url -> { _ -> com.sokoul.pc.ui.Art(url, Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp))) } },
+        onClick = onClick,
+    )
 }
+
+/** An episode's picture in the player's list: 16:9, as on the mock-up. */
+private val EPISODE_THUMB_W = 176.dp
+private val EPISODE_THUMB_H = 99.dp
 
 /**
  * libVLC hands some track names over as UTF-8 bytes read as Latin-1 ("FranÃ§ais" for "Français"). When the text carries the
@@ -238,6 +263,32 @@ internal fun trackLabel(raw: String): String {
 }
 
 private val UNKNOWN_LANGUAGE_CODES = setOf("und", "mul", "zxx", "mis", "unknown")
+
+/**
+ * The track heard, as the player's badge says it: its language and its channels ("Français 5.1"), not the file's own
+ * words ("Surround 5.1 - [French]"). Null when the track tells neither.
+ */
+internal fun audioBadgeText(raw: String): String? {
+    val label = repairText(raw)
+    val code = com.sokoul.desktop.player.AudioChoice.languageOf(label)?.takeIf { it.lowercase() !in UNKNOWN_LANGUAGE_CODES }
+    val channels = Regex("""(?<![\d.])([1-9]\.[0-2])(?![\d.])""").find(label)?.value
+        ?: when {
+            Regex("(?i)st[eé]r[eé]o").containsMatchIn(label) -> "2.0"
+            Regex("(?i)\\bmono\\b").containsMatchIn(label) -> "1.0"
+            else -> null
+        }
+    return listOfNotNull(code?.let(::languageName), channels).joinToString(" ").ifEmpty { null }
+}
+
+/** "S1 · É1 · L'Ombre du Passé": the episode under the title's logo, null for a film. */
+internal fun episodeLine(r: PlayRequest?): String? {
+    val s = r?.season ?: return null
+    val e = r.episode ?: return null
+    val kicker = r.kicker?.trim().orEmpty()
+    // The kicker is either the episode's name, or "S1E1 · name" when it was picked in the player.
+    val name = (if (Regex("""^S\d+E\d+""").containsMatchIn(kicker)) kicker.substringAfter(" · ", "") else kicker).trim().takeIf { it.isNotEmpty() && it != r.title }
+    return listOfNotNull("S$s", com.sokoul.pc.data.L("E$e", "É$e").text(), name).joinToString(" · ")
+}
 
 internal fun languageName(code: String): String {
     val name = java.util.Locale(code).getDisplayLanguage(java.util.Locale.getDefault())
@@ -307,11 +358,17 @@ internal fun retryUseless(f: PlayFailure): Boolean = com.sokoul.pc.playback.sour
 internal fun FailurePanel(session: PlaybackSession, failure: PlayFailure, onVersions: () -> Unit, onClose: () -> Unit, modifier: Modifier = Modifier) {
     val first = remember { FocusRequester() }
     LaunchedEffect(failure) { repeat(4) { androidx.compose.runtime.withFrameNanos { }; if (runCatching { first.requestFocus() }.isSuccess) return@LaunchedEffect } }
+    // As on the mock-up: a small card, "Playback unavailable" and the reason under it, then what helps first.
     Column(
-        modifier.widthIn(max = 1560.dp).panelEnter().glassSurface(RoundedCornerShape(com.sokoul.pc.theme.Corners.Modal), com.sokoul.pc.theme.Corners.Modal).padding(horizontal = 60.dp, vertical = 48.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier.widthIn(min = 720.dp, max = 1240.dp).panelEnter().glassSurface(RoundedCornerShape(com.sokoul.pc.theme.Corners.Modal), com.sokoul.pc.theme.Corners.Modal).padding(horizontal = 56.dp, vertical = 48.dp),
+        horizontalAlignment = Alignment.Start,
     ) {
-        Label(failureText(failure), com.sokoul.pc.theme.PanelType.Headline.copy(textAlign = androidx.compose.ui.text.style.TextAlign.Center), modifier = Modifier.widthIn(max = 1400.dp).testTag("player-error"), maxLines = 3)
+        Label(
+            if (session.live != null) com.sokoul.pc.data.L("Channel unavailable", "Chaîne indisponible").text() else com.sokoul.pc.data.L("Playback unavailable", "Lecture indisponible").text(),
+            com.sokoul.pc.theme.PanelType.Title, modifier = Modifier.testTag("player-error-title"), maxLines = 1,
+        )
+        Spacer(Modifier.height(12.dp))
+        Label(failureText(failure), com.sokoul.pc.theme.PanelType.Callout, com.sokoul.pc.theme.Palette.Secondary, Modifier.widthIn(max = 1120.dp).testTag("player-error"), maxLines = 3)
         Spacer(Modifier.height(36.dp))
         // Wide enough for a focused button grown by its scale not to touch the next one.
         Row(horizontalArrangement = Arrangement.spacedBy(36.dp)) {
@@ -327,21 +384,13 @@ internal fun FailurePanel(session: PlaybackSession, failure: PlayFailure, onVers
                 PillButton(tr(Text.Retry), session::retry, Modifier.testTag("failure-retry"))
                 PillButton(tr(Text.Close), onClose, Modifier.testTag("failure-close"))
             } else if (failure !is PlayFailure.EngineMissing && retryUseless(failure)) {
-                // The file itself is wrong (not the film, dead link, refused): retrying it gives the same answer, so
-                // the row starts with what helps.
-                val hasNext = session.versions.size > 1
-                val listButton = remember { FocusRequester() }
-                if (hasNext) PillButton(tr(Text.NextVersion), session::nextVersion, Modifier.testTag("failure-next"), first)
-                PillButton(tr(Text.AllVersions), onVersions, Modifier.testTag("failure-versions"), if (hasNext) listButton else first)
-                PillButton(tr(Text.Retry), session::retry, Modifier.testTag("failure-retry"))
-                PillButton(tr(Text.Refresh), session::refresh, Modifier.testTag("failure-refresh"))
-                PillButton(tr(Text.Close), onClose, Modifier.testTag("failure-close"))
+                // The file itself is wrong (not the film, dead link, refused): retrying it gives the same answer, so the
+                // card offers another version first. Back closes, as everywhere.
+                PillButton(com.sokoul.pc.data.L("Choose Another Version", "Choisir une autre version").text(), onVersions, Modifier.testTag("failure-versions"), first)
+                if (session.versions.size > 1) PillButton(tr(Text.NextVersion), session::nextVersion, Modifier.testTag("failure-next"))
             } else if (failure !is PlayFailure.EngineMissing) {
                 PillButton(tr(Text.Retry), session::retry, Modifier.testTag("failure-retry"), first)
-                if (session.versions.size > 1) PillButton(tr(Text.NextVersion), session::nextVersion, Modifier.testTag("failure-next"))
-                PillButton(tr(Text.AllVersions), onVersions, Modifier.testTag("failure-versions"))
-                PillButton(tr(Text.Refresh), session::refresh, Modifier.testTag("failure-refresh"))
-                PillButton(tr(Text.Close), onClose, Modifier.testTag("failure-close"))
+                PillButton(com.sokoul.pc.data.L("Choose Another Version", "Choisir une autre version").text(), onVersions, Modifier.testTag("failure-versions"))
             } else {
                 PillButton(tr(Text.Close), onClose, Modifier.testTag("failure-close"), first)
             }
@@ -379,7 +428,7 @@ internal fun UpgradeBanner(offer: UpgradeOffer, onAccept: () -> Unit, onDismiss:
  * own. Same glass capsule and place as [UpgradeBanner]; focus starts on keeping the film going, the likeliest wish.
  */
 @Composable
-internal fun LanguageNoticeBanner(notice: com.sokoul.pc.playback.session.LanguageNotice, onKeep: () -> Unit, onVersions: () -> Unit, modifier: Modifier = Modifier, requester: androidx.compose.ui.focus.FocusRequester) {
+internal fun LanguageNoticeBanner(notice: com.sokoul.pc.playback.session.LanguageNotice, onKeep: () -> Unit, onVersions: () -> Unit, modifier: Modifier = Modifier, requester: androidx.compose.ui.focus.FocusRequester, subtitled: Boolean = false) {
     // Inside a sentence, French, Spanish, Italian and Portuguese write language names in lower case ("en italiano").
     val locale = java.util.Locale.getDefault()
     val inSentence = { name: String -> if (locale.language in setOf("fr", "es", "it", "pt")) name.lowercase(locale) else name }
@@ -391,7 +440,11 @@ internal fun LanguageNoticeBanner(notice: com.sokoul.pc.playback.session.Languag
         horizontalArrangement = Arrangement.spacedBy(36.dp),
     ) {
         // "No Italian audio · Playing in English", for whichever language is wanted and heard.
-        Label(com.sokoul.pc.data.L("No $wanted audio · Playing in $language", "Pas de piste en $wanted · Lecture en $language").text(), com.sokoul.pc.theme.PanelType.Callout, maxLines = 1)
+        Label(
+            if (subtitled) com.sokoul.pc.data.L("No $wanted audio · Playing in $language, $wanted subtitles", "Pas de piste en $wanted · Lecture en $language, sous-titres en $wanted").text()
+            else com.sokoul.pc.data.L("No $wanted audio · Playing in $language", "Pas de piste en $wanted · Lecture en $language").text(),
+            com.sokoul.pc.theme.PanelType.Callout, maxLines = 1,
+        )
         PillButton(com.sokoul.pc.data.L("Keep Watching", "Continuer").text(), onKeep, Modifier.testTag("language-keep"), requester)
         PillButton(com.sokoul.pc.data.L("See Versions", "Voir les versions").text(), onVersions, Modifier.testTag("language-versions"))
     }

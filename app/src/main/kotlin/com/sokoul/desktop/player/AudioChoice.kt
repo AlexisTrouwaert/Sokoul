@@ -13,9 +13,11 @@ object AudioChoice {
             java.util.Locale.getISOLanguages().forEach { code ->
                 val locale = java.util.Locale.forLanguageTag(code)
                 put(code, code)
-                runCatching { locale.isO3Language }.getOrNull()?.let { put(it, code) }
+                // Android gives "" for a language with no three-letter code: an empty key made the empty word at the end
+                // of "Piste 1" a language, and a VF with one unnamed track was stopped as "no French" (Memento, 2026-11-22).
+                runCatching { locale.isO3Language }.getOrNull()?.takeIf { it.isNotBlank() }?.let { put(it, code) }
                 listOf(java.util.Locale.ENGLISH, java.util.Locale.FRENCH, java.util.Locale.getDefault(), locale).forEach {
-                    put(locale.getDisplayLanguage(it).lowercase(java.util.Locale.ROOT), code)
+                    locale.getDisplayLanguage(it).lowercase(java.util.Locale.ROOT).takeIf { name -> name.isNotBlank() }?.let { name -> put(name, code) }
                 }
             }
         }
@@ -43,7 +45,7 @@ object AudioChoice {
 
     /** Langue des Réglages reconnue dans le nom d'une piste (« [French] » → « fr »), ou null. */
     fun languageOf(label: String): String? = words.entries.firstOrNull { it.value.containsMatchIn(label) }?.key
-        ?: label.lowercase(java.util.Locale.ROOT).split(Regex("[^\\p{L}]+"))
+        ?: label.lowercase(java.util.Locale.ROOT).split(Regex("[^\\p{L}]+")).filter { it.isNotEmpty() }
             .firstNotNullOfOrNull { localeNames[it] }
 
     /** Une piste française parmi [tracks] (id, description). */

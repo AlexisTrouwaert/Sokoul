@@ -3,6 +3,7 @@ package com.sokoul.iptv.data.debrid
 import com.sokoul.iptv.domain.AudioLanguage
 import com.sokoul.iptv.domain.HdrFormat
 import com.sokoul.iptv.domain.VideoQuality
+import com.sokoul.iptv.parser.MediaInfo
 
 /** Origine du fichier, de la meilleure à la moins bonne. */
 enum class RipSource(val label: String) { REMUX("Remux"), BLURAY("Blu-ray"), WEBDL("WEB"), WEBRIP("WEBRip"), HDTV("HDTV") }
@@ -56,9 +57,12 @@ object ReleaseName {
     private val rxNxN = Regex("(?i)(?<![a-z0-9])(\\d{1,2})x(\\d{2,3})(?![0-9a-z])")
     private val rxSample = Regex("(?i)\\bsample\\b")
     private val rxExtras = Regex("(?i)(/|\\b)(extras?|bonus|featurettes?)(/|\\b)")
+    private val rxFrameSize = Regex("""(?i)(?<![a-z0-9])(\d{3,4})\s*[x×]\s*(\d{3,4})(?![a-z0-9])""")
+    private val rxWrittenResolution = Regex("""(?i)(?<![a-z0-9])(2160|1080|720|576|480)[pi]?(?![a-z0-9]|(?:[.,]\d+)?\s*(?:[GMT]i?B|[GMT]O)\b)""")
     /** A service's own "instant" label, never the word inside a title ("Instant Family"). */
     private val rxInstantLabel = Regex("(?i)\\[(?:RD\\s*)?INSTANT\\]|\\bINSTANT\\s+(?:RD|AVAILABLE|PLAY)\\b")
 
+    /** Supply metadata from least to most specific, with a known file name last. */
     fun parse(vararg texts: String?): Release {
         // extension retirée : « .ts » n'est pas « TS » (telesync)
         val all = texts.filterNotNull().joinToString("\n").replace(rxVideoExtLine, " ")
@@ -91,7 +95,7 @@ object ReleaseName {
         val frenchSubtitles = subtitleLines.any { line -> "FR" in flags(line) || line.split(tokenSep).any { it.uppercase() in FRENCH_TAGS } }
         val episodeTag = episodeTag(all)
         return Release(
-            quality = quality(up, tokens),
+            quality = texts.indices.reversed().firstNotNullOfOrNull { explicitQuality(texts[it]) } ?: taggedQuality(tokens),
             hdr = hdr(up, tokens),
             language = if (frenchSubtitles && (announced == null || announced == AudioLanguage.VO)) AudioLanguage.VOSTFR else announced,
             frenchVariant = listOf("TRUEFRENCH", "VFF", "VFQ", "VFI", "VF2", "VFB").firstOrNull { it in tokens },
@@ -120,12 +124,27 @@ object ReleaseName {
      * Résolution écrite d'abord : « UHD.Bluray.1080p » est un 1080p (vu sur un fichier classé 4K à tort) ;
      * « UHD », « 4K » et « FHD » ne décident que si aucune résolution n'est écrite.
      */
-    private fun quality(up: String, t: Set<String>): VideoQuality? = when {
-        t.any { it in setOf("2160P", "2160") } || "3840X2160" in up -> VideoQuality.UHD_4K
-        t.any { it in setOf("1080P", "1080I", "1080") } || "1920X1080" in up -> VideoQuality.FHD_1080
-        t.any { it in setOf("720P", "720") } || "1280X720" in up -> VideoQuality.HD_720
-        t.any { it in setOf("480P", "576P") } -> VideoQuality.SD
-        t.any { it in setOf("4K", "UHD") } -> VideoQuality.UHD_4K
+    internal fun explicitQuality(text: String?): VideoQuality? {
+        if (text == null) return null
+        rxFrameSize.find(text)?.destructured?.let { (width, height) ->
+            return when (MediaInfo.resolution(width.toInt(), height.toInt())) {
+                "4K" -> VideoQuality.UHD_4K
+                "1080p" -> VideoQuality.FHD_1080
+                "720p" -> VideoQuality.HD_720
+                else -> VideoQuality.SD
+            }
+        }
+        return when (rxWrittenResolution.find(text)?.groupValues?.get(1)) {
+            "2160" -> VideoQuality.UHD_4K
+            "1080" -> VideoQuality.FHD_1080
+            "720" -> VideoQuality.HD_720
+            "576", "480" -> VideoQuality.SD
+            else -> null
+        }
+    }
+
+    private fun taggedQuality(t: Set<String>): VideoQuality? = when {
+        "4K" in t || "UHD" in t -> VideoQuality.UHD_4K
         "FHD" in t -> VideoQuality.FHD_1080
         t.any { it in setOf("SD", "DVDRIP", "XVID") } -> VideoQuality.SD
         else -> null

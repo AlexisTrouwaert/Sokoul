@@ -49,13 +49,15 @@ class AnimeIdentityResolver(
 
     private fun note(step: String) = trace?.invoke(step)
 
-    private class Result(val identity: AnimeIdentity?)
+    private class Result(val identity: AnimeIdentity?, val at: Long = System.currentTimeMillis())
 
     /** The identity of a catalog title, or null when it is not an anime or when nothing links it for sure. */
     suspend fun identity(kind: String, tmdbId: Int, info: TmdbInfo? = null): AnimeIdentity? {
         if (!enabled()) return null
         val key = "$kind:$tmdbId"
-        known[key]?.let { return it.identity }
+        // An identity found holds for the session. "Nothing found" is asked again after a while: a lookup whose
+        // services timed out once left an anime without Kitsu, SeaDex and its romaji names until the app restarted.
+        known[key]?.takeIf { it.identity != null || System.currentTimeMillis() - it.at < MISS_RETRY_MS }?.let { return it.identity }
         val found = try {
             resolve(kind, tmdbId, info)
         } catch (c: CancellationException) {
@@ -244,3 +246,6 @@ class AnimeIdentityResolver(
         val ASIAN = setOf("ja", "zh", "ko")
     }
 }
+
+/** How long "no identity" is believed before the services are asked again. */
+private const val MISS_RETRY_MS = 5 * 60_000L

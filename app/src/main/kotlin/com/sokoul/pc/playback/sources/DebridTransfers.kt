@@ -41,7 +41,49 @@ class DebridTransfers(
         kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { runCatching { api.deleteTorrent(id) } }
     }
 
-    suspend fun link(stream: DebridStream, query: DebridQuery, keep: Boolean, onProgress: (Transfer) -> Unit): String {
+    suspend fun link(stream: DebridStream, query: DebridQuery, keep: Boolean, onProgress: (Transfer) -> Unit): String =
+        try {
+            linkOnce(stream, query, keep, onProgress)
+        } catch (e: PlayFailureException) {
+            // "too_many_requests" is Real-Debrid asking to slow down, not a limit of the account: a race of three after
+            // a few refused files met it, and the whole service was left for a site's link (Perfect Days, 2026-11-24).
+            if (!rateLimited.getAndSet(false)) throw e
+            StartClock.note("rd rate limited, waiting ${RATE_WAIT_MS} ms")
+            delay(RATE_WAIT_MS)
+            linkOnce(stream, query, keep, onProgress)
+        }
+
+    /** Until when no torrent is added: Real-Debrid refuses every add for a few minutes once it pauses the account. */
+    @Volatile private var pausedUntil = 0L
+    @Volatile private var pausedCheckedAt = 0L
+    @Volatile private var pausedAnswer = false
+
+    /**
+     * Whether Real-Debrid refuses every add right now: a Creative Commons film (Big Buck Bunny) is asked for, and removed
+     * at once if accepted. Asked at most once per [PAUSE_CHECK_MS].
+     */
+    private suspend fun accountPaused(): Boolean {
+        val now = System.currentTimeMillis()
+        if (now - pausedCheckedAt < PAUSE_CHECK_MS) return pausedAnswer
+        pausedCheckedAt = now
+        pausedAnswer = try {
+            val id = api.addMagnet("magnet:?xt=urn:btih:$FREE_FILM")
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { runCatching { api.deleteTorrent(id) } }
+            false
+        } catch (e: RdException) {
+            e.apiCode == 35 || e.code == 451
+        } catch (c: CancellationException) {
+            throw c
+        } catch (_: Exception) {
+            false
+        }
+        return pausedAnswer
+    }
+
+    /** Set when the last refusal was Real-Debrid's "too many requests" (HTTP 429, code 34). */
+    private val rateLimited = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    private suspend fun linkOnce(stream: DebridStream, query: DebridQuery, keep: Boolean, onProgress: (Transfer) -> Unit): String {
         val hash = stream.infoHash ?: throw PlayFailureException(PlayFailure.NoSource)
         try {
             // A season pack can be there several times, each copy holding the episodes that were asked of it.
@@ -55,6 +97,8 @@ class DebridTransfers(
             }
             // Never add a duplicate or silently change selected files on an already-ready account copy.
             if (readyCopyMissingFile) throw PlayFailureException(PlayFailure.NotReady(null))
+            // Real-Debrid is pausing the account: an add would only be refused and lengthen the pause.
+            if (System.currentTimeMillis() < pausedUntil) throw PlayFailureException(PlayFailure.DebridLimit)
             return fromNew(hash, stream, query, keep, onProgress)
         } catch (e: RdException) {
             if (e.apiCode == TORRENT_ALREADY_ACTIVE) {
@@ -79,7 +123,17 @@ class DebridTransfers(
             // Real-Debrid's own reason in the source timings ("infringing_file", "torrent_file_invalid"…): a refused
             // version otherwise only says "dead link".
             StartClock.note("rd ${hash.take(6)} refused: HTTP ${e.code} code ${e.apiCode} ${e.message.orEmpty().take(60)}")
-            throw PlayFailureException(failureOf(e))
+            if (e.code == 429 || e.apiCode == 34) rateLimited.set(true)
+            val failure = failureOf(e)
+            // "infringing_file" is also what Real-Debrid answers to every add while it pauses an account (after many adds
+            // in a row): Big Buck Bunny itself was refused, then accepted four minutes later (2026-11-24). Blamed on the
+            // file, dozens of good 4K versions were set aside for 30 days.
+            if (failure == PlayFailure.Blocked && accountPaused()) {
+                pausedUntil = System.currentTimeMillis() + PAUSE_MS
+                StartClock.note("rd account paused: a free film is refused too")
+                throw PlayFailureException(PlayFailure.DebridLimit)
+            }
+            throw PlayFailureException(failure)
         }
     }
 
@@ -113,6 +167,9 @@ class DebridTransfers(
             if (info.status in DEAD) throw PlayFailureException(PlayFailure.DeadLink)
             if (info.files.isEmpty()) {
                 if (!keep) throw PlayFailureException(PlayFailure.NotReady(null))
+                // Still converting the magnet after the metadata polls: no peer has given even the file list, so nobody
+                // will send the file either. Waiting cost 13 s before the next version (Breaking Bad 4K, 2026-11-23).
+                if (info.status == "magnet_conversion") throw PlayFailureException(PlayFailure.NotReady(0))
                 // Picked by hand: the torrent stays, and its file can be chosen once Real-Debrid has read it.
                 keepTorrent = true
                 return followOwn(id, stream, query, onProgress)
@@ -239,6 +296,11 @@ class DebridTransfers(
         private const val ACCOUNT_LIMIT = 100
         private const val RECONCILE_LIMIT = 5000
         private const val TORRENT_ALREADY_ACTIVE = 33
+        private const val RATE_WAIT_MS = 2_500L
+        private const val PAUSE_CHECK_MS = 300_000L
+        private const val PAUSE_MS = 180_000L
+        /** Big Buck Bunny (Blender Foundation, Creative Commons): never on a rights holder's list. */
+        private const val FREE_FILM = "dd8255ecdc7ca55fb0bbf81323d87062db1f6d1c"
         private const val METADATA_POLLS = 4
         private const val READY_POLLS = 3
         private const val WAITING_FILES = "waiting_files_selection"
@@ -248,7 +310,8 @@ class DebridTransfers(
         fun failureOf(e: RdException): PlayFailure = when {
             e.code == 401 || e.apiCode == 8 || e.apiCode == 9 -> PlayFailure.KeyRefused
             e.apiCode == 21 || e.apiCode == 23 || e.apiCode == 36 || e.apiCode == 18 -> PlayFailure.DebridLimit
-            e.apiCode == 35 || e.apiCode == 28 || e.apiCode == 24 -> PlayFailure.DeadLink
+            e.apiCode == 35 -> PlayFailure.Blocked
+            e.apiCode == 28 || e.apiCode == 24 -> PlayFailure.DeadLink
             // Still "too many requests" after the API's own retries: Real-Debrid is to be left alone for now. Taken as a passing
             // network error, it had the player ask for every version in turn for three minutes (2026-11-08).
             e.code == 429 || e.apiCode == 34 -> PlayFailure.DebridLimit

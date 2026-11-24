@@ -41,7 +41,8 @@ data class AnimeSearch(val check: AnimeCheck, val seaDex: List<SeaDexRelease> = 
 data class AnimeLookup(val query: DebridQuery, val search: AnimeSearch?)
 
 /** Résultat d'une recherche de versions : les versions classées, ou la raison de l'absence. */
-data class DebridResult(val streams: List<DebridStream>, val problem: String? = null, val done: Boolean = false)
+data class DebridResult(val streams: List<DebridStream>, val problem: String? = null, val done: Boolean = false, val query: DebridQuery? = null,
+    val failed: Boolean = false)
 
 /**
  * Real-Debrid sur PC : versions trouvées par Torrentio et Comet (format Stremio, jeton ajouté au moment de la requête,
@@ -55,7 +56,7 @@ class DesktopDebrid(
     private val http: okhttp3.OkHttpClient = catalog.http,
 ) {
     /** Every advertised language is searched: the audio preference only ranks, so it is not part of the key. */
-    private val cache = ConcurrentHashMap<DebridQuery, Pair<Long, List<DebridStream>>>()
+    private val cache = ConcurrentHashMap<DebridQuery, Pair<Long, DebridResult>>()
 
     /** Forgets the searches kept in memory; "Clear the catalogue cache" empties the database copy at the same time. */
     fun clearCache() = cache.clear()
@@ -102,7 +103,6 @@ class DesktopDebrid(
     fun search(q: DebridQuery, info: TmdbInfo?, refresh: Boolean, lookup: (suspend () -> AnimeLookup?)? = null): Flow<DebridResult> = channelFlow {
         note("search")
         runCatching { db.purgeCache(CACHE_PREFIX, System.currentTimeMillis() - SAVED_MS) }
-        val planned = async { runCatching { lookup?.invoke() }.getOrElse { if (it is CancellationException) throw it else null } }
         val token = withContext(Dispatchers.IO) { token() }
         if (token == null) {
             send(DebridResult(emptyList(), "Real-Debrid n'est pas configuré", done = true))
@@ -110,18 +110,20 @@ class DesktopDebrid(
         }
         val known = cache[q]?.takeIf { !refresh && System.currentTimeMillis() - it.first < TTL_MS }
         if (known != null) {
-            send(DebridResult(known.second, done = true))
+            send(known.second)
             return@channelFlow
         }
         val imdb = info?.imdbId ?: catalog.imdbId(if (q.series) "tv" else "movie", q.tmdbId)
-        if (imdb == null) {
+        if (imdb == null && lookup == null) {
             send(DebridResult(emptyList(), "Identifiant IMDb introuvable pour ce titre", done = true))
             return@channelFlow
         }
+        val planned = lookup?.let { resolve -> async { runCatching { resolve() }.getOrElse { if (it is CancellationException) throw it else null } } }
         val titles = listOfNotNull(info?.title, info?.originalTitle)
         val lock = Mutex()
         val results = ArrayList<List<DebridStream>>()
         var plan: AnimeLookup? = null
+        var applied = planned == null
         var anime: AnimeSearch? = null
         var community: Set<String> = emptySet()
         var community0: List<DebridStream> = emptyList()
@@ -167,31 +169,30 @@ class DesktopDebrid(
             val found = fetch(url, refresh)
             note(label + " " + (found?.size ?: "failed"))
             if (found == null) return@launch
-            val snapshot = lock.withLock {
+            lock.withLock {
                 // The community's releases go after the services' own lines of the same torrent, which carry a link.
                 results.add(results.size - (if (community0.isNotEmpty()) 1 else 0), found)
-                if (!planned.isCompleted) null else withContext(Dispatchers.Default) { kept() }
+                if (applied) send(withContext(Dispatchers.Default) { DebridResult(kept(), query = plan?.query ?: base0) })
             }
-            if (snapshot != null) send(DebridResult(snapshot))
         }
         // Torrentio without the token first: the same versions in under a second (the configured one takes 20 s).
         val fast = torrentio && fastTorrentio()
         val plain = DebridAddons.torrentioPlain(false)
-        val jobs = (listOfNotNull(if (fast) ask("$plain/" + q.streamPath(imdb), "torrentio fast imdb") else null) +
+        val jobs = (if (imdb == null) emptyList() else listOfNotNull(if (fast) ask("$plain/" + q.streamPath(imdb), "torrentio fast imdb") else null) +
             listOfNotNull(if (torrentio) ask("${DebridAddons.torrentioPlain(true)}/" + q.streamPath(imdb), "torrentio french imdb") else null) +
             bases.map { base -> ask("$base/" + q.streamPath(imdb), host(base) + " imdb") }).toMutableList()
-        val identity = launch {
-            val found = planned.await()
+        val identity = planned?.let { task -> launch {
+            val found = task.await()
             note("identity " + (if (found?.search != null) "anime" else "none"))
-            val snapshot = lock.withLock {
+            lock.withLock {
                 plan = found
                 anime = found?.search
                 community = found?.search?.seaDex?.map { it.infoHash }?.toSet().orEmpty()
                 community0 = found?.search?.let { a -> communityStreams(a, found.query) }.orEmpty()
                 if (community0.isNotEmpty()) results += community0
-                withContext(Dispatchers.Default) { kept() }
+                applied = true
+                send(withContext(Dispatchers.Default) { DebridResult(kept(), query = found?.query ?: base0) })
             }
-            send(DebridResult(snapshot))
             // Comet's manifest takes Kitsu ids, but on 2026-11-08 it answered "kitsu:12:1" with other series (Blue Box,
             // Arcane, The Walking Dead): only Torrentio is asked by Kitsu id.
             val kitsu = found?.query?.kitsuPath()?.takeIf { found.search != null }
@@ -199,12 +200,14 @@ class DesktopDebrid(
                 val kitsuBases = (if (fast) listOf(plain) else bases.filter { it.startsWith(DebridAddons.TORRENTIO) }) + DebridAddons.torrentioPlain(true)
                 kitsuBases.forEach { base -> lock.withLock { jobs += ask("$base/$kitsu", (if (fast) "torrentio fast" else host(base)) + " kitsu") } }
             }
-        }
-        identity.join()
+        } }
+        identity?.join()
         lock.withLock { jobs.toList() }.joinAll()
         val all = lock.withLock { withContext(Dispatchers.Default) { kept() } }
-        if (all.isNotEmpty()) cache[q] = System.currentTimeMillis() to all
-        send(DebridResult(all, if (all.isEmpty()) "Aucune version trouvée sur Real-Debrid" else null, done = true))
+        val result = DebridResult(all, if (all.isEmpty()) "Aucune version trouvée sur Real-Debrid" else null,
+            done = true, query = plan?.query ?: q, failed = all.isEmpty() && results.isEmpty() && jobs.isNotEmpty())
+        if (all.isNotEmpty()) cache[q] = System.currentTimeMillis() to result
+        send(result)
     }
 
     /**
@@ -285,7 +288,23 @@ class DesktopDebrid(
      */
     private val fastHttp by lazy { http.newBuilder().connectionPool(okhttp3.ConnectionPool()).build() }
 
-    private suspend fun fetch(address: String, refresh: Boolean = false): List<com.sokoul.iptv.data.debrid.DebridStream>? = withContext(Dispatchers.IO) {
+    /** The calls under way, by address: a second search of the same title joins the first one's call. */
+    private val inFlight = ConcurrentHashMap<String, kotlinx.coroutines.Deferred<List<com.sokoul.iptv.data.debrid.DebridStream>?>>()
+    private val fetchScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
+
+    /**
+     * The title page, its search ahead and the start of the film asked the same services at the same time (three
+     * Torrentio and Comet calls for Inception on the Chromecast, 2026-11-22): the same address is now asked once.
+     */
+    private suspend fun fetch(address: String, refresh: Boolean = false): List<com.sokoul.iptv.data.debrid.DebridStream>? {
+        if (refresh) return fetchNow(address, true)
+        val call = inFlight.computeIfAbsent(address) {
+            fetchScope.async { try { fetchNow(address, false) } finally { inFlight.remove(address) } }
+        }
+        return call.await()
+    }
+
+    private suspend fun fetchNow(address: String, refresh: Boolean): List<com.sokoul.iptv.data.debrid.DebridStream>? = withContext(Dispatchers.IO) {
         val key = cacheKey(address)
         // An answer of the last hours is used again: a second start of the same episode lists its versions at once.
         if (!refresh) runCatching { db.tmdbGet(key) }.getOrNull()?.takeIf { System.currentTimeMillis() - it.second < SAVED_MS }?.let { return@withContext DebridStreams.parse(it.first) }

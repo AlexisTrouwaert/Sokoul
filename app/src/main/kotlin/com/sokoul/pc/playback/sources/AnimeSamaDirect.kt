@@ -38,12 +38,21 @@ import java.util.concurrent.TimeUnit
  */
 internal object AnimeSamaSite {
     const val LINK_PATH = "/api/lien.php"
-    /** Language pages a season may have, in the server's order: the first is read for the episode count. */
-    val LANGUAGES = listOf("vostfr", "vf", "vosteng", "vostspa", "vj", "va", "vf1", "vf2", "vkr")
+    /** Known language pages, used when the season does not declare its editions. */
+    private val LANGUAGES = listOf("vostfr", "vf", "vosteng", "vostspa", "vj", "va", "vf1", "vf2", "vkr")
+    private val numberedFrench = Regex("vf[0-9]{1,2}")
+    fun frenchEdition(language: String): Boolean = language == "vf" || numberedFrench.matches(language)
+
+    fun seasonLanguages(declared: List<String>?, panelLanguage: String?): List<String> {
+        val known = (LANGUAGES + listOfNotNull(panelLanguage)).distinct()
+        if (declared == null) return known
+        val editions = declared.filter(numberedFrench::matches).distinct().take(6)
+        return (known + editions).filter { it == "vostfr" || it == panelLanguage || it in declared }.distinct()
+    }
     private const val PROXY_PREFIX = "https://proxy.liyao.space/------"
 
     data class Result(val url: String, val name: String, val alternativeNames: List<String>)
-    data class Panel(val name: String, val url: String, val number: Int?)
+    data class Panel(val name: String, val url: String, val number: Int?, val language: String?)
     data class Reference(val id: String, val page: String, val origin: String)
 
     private val rxComments = listOf(Regex("<!--[\\s\\S]*?-->"), Regex("/\\*[\\s\\S]*?\\*/"))
@@ -66,7 +75,7 @@ internal object AnimeSamaSite {
         Result(href, title, subtitle.split(',').map(String::trim).filter(String::isNotEmpty))
     }.toList()
 
-    private val rxPanel = Regex("panneauAnime\\(\\s*\"([^\"]+)\"\\s*,\\s*\"([^\"]+?)/?(?:vostfr|vf\\d*|vosteng|vostspa|vj|va|vkr)?\"\\s*\\)")
+    private val rxPanel = Regex("panneauAnime\\(\\s*\"([^\"]+)\"\\s*,\\s*\"([^\"]+)\"\\s*\\)")
 
     /** Season cards declared by `panneauAnime("name", "saison1/vostfr")`, commented and template cards excluded. */
     fun seasonPanels(html: String, catalogueUrl: String): List<Panel> {
@@ -79,9 +88,11 @@ internal object AnimeSamaSite {
             if (name.isEmpty() || link.isEmpty() || name == "nom" || link == "url") return@mapNotNull null
             if (slug.isNotEmpty() && link.startsWith("$slug/")) link = link.removePrefix("$slug/")
             link = link.trimStart('/')
+            val language = link.substringAfterLast('/', "").takeIf { it in LANGUAGES || frenchEdition(it) }
+            if (language != null) link = link.substringBeforeLast('/')
             val url = "$base/$link"
             if (!seen.add(url)) return@mapNotNull null
-            Panel(name, url, Regex("^saison(\\d+)$", RegexOption.IGNORE_CASE).find(link)?.groupValues?.get(1)?.toIntOrNull())
+            Panel(name, url, Regex("^saison(\\d+)$", RegexOption.IGNORE_CASE).find(link)?.groupValues?.get(1)?.toIntOrNull(), language)
         }.toList()
     }
 
@@ -107,7 +118,13 @@ internal object AnimeSamaSite {
         return byIndex.values.toList()
     }
 
-    fun isPlayerUrl(url: String?): Boolean = url != null && Regex("^https?://[^/\\s]+\\.[^/\\s]+", RegexOption.IGNORE_CASE).containsMatchIn(url)
+    private val playerUrl = Regex("^https?://[^/\\s]+\\.[^/\\s]+", RegexOption.IGNORE_CASE)
+    private val emptyPlayer = Regex(
+        """sibnet\.[a-z0-9-]+/shell\.php\?videoid=$|vidmoly\.[a-z0-9-]+/embed-\.html$|sendvid\.[a-z0-9-]+/embed/$|vk\.[a-z0-9-]+/video_ext\.php\?oid=&hd=3$""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    fun isPlayerUrl(url: String?): Boolean = url != null && playerUrl.containsMatchIn(url) && !emptyPlayer.containsMatchIn(url)
 
     private fun referenceUrl(page: HttpUrl, id: String, host: String): String =
         page.newBuilder().encodedPath(LINK_PATH).query(null).addQueryParameter("l", id).addQueryParameter("p", page.encodedPath)
@@ -220,6 +237,9 @@ internal class AnimeSamaDns(http: OkHttpClient, private val now: () -> Long = Sy
 class AnimeSamaDirect(http: OkHttpClient, private val site: String = "https://anime-sama.to", private val now: () -> Long = System::currentTimeMillis) {
     private val client = http.newBuilder().dns(AnimeSamaDns(http)).callTimeout(20, TimeUnit.SECONDS).followRedirects(true).build()
     private val catalogues = ConcurrentHashMap<String, Pair<Long, JsonArray>>()
+    private data class SeasonPage(val declared: List<String>?, val players: List<List<String>>)
+    private val seasonPages = LinkedHashMap<String, Pair<Long, SeasonPage>>(16, 0.75f, true)
+    private val seasonRequests = Semaphore(PARALLEL)
 
     /** Works matching [name], with their seasons and the episode count of each (players of one language only). */
     suspend fun search(name: String): JsonArray? {
@@ -240,15 +260,15 @@ class AnimeSamaDirect(http: OkHttpClient, private val site: String = "https://an
         val seasons = work["seasons"]?.jsonArray ?: return null
         val season = seasons.getOrNull(target.season - 1)?.jsonObject ?: return null
         val base = season["url"]?.jsonPrimitive?.contentOrNull ?: return null
-        val first = get("$base/${AnimeSamaSite.LANGUAGES.first()}/", referer = "$site/")
-        val declared = AnimeSamaSite.availableLanguages(first)
-        val languages = AnimeSamaSite.LANGUAGES.filter { declared == null || it == AnimeSamaSite.LANGUAGES.first() || it in declared }
+        val panelLanguage = season["panelLanguage"]?.jsonPrimitive?.contentOrNull
+        val firstLanguage = panelLanguage ?: "vostfr"
+        val first = seasonPage(base, firstLanguage)
+        val languages = AnimeSamaSite.seasonLanguages(first?.declared, panelLanguage)
         val links = coroutineScope {
             languages.map { language ->
                 async {
-                    val page = "$base/$language/"
-                    val html = if (language == AnimeSamaSite.LANGUAGES.first()) first else get(page, referer = "$site/")
-                    val players = html?.let { AnimeSamaSite.episodePlayers(it, page).getOrNull(target.episode - 1) }.orEmpty()
+                    val page = if (language == firstLanguage) first else seasonPage(base, language)
+                    val players = page?.players?.getOrNull(target.episode - 1).orEmpty()
                     language to resolvePlayers(players)
                 }
             }.awaitAll()
@@ -275,8 +295,8 @@ class AnimeSamaDirect(http: OkHttpClient, private val site: String = "https://an
         val counted = coroutineScope {
             panels.map { panel ->
                 async {
-                    // Only numbered seasons and films count episodes: one language page each, the first that has players.
-                    gate.withPermit { panel to episodeCount(panel.url) }
+                    // The season spans every episode published in its original or French editions.
+                    gate.withPermit { panel to episodeCount(panel) }
                 }
             }.awaitAll()
         }
@@ -289,6 +309,7 @@ class AnimeSamaDirect(http: OkHttpClient, private val site: String = "https://an
                     addJsonObject {
                         put("name", panel.name)
                         panel.number?.let { put("number", it) }
+                        panel.language?.let { put("panelLanguage", it) }
                         put("url", panel.url)
                         putJsonArray("episodes") { repeat(count) { addJsonObject { put("index", it + 1); putJsonArray("streaming_links") { } } } }
                     }
@@ -297,14 +318,34 @@ class AnimeSamaDirect(http: OkHttpClient, private val site: String = "https://an
         }
     }
 
-    private suspend fun episodeCount(seasonUrl: String): Int {
-        for (language in listOf("vostfr", "vf")) {
-            val page = "$seasonUrl/$language/"
-            val html = get(page, referer = "$site/") ?: continue
-            val count = AnimeSamaSite.episodePlayers(html, page).size
-            if (count > 0) return count
+    private suspend fun episodeCount(panel: AnimeSamaSite.Panel): Int {
+        val firstLanguage = panel.language ?: "vostfr"
+        val first = seasonPage(panel.url, firstLanguage)
+        val languages = AnimeSamaSite.seasonLanguages(first?.declared, panel.language)
+            .filter { it != firstLanguage && (it == "vostfr" || AnimeSamaSite.frenchEdition(it)) }
+        val editions = coroutineScope {
+            languages.map { language -> async { seasonPage(panel.url, language)?.players?.size ?: 0 } }.awaitAll()
         }
-        return 0
+        return maxOf(first?.players?.size ?: 0, editions.maxOrNull() ?: 0)
+    }
+
+    private suspend fun seasonPage(base: String, language: String): SeasonPage? {
+        val page = "$base/$language/"
+        synchronized(seasonPages) {
+            seasonPages[page]?.takeIf { it.first > now() }?.let { return it.second }
+        }
+        return seasonRequests.withPermit {
+            val html = get(page, referer = "$site/") ?: return@withPermit null
+            val inline = AnimeSamaSite.episodePlayers(html, page)
+            val players = if (inline.isNotEmpty()) inline
+                else get("${page}episodes.js", referer = page)?.let { AnimeSamaSite.episodePlayers(it, page) }.orEmpty()
+            val resolved = SeasonPage(AnimeSamaSite.availableLanguages(html), players)
+            if (players.isNotEmpty() || resolved.declared != null) synchronized(seasonPages) {
+                seasonPages[page] = (now() + SEASON_PAGE_MS) to resolved
+                if (seasonPages.size > SEASON_PAGE_LIMIT) seasonPages.remove(seasonPages.keys.first())
+            }
+            resolved
+        }
     }
 
     /** Player URLs for one episode: references resolved with the page's token, others kept; unresolved ones dropped. */
@@ -369,6 +410,8 @@ class AnimeSamaDirect(http: OkHttpClient, private val site: String = "https://an
         const val MAX_WORKS = 4
         const val PARALLEL = 4
         const val CATALOGUE_MS = 30 * 60_000L
+        const val SEASON_PAGE_MS = 2 * 60_000L
+        const val SEASON_PAGE_LIMIT = 16
         const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
     }
 }

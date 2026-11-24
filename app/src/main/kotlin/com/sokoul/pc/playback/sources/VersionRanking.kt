@@ -76,12 +76,21 @@ object VersionRanking {
         // IPTV is always there but counts on the account's connections and its picture is often poor (720x406 for a
         // Spartacus episode, 2026-11-19): it comes after every Real-Debrid and web version that may still play, as a last
         // resort. "Preferred source: IPTV" puts it first again.
-        val byReady = compareBy<PlayVersion> { if (it.origin == VersionOrigin.Iptv) IPTV_READY_RANK else readyRank(it.readiness) }
+        // A web link is never in the account: it comes after every Real-Debrid version that may still play (Unknown
+        // included). Ranked "Likely", it went before the Torrentio results not yet checked, and a streaming site played
+        // where Real-Debrid had the film (2026-11-23).
+        val byReady = compareBy<PlayVersion> {
+            when {
+                it.origin == VersionOrigin.Iptv -> IPTV_READY_RANK
+                it.origin == VersionOrigin.Web -> WEB_READY_RANK
+                else -> readyRank(it.readiness)
+            }
+        }
         // Windows wants SDR first. A TV that shows HDR wants the sharpest, then the richest; a format it cannot show goes after SDR.
         // The viewer's choice "best quality first": the sharpest first, then the richest picture, whatever the screen.
         val byPicture = if (prefs.bestQualityFirst) {
-            val rich = caps.copy(hdr10 = true, dolbyVision = true)
-            compareBy<PlayVersion> { qualityRank(SourceRules.usefulQuality(it.quality, caps)) }.thenBy { SourceRules.pictureRank(it.hdr, rich) }
+            // Only the sharpness here: at the same sharpness what is ready goes first, then the picture this screen shows.
+            compareBy<PlayVersion> { qualityRank(SourceRules.usefulQuality(it.quality, caps)) }
         } else if (caps.hdr10 || caps.dolbyVision) {
             compareBy<PlayVersion> { if (SourceRules.pictureRank(it.hdr, caps) > 2) 1 else 0 }
                 .thenBy { qualityRank(SourceRules.usefulQuality(it.quality, caps)) }
@@ -99,7 +108,15 @@ object VersionRanking {
             // (Anime-Sama, the web sources) met one with a size, and the session kept the list without them.
             .thenByDescending { it.sizeBytes ?: 0L }
             .thenBy { it.key }
-        val order = (if (readyFirst) base.then(byReady).then(byPicture) else base.then(byPicture).then(byReady)).then(rest)
+        // Best quality first: the sharpest, then at that sharpness what is ready (a 4K not in the cache cost 17 s before
+        // the 4K in the account played, Google TV Streamer, 2026-11-23), then SDR before HDR10 on an SDR set and Dolby
+        // Vision only where it plays.
+        val byFormat = compareBy<PlayVersion> { SourceRules.pictureRank(it.hdr, caps) }
+        val order = when {
+            readyFirst -> base.then(byReady).then(byPicture)
+            prefs.bestQualityFirst -> base.then(byPicture).then(byReady).then(byFormat)
+            else -> base.then(byPicture).then(byReady)
+        }.then(rest)
         return versions.sortedWith(order)
     }
 
@@ -109,14 +126,18 @@ object VersionRanking {
         PreferredOrigin.Iptv -> if (v.origin == VersionOrigin.Iptv) 0 else 1
     }
 
-    private const val IPTV_READY_RANK = 4
+    // After Real-Debrid, the sites, then IPTV as the last resort (its picture is often poor). A dead site is left after
+    // three failed links (PlaybackSession.MAX_WEB_FAILS), so it no longer holds the start for long. The owner expected the
+    // web before IPTV (2026-11-24).
+    private const val WEB_READY_RANK = 4
+    private const val IPTV_READY_RANK = 5
 
     private fun readyRank(r: Readiness) = when (r) {
         Readiness.Ready -> 0
         Readiness.Likely -> 1
         Readiness.Unknown -> 3
-        Readiness.Preparing -> 5
-        Readiness.NotCached -> 6
+        Readiness.Preparing -> 6
+        Readiness.NotCached -> 7
     }
 
     private fun qualityRank(q: VideoQuality?) = when (q) {
@@ -170,7 +191,16 @@ object StartPolicy {
         val open = ranked.filter { it.key !in failed && it.origin !in blocked && it.rejected == null }
         // After a service gave a bad link, its other links are likely as bad: those of other services come first.
         val usable = open.filter { it.providerHost == null || it.providerHost !in failedHosts } + open.filter { it.providerHost != null && it.providerHost in failedHosts }
-        if (mode == StartMode.WaitBest) return usable.firstOrNull()?.let { StartChoice(it, keep = true) }
+        if (mode == StartMode.WaitBest) {
+            // Waiting for the best still begins with a quick look: the best ones not known to be in the cache are asked
+            // at once (in a race), and only when none is ready does the best one download. One by one, each that nobody
+            // shares cost 16 s before the next (Breaking Bad 4K on the Google TV Streamer, 2026-11-23).
+            val best = usable.firstOrNull() ?: return null
+            val look = usable.firstOrNull { it.origin == VersionOrigin.Debrid && it.quality == best.quality && it.readiness != Readiness.Ready &&
+                it.key !in quickTried && worthATry(it.readiness, quickTried.size) }
+            if (best.origin == VersionOrigin.Debrid && best.readiness != Readiness.Ready && look != null) return StartChoice(look, keep = false)
+            return StartChoice(best, keep = true)
+        }
         val quick = usable.firstOrNull { it.key !in quickTried && worthATry(it.readiness, quickTried.size) }
         if (quick != null) return StartChoice(quick, keep = false)
         // Nothing can start right away: the best version is downloaded, with its progress on screen.
@@ -192,15 +222,21 @@ object StartPolicy {
         size: Int,
         /** Only versions of the first one's quality race: else the quickest link, often a 1080p, beat the 4K. */
         sameQuality: Boolean = false,
+        /**
+         * How wanted what one hears is (lower first): only versions heard like the first one race. A VO raced beside the
+         * last French ones and, quickest, won (Les Infiltrés, 2026-11-22).
+         */
+        heard: (PlayVersion) -> Int = { 0 },
     ): List<PlayVersion> {
         if (size < 2) return emptyList()
         val first = next(ranked, mode, failed, quickTried, blocked, failedHosts) ?: return emptyList()
         if (first.keep || first.version.origin != VersionOrigin.Debrid || first.version.readiness == Readiness.Ready) return emptyList()
         val open = ranked.filter { it.key !in failed && it.origin !in blocked && it.rejected == null }
         val usable = open.filter { it.providerHost == null || it.providerHost !in failedHosts } + open.filter { it.providerHost != null && it.providerHost in failedHosts }
+        val firstHeard = heard(first.version)
         val group = usable.filter {
             it.origin == VersionOrigin.Debrid && it.key !in quickTried && it.readiness != Readiness.Ready && worthATry(it.readiness, quickTried.size) &&
-                (!sameQuality || it.quality == first.version.quality)
+                (!sameQuality || it.quality == first.version.quality) && heard(it) == firstHeard
         }.take(size)
         return if (group.size > 1) group else emptyList()
     }

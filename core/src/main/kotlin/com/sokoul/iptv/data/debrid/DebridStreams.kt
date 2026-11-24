@@ -276,6 +276,7 @@ object DebridStreams {
     fun enrich(first: DebridStream, later: DebridStream): DebridStream {
         val a = first.release
         val b = later.release
+        val fileQuality = ReleaseName.explicitQuality(first.filename) ?: ReleaseName.explicitQuality(later.filename)
         // French first, as ReleaseName reads it, then the others in a fixed order: the arrival order changes nothing.
         val audio = (a.audio + b.audio).distinct().sortedWith(compareBy<String> { if (it == "FR") 0 else 1 }.thenBy { it })
         val language = when {
@@ -295,7 +296,7 @@ object DebridStreams {
             filename = first.filename ?: later.filename,
             fileIdx = first.fileIdx ?: later.fileIdx,
             release = a.copy(
-                quality = a.quality ?: b.quality,
+                quality = fileQuality ?: a.quality ?: b.quality,
                 hdr = a.hdr ?: b.hdr,
                 language = language,
                 frenchVariant = a.frenchVariant ?: b.frenchVariant,

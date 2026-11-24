@@ -39,6 +39,10 @@ internal object AnimeSamaParse {
         return (season["number"] as? JsonPrimitive)?.intOrNull?.takeIf { it > 0 }
             ?: Regex("""^(?:saison|saga)\s+(\d+)\b""").find(name)?.groupValues?.get(1)?.toIntOrNull()?.takeIf { it > 0 }
     }
+    /** "Saison 1 Partie 2", "Part 2", "Cour 2": the part of a season split in two; null for a whole season. */
+    private fun partNumber(season: JsonObject): Int? =
+        Regex("""\b(?:partie|part|cour)\s*(\d+)\b""").find(AnimeCategories.plain(text(season, "name").orEmpty()))?.groupValues?.get(1)?.toIntOrNull()
+
     fun target(root: JsonArray, names: List<String>, movie: Boolean, season: Int?, episode: Int?, absolute: Int?): Target? {
         val normalized = names.map(AnimeCategories::plain)
         root.forEachIndexed { ai, element ->
@@ -57,16 +61,27 @@ internal object AnimeSamaParse {
                     }
                 }
             } else {
-                var left = absolute
+                // One card per season and part: "Saison 1 Partie 2" has the number 1 too, and dropping it as a duplicate
+                // lost its episodes and shifted every later season of the absolute count. A second card of the same
+                // season without a part ("East Blue alternate") is the same episodes again and still goes.
                 val numbered = seasons.withIndex().mapNotNull { entry -> seasonNumber(entry.value)?.let { number -> entry to number } }
-                    .distinctBy { it.second }.sortedBy { it.second }.map { it.first }
-                for ((si, s) in numbered) {
+                    .distinctBy { (entry, number) -> number to partNumber(entry.value) }
+                    .sortedWith(compareBy({ it.second }, { partNumber(it.first.value) ?: 1 }, { it.first.index })).map { it.first }
+                var left = absolute
+                if (left != null) for ((si, s) in numbered) {
                     val count = objects(s, "episodes").size
-                    if (left != null) {
-                        if (left in 1..count) return Target(ai + 1, si + 1, left)
-                        left -= count
-                    } else if (seasonNumber(s) == season && episode != null && episode in 1..count) {
-                        return Target(ai + 1, si + 1, episode)
+                    if (left in 1..count) return Target(ai + 1, si + 1, left)
+                    left -= count
+                }
+                // The season's own numbering, across its parts: episode 14 of a 12 + 12 season is the second part's 2nd.
+                // Only without an absolute number: one that runs past the catalogue is a wrong mapping, and its season and
+                // episode would then play another episode.
+                if (absolute == null && season != null && episode != null) {
+                    var inSeason = episode
+                    for ((si, s) in numbered.filter { seasonNumber(it.value) == season }) {
+                        val count = objects(s, "episodes").size
+                        if (inSeason in 1..count) return Target(ai + 1, si + 1, inSeason)
+                        inSeason -= count
                     }
                 }
             }

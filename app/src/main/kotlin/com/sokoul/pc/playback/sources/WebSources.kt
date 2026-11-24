@@ -116,19 +116,24 @@ object WebParse {
             .replace(Regex("\\p{M}+"), "")
         val tokens = normalized.split(Regex("[^a-z0-9]+")).filter(String::isNotEmpty).toSet()
         val compact = tokens.joinToString("")
-        val french = tokens.any { it in FRENCH_AUDIO || Regex("vf[0-9]+").matches(it) } || compact in FRENCH_AUDIO_COMPACT
+        val explicitDub = tokens.any { it in FRENCH_DUB || NUMBERED_FRENCH.matches(it) }
+        val french = explicitDub || tokens.any { it in FRENCH_AUDIO } || compact in FRENCH_AUDIO_COMPACT
         val original = tokens.any { it in ORIGINAL_AUDIO }
         val subtitles = tokens.any { it in FRENCH_SUBTITLES } || (french && tokens.any { it in SUBTITLE_HINTS })
 
+        if (tokens.any { it in MULTI_AUDIO }) return AudioLanguage.MULTI
+        // “VO sous-titrée FR” names one audio track. Only an explicit VF marker can also promise a dub.
+        if (subtitles) return if (explicitDub) AudioLanguage.MULTI else AudioLanguage.VOSTFR
         // Some provider payloads list both audio tracks explicitly instead of labelling the release "MULTI".
-        if (tokens.any { it in MULTI_AUDIO } || (french && original)) return AudioLanguage.MULTI
-        if (subtitles) return AudioLanguage.VOSTFR
+        if (french && original) return AudioLanguage.MULTI
         if (french) return AudioLanguage.VF
         if (original) return AudioLanguage.VO
         return null
     }
 
-    private val FRENCH_AUDIO = setOf("vf", "vff", "vfq", "vfi", "fr", "fra", "fre", "french", "francais", "francaise")
+    private val FRENCH_DUB = setOf("vf", "vff", "vfq", "vfi", "truefrench")
+    private val NUMBERED_FRENCH = Regex("vf[0-9]+")
+    private val FRENCH_AUDIO = setOf("fr", "fra", "fre", "french", "francais", "francaise")
     private val FRENCH_AUDIO_COMPACT = setOf("truefrench", "frenchdub", "francaisdub", "frfr", "frenchvf", "francaisvf")
     private val ORIGINAL_AUDIO = setOf("voeng", "va", "vj", "vkr", "vo", "original", "japanese", "japonais", "ja", "jpn", "en", "eng", "english")
     private val FRENCH_SUBTITLES = setOf("vostfr", "vost", "stfr", "subfr", "sousstitresfrancais")

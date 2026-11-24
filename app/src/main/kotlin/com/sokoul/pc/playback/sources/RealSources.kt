@@ -29,10 +29,11 @@ import com.sokoul.iptv.data.net.XtreamClient
 import com.sokoul.iptv.parser.XtreamUrls
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -44,9 +45,9 @@ import java.util.concurrent.TimeUnit
 /** Which entries of an IPTV catalog are a given title. Pure and tested. */
 object IptvMatch {
     private val tag = Regex("""\[[^\]]*\]|\{[^}]*\}|\|[^|]*\|""")
-    private val languagePrefix = Regex("""^\s*[A-Za-z]{2,3}\s*[-:|]\s*""")
+    private val languagePrefix = Regex("""(?i)^\s*(?:(?:4k|uhd)(?:[-_ ][a-z0-9]{2,5})?|[a-z]{2,3})\s*[-:|]\s*""")
     private val year = Regex("""\((19|20)\d{2}\)|\b(19|20)\d{2}\b""")
-    private val quality = Regex("""(?i)\b(4k|uhd|fhd|hd|sd|1080p?|720p?|2160p?|multi|vf|vff|vfq|vostfr|vo|truefrench|french|hevc|x265|h265)\b""")
+    private val quality = Regex("""(?i)\b(4k|uhd|fhd|hd|sd|1080[pi]?|720p?|2160[pi]?|(?:3840|4096|1920|1280)\s*[x×]\s*\d{3,4}|multi|vf|vff|vfq|vostfr|vo|truefrench|french|hevc|x265|h265)\b""")
     private val numberedSequel = Regex("""^(.*\D)\s+(\d+)$""")
 
     /** The title alone: "FR - Dune (2021) 4K MULTI" gives "dune". */
@@ -76,6 +77,22 @@ object IptvMatch {
             target.groupValues[1].trim() == base && target.groupValues[2].toIntOrNull() != number
         }
     }
+}
+
+/** The audio language an IPTV provider's country prefix stands for ("FR|", "GE -", "4K-EN|"). */
+object IptvLanguage {
+    private val prefix = Regex("""(?i)^\s*(?:(?:4k|uhd|fhd|hd)[-_ ])?([a-z]{2,3})\s*[|:\-]""")
+    private val codes = mapOf(
+        "FR" to "FR", "VF" to "FR", "BE" to "FR", "CA" to "FR", "CH" to "FR", "EN" to "EN", "UK" to "EN", "US" to "EN",
+        "DE" to "DE", "GE" to "DE", "GER" to "DE", "IT" to "IT", "ITA" to "IT", "ES" to "ES", "SP" to "ES", "LAT" to "ES",
+        "PT" to "PT", "BR" to "PT", "NL" to "NL", "TR" to "TR", "AR" to "AR", "JP" to "JA", "JA" to "JA", "KO" to "KO",
+        "KR" to "KO", "PL" to "PL", "RU" to "RU", "PH" to "TL", "IN" to "HI", "HI" to "HI", "ALB" to "SQ", "AL" to "SQ",
+        "KU" to "KU", "GR" to "EL", "SE" to "SV", "SW" to "SV", "NO" to "NO", "DK" to "DA", "FI" to "FI", "RO" to "RO",
+        "EX" to "SR", "YU" to "SR", "IR" to "FA", "PK" to "UR",
+    )
+
+    /** The language code, or null when the name has no country prefix or one not listed. */
+    fun fromPrefix(name: String): String? = prefix.find(name)?.groupValues?.get(1)?.uppercase()?.let(codes::get)
 }
 
 /** What a server answers about a link, read with a one-byte request. */
@@ -176,7 +193,8 @@ class RealSources(
     suspend fun connectionUse(): Pair<Int, Int>? {
         val p = withContext(Dispatchers.IO) { playlist() } ?: return null
         if (p.type != PlaylistType.XTREAM) return null
-        val a = runCatching { xtream.account(XtreamAuth(p.url.trimEnd('/'), p.username.orEmpty(), p.password.orEmpty(), p.userAgent)) }.getOrNull() ?: return null
+        val a = runCatching { xtream.account(XtreamAuth(p.url.trimEnd('/'), p.username.orEmpty(), p.password.orEmpty(), p.userAgent)) }
+            .getOrElse { if (it is CancellationException) throw it else null } ?: return null
         return (a.activeConnections ?: return null) to (a.maxConnections ?: return null)
     }
 
@@ -196,7 +214,60 @@ class RealSources(
         return all.firstOrNull { it.id == active } ?: all.firstOrNull()
     }
 
-    override fun find(request: PlayRequest, refresh: Boolean): Flow<SearchUpdate> = search(request, refresh, withIptv = true)
+    /** One search per title running, shared by whoever asks for it (the title page's badges, the start of the film). */
+    private class Running(val state: kotlinx.coroutines.flow.MutableStateFlow<SearchUpdate?>) {
+        @Volatile var job: kotlinx.coroutines.Job? = null
+        @Volatile var finishedAt: Long = 0
+        var foreground = false
+    }
+    private val running = HashMap<String, Running>()
+    private val sharing = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.Default)
+
+    /**
+     * The title page searched once for its badges, and pressing Play searched a second time from the start: both ran
+     * together on the Chromecast and the film started after 24 s (Inception, 2026-11-22). Play now joins the search
+     * under way and gets at once what it has found; a search finished less than [REUSE_MS] ago is used as it is.
+     * [refresh] (Retry) always searches again.
+     */
+    override fun find(request: PlayRequest, refresh: Boolean): Flow<SearchUpdate> {
+        if (refresh) return search(request, true, withIptv = true)
+        val run = shared(request, foreground = true)
+        // Until the update that says the search is done, that one included.
+        return run.state.filterNotNull().transformWhile { u -> emit(u); !u.done }
+    }
+
+    /** The search of this title under way or just finished, started when there is none. */
+    private fun shared(request: PlayRequest, foreground: Boolean): Running {
+        val key = sharedKey(request)
+        return synchronized(running) {
+            val now = System.currentTimeMillis()
+            running.values.removeAll { it.finishedAt != 0L && now - it.finishedAt > REUSE_MS }
+            running[key]?.let {
+                it.foreground = it.foreground || foreground
+                return@synchronized it
+            }
+            if (!foreground) running.entries.removeAll { (_, old) ->
+                (!old.foreground && old.finishedAt == 0L).also { if (it) old.job?.cancel() }
+            }
+            Running(kotlinx.coroutines.flow.MutableStateFlow(null)).also { r ->
+                r.foreground = foreground
+                running[key] = r
+                r.job = sharing.launch {
+                    try {
+                        search(request, false, withIptv = true).collect { r.state.value = it }
+                    } catch (c: CancellationException) {
+                        throw c
+                    } catch (_: Exception) {
+                        // Whoever waits must not wait for ever: what was found stays, the search ends.
+                    } finally {
+                        val last = r.state.value
+                        if (last?.done != true) r.state.value = last?.copy(done = true) ?: SearchUpdate(emptyList(), true, PlayFailure.Network)
+                        r.finishedAt = System.currentTimeMillis()
+                    }
+                }
+            }
+        }
+    }
 
     /**
      * [withIptv] false for a search ahead: the IPTV catalog search is the long database query, and run while a page was
@@ -206,39 +277,67 @@ class RealSources(
         val series = request.kind == "tv"
         val info = runCatching { catalog.details(request.kind, request.tmdbId) }.getOrElse { if (it is CancellationException) throw it else null }
         val titles = listOfNotNull(request.title, info?.originalTitle).distinct()
-        val iptv = if (withIptv) iptv(request, titles, info?.year) else emptyList()
+        val animeCandidate = info == null || 16 in info.genreIds || info.originalLanguage?.take(2) in setOf("ja", "zh", "ko")
         // The Sokoul server's links arrive as each of its sources answers; the others do not wait for them.
         // A search ahead skips them: it would ask the scraping sites for an episode nobody has chosen yet.
         val webSearch = web?.takeIf { withIptv && it.configured() }
         val animeWebSearch = animeWeb?.takeIf { withIptv && series && it.configured() }
         val lock = kotlinx.coroutines.sync.Mutex()
+        // The IPTV catalogue is a long database query: it runs beside the other services instead of before them, so
+        // Real-Debrid and the streaming sites are asked from the first moment (they waited for it before).
+        var fromIptv = emptyList<PlayVersion>()
+        var iptvDone = !withIptv
         var fromDebrid = emptyList<PlayVersion>()
         var fromWeb = emptyList<PlayVersion>()
         var fromAnimeWeb = emptyList<PlayVersion>()
         var fromAnimeSama = emptyList<PlayVersion>()
-        var notices = emptyList<SourceNotice>()
+        var animeNotices = emptyList<SourceNotice>()
+        var debridNotice: SourceNotice? = null
         // Anime-Sama no longer needs the Sokoul server (the app reads the site itself); only a search ahead skips it.
         var animeSamaDone = animeSama == null || !withIptv
         var debridDone = !debrid.configured()
+        // What the Real-Debrid account holds marks the versions ready to play. Its list came after the versions themselves
+        // (4.3 s, then 9.2 s, for The Matrix on the Chromecast): the versions are shown at once and marked when it comes;
+        // the search is only said done once it is known, so that no choice is made without it.
+        var accountKnown = debridDone
+        var accountHeld: Map<String, RdTorrent> = emptyMap()
+        var lastFound = emptyList<DebridStream>()
         var webDone = webSearch == null
         var animeWebDone = animeWebSearch == null
         suspend fun publish() {
-            val all = iptv + fromDebrid + fromWeb + fromAnimeWeb + fromAnimeSama
-            val done = debridDone && webDone && animeWebDone && animeSamaDone
-            send(SearchUpdate(all, done, PlayFailure.NoSource.takeIf { done && all.isEmpty() }, notices))
+            val all = fromIptv + fromDebrid + fromWeb + fromAnimeWeb + fromAnimeSama
+            val done = iptvDone && debridDone && accountKnown && webDone && animeWebDone && animeSamaDone
+            send(SearchUpdate(all, done, PlayFailure.NoSource.takeIf { done && all.isEmpty() },
+                animeNotices + listOfNotNull(debridNotice), debridPending = !debridDone || !accountKnown))
+        }
+        if (!iptvDone) launch {
+            val found = try {
+                // Providers name series in English ("FR| Frieren: Beyond Journey's End") where the app has the French
+                // and original titles: the English title and an anime's known names are looked for as well.
+                val identity = if (series && animeCandidate) runCatching { anime?.identity(request.kind, request.tmdbId, info) }.getOrNull() else null
+                val english = runCatching { catalog.tmdb.namesAndImages(catalog.key(), request.kind, request.tmdbId, "en-US")?.title }.getOrNull()
+                val names = (titles + listOfNotNull(english) + identity?.names.orEmpty()).distinct().take(IPTV_NAMES)
+                val absolute = identity?.let { runCatching { episodeRef(request, it)?.absolute }.getOrNull() }
+                iptv(request, names, info?.year, absolute)
+            } catch (c: CancellationException) { throw c } catch (_: Exception) { emptyList() }
+            StartClock.note("iptv " + found.size + found.take(3).joinToString("") { " | " + it.name.take(60) + " [" + (it.language?.name ?: "?") + "]" })
+            lock.withLock { fromIptv = found; iptvDone = true; publish() }
         }
         if (!animeSamaDone) launch {
             val identity = try { anime?.identity(request.kind, request.tmdbId, info) } catch (c: CancellationException) { throw c } catch (_: Exception) { null }
             val asked = identity != null || info?.originalLanguage?.take(2) in setOf("ja", "zh", "ko")
             com.sokoul.pc.playback.session.StartClock.note("anime-sama ${if (asked) "asked" else "skipped: not an anime"}")
-            val result = if (asked) {
-                animeSama!!.find(request, (listOf(request.title) + identity?.names.orEmpty() + listOfNotNull(info?.originalTitle)).distinct(), episodeRef(request, identity)?.absolute)
-            } else AnimeSamaSource.Result()
-            lock.withLock { fromAnimeSama = result.versions; notices = result.notices; animeSamaDone = true; publish() }
+            val result = try {
+                if (asked) animeSama!!.find(request, (listOf(request.title) + identity?.names.orEmpty() + listOfNotNull(info?.originalTitle)).distinct(), episodeRef(request, identity)?.absolute)
+                else AnimeSamaSource.Result()
+            } catch (c: CancellationException) { throw c } catch (_: Exception) { AnimeSamaSource.Result() }
+            lock.withLock { fromAnimeSama = result.versions; animeNotices = result.notices; animeSamaDone = true; publish() }
         }
         if (webSearch != null) {
             launch {
-                webSearch.find(request) { versions -> lock.withLock { fromWeb = fromWeb + versions; publish() } }
+                try {
+                    webSearch.find(request) { versions -> lock.withLock { fromWeb = fromWeb + versions; publish() } }
+                } catch (c: CancellationException) { throw c } catch (_: Exception) { StartClock.note("web search failed") }
                 lock.withLock { webDone = true; publish() }
             }
         }
@@ -261,16 +360,34 @@ class RealSources(
         lock.withLock { publish() }
         val query = DebridQuery(request.tmdbId, series, request.season, request.episode)
         // The identity is looked up while the services are already asked: it never adds its time to theirs.
-        val lookup = async { kotlinx.coroutines.withTimeoutOrNull(LOOKUP_MS) { animeLookup(request, info, titles, query) } }
-        val account = async { transfers.account() }
-        debrid.search(query, info, refresh) { lookup.await() }.collect { found ->
-            val q = lookup.await()?.query ?: query
-            val held = account.await()
+        val lookup: (suspend () -> com.sokoul.desktop.data.AnimeLookup?)? = if (series && animeCandidate) {
+            { kotlinx.coroutines.withTimeoutOrNull(LOOKUP_MS) { animeLookup(request, info, titles, query) } }
+        } else null
+        var lastQuery = query
+        launch {
+            val held = transfers.account()
+            StartClock.note("real-debrid account snapshot: ${held.size} active entries")
             lock.withLock {
-                fromDebrid = found.streams.map { version(it, q, held, request) }
-                debridDone = found.done
+                accountHeld = held
+                accountKnown = true
+                if (lastFound.isNotEmpty()) fromDebrid = lastFound.map { version(it, lastQuery, held, request) }
                 publish()
             }
+        }
+        try {
+            debrid.search(query, info, refresh, lookup).collect { found ->
+                val q = found.query ?: query
+                lock.withLock {
+                    lastFound = found.streams
+                    lastQuery = q
+                    fromDebrid = found.streams.map { version(it, q, accountHeld, request) }
+                    debridDone = found.done
+                    if (found.done && found.streams.isEmpty()) debridNotice = if (found.failed) SourceNotice.DebridUnavailable else SourceNotice.DebridNoVersions
+                    publish()
+                }
+            }
+        } catch (c: CancellationException) { throw c } catch (_: Exception) {
+            lock.withLock { debridDone = true; debridNotice = SourceNotice.DebridUnavailable; publish() }
         }
     }
 
@@ -343,7 +460,9 @@ class RealSources(
             frenchVariantRank = when (s.release.frenchVariant) { "TRUEFRENCH", "VFF" -> 0; null -> 1; else -> 2 },
             discard = { s.infoHash?.let { transfers.forget(it) } },
             open = { keep, onProgress ->
+                s.infoHash?.let { h -> runCatching { db.rdNoteAdded(h) } }
                 val url = if (s.infoHash != null) transfers.link(s, query, keep, onProgress) else viaSearchService(s)
+                s.infoHash?.let { h -> runCatching { db.rdNotePlayed(h, request.resumeKey) } }
                 // Checked before opening: it costs no IPTV connection and catches a dead link or a waiting clip at once.
                 StartClock.note("link " + (s.infoHash?.take(6) ?: "url"))
                 failureOf(probe.check(url, null), request.kind == "movie")?.let { throw PlayFailureException(it) }
@@ -357,7 +476,7 @@ class RealSources(
         throw PlayFailureException(if (e is DesktopDebrid.NotReady) PlayFailure.NotReady(null) else PlayFailure.Network)
     }
 
-    private suspend fun iptv(request: PlayRequest, titles: List<String>, year: Int?): List<PlayVersion> = withContext(Dispatchers.IO) {
+    private suspend fun iptv(request: PlayRequest, titles: List<String>, year: Int?, absolute: Int? = null): List<PlayVersion> = withContext(Dispatchers.IO) {
         val p = playlist() ?: return@withContext emptyList()
         val base = p.url.trimEnd('/')
         val user = p.username.orEmpty()
@@ -365,25 +484,26 @@ class RealSources(
         val auth = XtreamAuth(base, user, pass, p.userAgent)
         fun allowed(category: String?, kind: String, title: String) =
             canOpenIptvCategory(db, p, category, kind, title, kidsProfile())
-        val account: suspend () -> com.sokoul.iptv.parser.XtAccount? = {
-            if (p.type != PlaylistType.XTREAM) null else runCatching { xtream.account(auth) }.getOrElse { if (it is CancellationException) throw it else null }
-        }
         if (request.kind == "movie") {
-            titles.flatMap { db.movies(p.id, search = it, limit = SEARCH_LIMIT) }.distinctBy { it.id }
+            titles.flatMap { db.providerMoviesPage(p.id, search = it, limit = SEARCH_LIMIT) }.distinctBy { it.id }
                 .filter { IptvMatch.matches(it.name, it.tmdbId, it.year, request.tmdbId, titles, year) }
                 .filter { allowed(it.categoryId, "movie", it.name) }
-                .mapNotNull { movie -> movieVersion(movie, p, base, user, pass, request, account) }
+                .mapNotNull { movie -> movieVersion(movie, p, base, user, pass, request) }
         } else {
             if (p.type != PlaylistType.XTREAM) return@withContext emptyList()
-            titles.flatMap { db.series(p.id, search = it, limit = SEARCH_LIMIT) }.distinctBy { it.id }
+            titles.flatMap { db.providerSeriesPage(p.id, search = it, limit = SEARCH_LIMIT) }.distinctBy { it.id }
                 .filter { IptvMatch.matches(it.name, it.tmdbId, it.year, request.tmdbId, titles, year) }
                 .filter { allowed(it.categoryId, "series", it.name) }
                 .mapNotNull { s ->
                     val seriesId = s.id.toLongOrNull() ?: return@mapNotNull null
                     iptvVersion("iptv-s-${s.id}", s.name) {
                         if (!allowed(s.categoryId, "series", s.name)) throw PlayFailureException(PlayFailure.NoSource)
-                        gate.clear(account)
-                        val found = xtream.seriesInfo(auth, seriesId).episodes.firstOrNull { it.season == request.season && it.episodeNum == request.episode }
+                        gate.clear { null }
+                        val episodes = xtream.seriesInfo(auth, seriesId).episodes
+                        // An anime is often filed as one long season numbered from the first episode on: the absolute
+                        // number then names the episode when the season and episode do not exist there.
+                        val found = episodes.firstOrNull { it.season == request.season && it.episodeNum == request.episode }
+                            ?: absolute?.takeIf { episodes.map { e -> e.season }.distinct().size == 1 }?.let { n -> episodes.firstOrNull { it.episodeNum == n } }
                             ?: throw PlayFailureException(PlayFailure.NoSource)
                         StreamRequest(XtreamUrls.episode(base, user, pass, found.id, found.extension), p.userAgent, null, request.title, live = false)
                     }
@@ -391,7 +511,7 @@ class RealSources(
         }
     }
 
-    private fun movieVersion(movie: Movie, p: Playlist, base: String, user: String, pass: String, request: PlayRequest, account: suspend () -> com.sokoul.iptv.parser.XtAccount?): PlayVersion? {
+    private fun movieVersion(movie: Movie, p: Playlist, base: String, user: String, pass: String, request: PlayRequest): PlayVersion? {
         val url = movie.streamUrl ?: if (p.type == PlaylistType.XTREAM) {
             XtreamUrls.movie(base, user, pass, movie.id.toLongOrNull() ?: return null, movie.extension)
         } else {
@@ -403,7 +523,8 @@ class RealSources(
         return iptvVersion("iptv-m-${movie.id}", movie.name) {
             if (!canOpenIptvCategory(db, p, movie.categoryId, "movie", movie.name, kidsProfile()))
                 throw PlayFailureException(PlayFailure.NoSource)
-            gate.clear(account)
+            // Xtream connection counters can lag behind the actual stream, including on VOD.
+            gate.clear { null }
             StreamRequest(url, p.userAgent, null, request.title, live = false)
         }
     }
@@ -413,7 +534,9 @@ class RealSources(
         return PlayVersion(
             key = key, origin = VersionOrigin.Iptv, name = name, language = release.language, quality = release.quality, hdr = release.hdr,
             readiness = Readiness.Ready, ripRank = UNKNOWN_RIP_RANK + 1,
-            announcedAudio = release.audio,
+            // "TR| Jujutsu Kaisen", "GE| Solo Leveling": the provider's country prefix is the dub's language. Unread, a
+            // Turkish dub ranked as a version of unknown language, beside the French ones.
+            announcedAudio = release.audio.ifEmpty { IptvLanguage.fromPrefix(name)?.let { listOf(it) }.orEmpty() },
             foreignDub = release.dub,
             open = { _, _ ->
                 if (com.sokoul.desktop.data.DesktopRecorder.connectionInUse.get()) throw PlayFailureException(PlayFailure.ConnectionsFull(1, 1))
@@ -422,16 +545,20 @@ class RealSources(
         )
     }
 
-    private val ahead = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
-    private var aheadJob: kotlinx.coroutines.Job? = null
 
     /**
      * The search of what would play next, run ahead: its answers stay in the caches, so that the start lists them at once.
      * One at a time, the newest wins. Nothing is added to the Real-Debrid account and no IPTV connection is opened.
      */
+    private fun sharedKey(request: PlayRequest) = listOf(request.kind, request.tmdbId, request.season, request.episode, kidsProfile()).joinToString(":")
+
+    /**
+     * The title page, a moment after it is shown: the full search of what Play would start begins, and Play joins it.
+     * A reduced search here (no IPTV, no sites) and a full one at Play ran side by side and parsed the same releases
+     * twice on the Chromecast's CPU (Avatar, 2026-11-22). The IPTV query runs on the IO threads beside the others.
+     */
     override fun prefetch(request: PlayRequest) {
-        aheadJob?.cancel()
-        aheadJob = ahead.launch { runCatching { search(request, refresh = false, withIptv = false).collect { } } }
+        shared(request, foreground = false)
     }
 
     /** When each step of the last search ended. */
@@ -440,13 +567,16 @@ class RealSources(
     /** After a stream failed, its link tells why. The refusal of an IPTV link makes the gate hold off. */
     suspend fun diagnose(version: PlayVersion?, stream: StreamRequest): PlayFailure? {
         val found = failureOf(probe.check(stream.url, stream.userAgent), film = false)
-        if (version == null) return liveCause(found)
-        if (version.origin == VersionOrigin.Iptv && found is PlayFailure.Refused) gate.noteRefusal()
+        if (version == null) return iptvCause(found)
+        if (version.origin == VersionOrigin.Iptv && found is PlayFailure.Refused) {
+            gate.noteRefusal()
+            return iptvCause(found)
+        }
         return found
     }
 
-    /** A channel that would not open: the counter is worth reading now, to say why. A refusal with a full account is the account. */
-    private suspend fun liveCause(found: PlayFailure?): PlayFailure? {
+    /** Once a stream fails to open, the connection count can explain a provider refusal. */
+    private suspend fun iptvCause(found: PlayFailure?): PlayFailure? {
         if (found != null && found !is PlayFailure.Refused) return found
         val use = connectionUse() ?: return found
         if (use.second <= 0 || use.first < use.second) return found
@@ -456,6 +586,8 @@ class RealSources(
 
     private companion object {
         const val SEARCH_LIMIT = 50
+        /** A finished search of the same title is used again for this long (the title page, then Play). */
+        const val REUSE_MS = 120_000L
         /** The identity's longest wait: past it, the search goes on as for any series. */
         const val LOOKUP_MS = 15_000L
         const val ANIME_IDENTITY = "pc.anime.identity"
@@ -472,3 +604,6 @@ internal fun canOpenIptvCategory(db: DesktopDb, playlist: Playlist, category: St
     if (kids && (name.isNullOrBlank() || name == category)) return false
     return com.sokoul.pc.live.TvOrganization(db, { playlist }, { kids }).canAccessCategory(category, name, kind)
 }
+
+/** How many names the IPTV catalogue is searched with: each one is a database query. */
+private const val IPTV_NAMES = 6

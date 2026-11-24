@@ -11,6 +11,7 @@ import com.sokoul.pc.playback.session.qualityLabel
 import com.sokoul.pc.playback.sources.OnlineSubtitles
 import com.sokoul.pc.ui.moveWithArrow
 import com.sokoul.pc.ui.glassSurface
+import com.sokoul.pc.ui.panelEnter
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -34,6 +35,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.border
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.requiredWidth
@@ -75,11 +78,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.collectAsState
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.flow.first
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -124,7 +129,6 @@ private const val HIDE_AFTER_MS = 3_500L
 private const val CONTROLS_HIDE_MS = 6_000L
 private const val RESUME_NOTICE_FROM_MS = 30_000L
 private const val SEEK_STREAK_MS = 450L
-private const val SEEK_LABEL_MIN = 0.1f
 private const val SEEK_MS = 10_000L
 /** A slide across the whole width of a phone moves this far in the video. */
 private const val SWIPE_SPAN_MS = 120_000L
@@ -170,6 +174,8 @@ fun PlayerScreen(
     extra: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit = {},
     /** The watch party of the app; null hides it (tests, trailers). */
     party: com.sokoul.pc.party.WatchParty? = null,
+    /** The title's logo (system language, else original, else any; TmdbClient picks it), shown while a source is found. */
+    logoOf: suspend (PlayRequest) -> String? = { null },
 ) {
     val focus = focusRequester ?: remember { FocusRequester() }
     val playFocus = remember { FocusRequester() }
@@ -284,6 +290,40 @@ fun PlayerScreen(
     val online = subtitles?.takeIf { target != null && it.available() }
     LaunchedEffect(target) { subtitles?.reset() }
     LaunchedEffect(menu, target) { if (menu == PlayerMenu.Subtitles && target != null) online?.load(target) }
+    // The first wanted language is missing from what plays (Teen Titans Go!: every French version blocked by Real-Debrid,
+    // the original played, 2026-11-22): the original goes on with subtitles in that language, the file's own track
+    // first, else the first one found online, and a notice says so. Once per episode, never over subtitles the viewer
+    // chose. Nothing happens when the original itself comes first in the wanted languages.
+    var autoSubtitlesFor by remember { mutableStateOf<String?>(null) }
+    var subtitleNotice by remember { mutableStateOf<com.sokoul.pc.playback.session.LanguageNotice?>(null) }
+    val firstWanted = prefs?.audioIntent?.languages?.firstOrNull()?.takeIf { it != com.sokoul.desktop.data.AudioIntent.ORIGINAL }
+    LaunchedEffect(playingNow, status?.audio, status?.subtitles, target?.resumeKey) {
+        val wanted = firstWanted ?: return@LaunchedEffect
+        val key = target?.resumeKey ?: return@LaunchedEffect
+        val st = status ?: return@LaunchedEffect
+        if (!playingNow || autoSubtitlesFor == key || st.audio.isEmpty()) return@LaunchedEffect
+        // Every track names a language and none is the wanted one: an unnamed track may be it, and proves nothing.
+        if (st.audio.any { com.sokoul.desktop.player.AudioChoice.languageOf(it.second) == null }) return@LaunchedEffect
+        if (st.audio.any { com.sokoul.desktop.player.AudioChoice.matches(wanted, it.second) }) return@LaunchedEffect
+        autoSubtitlesFor = key
+        val heard = st.audio.firstOrNull { it.first == st.audioId }?.second ?: st.audio.first().second
+        if (online?.active != null || st.subtitleId >= 0) return@LaunchedEffect
+        val own = st.subtitles.firstOrNull { it.first >= 0 && com.sokoul.desktop.player.AudioChoice.matches(wanted, it.second) }
+        if (own != null) {
+            player?.setSubtitles(own.first)
+        } else {
+            val o = online ?: return@LaunchedEffect
+            o.load(target)
+            androidx.compose.runtime.snapshotFlow { o.searching }.first { !it }
+            val found = o.results.filter { com.sokoul.desktop.player.AudioChoice.matches(wanted, it.language) }
+            o.choose(found.firstOrNull { !it.hearingImpaired } ?: found.firstOrNull() ?: return@LaunchedEffect)
+        }
+        com.sokoul.pc.playback.session.StartClock.note("no $wanted audio: $wanted subtitles on")
+        subtitleNotice = com.sokoul.pc.playback.session.LanguageNotice(wanted, heard)
+        kotlinx.coroutines.delay(SUBTITLE_NOTICE_MS)
+        subtitleNotice = null
+    }
+    LaunchedEffect(target?.resumeKey) { subtitleNotice = null }
 
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
     LaunchedEffect(activity) { chained = 0 }
@@ -352,12 +392,15 @@ fun PlayerScreen(
         menu = PlayerMenu.None
         askFocus(if (controls && from != null) from else focus)
     }
+    val remoteLive = com.sokoul.pc.Platform.IS_TV && !com.sokoul.pc.ui.Form.isPhone &&
+        !com.sokoul.pc.ui.Form.tablet && session.live != null
     val currentBackAction = rememberUpdatedState<() -> Unit>(newValue = {
         when {
             stillAsk != null -> { stillAsk = null; onClose() }
             menu != PlayerMenu.None -> closePanel()
             seekTarget != null -> seekTarget = null
             failure != null -> onClose()
+            remoteLive && !controls -> onClose()
             visible || bannerShown || controls -> {
                 quietClose = true
                 controls = false
@@ -406,6 +449,10 @@ fun PlayerScreen(
             .onPreviewKeyEvent { e ->
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 activity++
+                if (e.key == Key.Escape && remoteLive) {
+                    currentBackAction.value()
+                    return@onPreviewKeyEvent true
+                }
                 // Back dismisses the visible player chrome before it can leave playback.
                 if (e.key == Key.Escape && stillAsk == null && failure == null &&
                     menu == PlayerMenu.None && seekTarget == null && (visible || bannerShown || controls)) {
@@ -675,6 +722,26 @@ fun PlayerScreen(
         if (!rememberHasFrames(player)) {
             Art(image, Modifier.fillMaxSize(), placeholder = Color.Black)
             Box(Modifier.fillMaxSize().background(Color(0x99000000)))
+            // While a source is looked for and opened, the title's own logo breathes in the middle of the picture; the
+            // title in display type stands in when the catalog has no logo. Nothing shows until the catalog has answered,
+            // so that the text never jumps to the logo.
+            if (phase is Phase.Searching || phase is Phase.Preparing || phase is Phase.Downloading ||
+                phase is Phase.Opening || (phase is Phase.Tuning && !remoteLive)) {
+                val waitingFor = session.request
+                val logo by androidx.compose.runtime.produceState<Pair<Boolean, String?>>(false to null, waitingFor?.resumeKey) {
+                    value = true to waitingFor?.let { r -> runCatching { logoOf(r) }.getOrNull() }
+                }
+                if (logo.first || waitingFor == null) BreathingLogo(logo.second, title, Modifier.align(Alignment.Center))
+            }
+        }
+        if (remoteLive && phase is Phase.Tuning && menu == PlayerMenu.None) {
+            Column(Modifier.align(Alignment.Center).clip(RoundedCornerShape(24.dp))
+                .background(Color(0xD91C1C1E)).padding(horizontal = 36.dp, vertical = 24.dp)
+                .testTag("player-tuning-channel"), horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Label(com.sokoul.pc.live.TvCatalog.shortLabel(phase.title), Type.RowTitle, maxLines = 1)
+                Label(com.sokoul.pc.data.L("Connecting…", "Connexion…").text(), Type.Meta, Palette.Secondary)
+            }
         }
         // Live now/next context belongs to the same lower overlay as film and episode controls.
         if (playingNow && status != null) {
@@ -682,7 +749,10 @@ fun PlayerScreen(
                 StyledCue(text, prefs, visible, Modifier.align(Alignment.BottomCenter))
             }
         }
-        if (visible || !playingNow) BackButton(onClick = onClose, modifier = Modifier.padding(start = 40.dp, top = 44.dp).testTag("player-back"))
+        if (visible || !playingNow || com.sokoul.pc.ui.Form.tablet) {
+            BackButton(onClick = { if (menu == PlayerMenu.None) onClose() else currentBackAction.value() },
+                modifier = Modifier.padding(start = 40.dp, top = 44.dp).testTag("player-back"), onTablet = true)
+        }
         // A phone has no channel or guide keys: the same actions as buttons, under the back arrow.
         if (com.sokoul.pc.ui.Form.isPhone && session.live != null && visible && menu == PlayerMenu.None && failure == null) {
             Row(
@@ -705,6 +775,9 @@ fun PlayerScreen(
                 onClose = onClose,
                 modifier = Modifier.align(Alignment.Center),
             )
+        }
+        val chromeLogo by androidx.compose.runtime.produceState<String?>(null, request?.kind, request?.tmdbId) {
+            value = request?.takeIf { session.live == null }?.let { r -> runCatching { logoOf(r) }.getOrNull() }
         }
         if (failure == null && (visible || !playingNow)) {
             AnimatedVisibility(true, Modifier.fillMaxSize(), enter = fadeIn(), exit = fadeOut()) {
@@ -733,6 +806,7 @@ fun PlayerScreen(
                     party = party,
                     fullscreen = fullscreen,
                     onToggleFullscreen = onToggleFullscreen,
+                    logo = chromeLogo,
                     onFormat = {
                         format = it
                         prefs?.videoFormat = it
@@ -781,39 +855,59 @@ fun PlayerScreen(
         LaunchedEffect(left == 0) { if (left == 0 && coming != null) autoPlay(coming) }
         stillAsk?.let { waiting ->
             Scrim()
-            StillWatchingPrompt(
-                onContinue = {
+            LaunchedEffect(Unit) {
+                androidx.compose.runtime.withFrameNanos { }
+                runCatching { stillFocus.requestFocus() }
+            }
+            // Back stops, as everywhere in the player: the card only asks to go on.
+            PromptCard(
+                com.sokoul.pc.data.L("Are you still watching?", "Vous regardez toujours ?").text(),
+                episodeLine(request) ?: request?.title,
+                com.sokoul.pc.data.L("Continue", "Continuer").text(),
+                {
                     stillAsk = null
                     chained = 0
                     session.play(waiting)
                     askFocus(focus)
                 },
-                onStop = {
-                    stillAsk = null
-                    onClose()
-                },
-                requester = stillFocus,
-                modifier = Modifier.align(Alignment.Center).zIndex(10f),
+                stillFocus,
+                Modifier.align(Alignment.BottomEnd).padding(end = 60.dp, bottom = 80.dp).zIndex(10f),
+                tag = "player-still-watching", actionTag = "still-continue",
             )
+        }
+        val nextInfo by androidx.compose.runtime.produceState<com.sokoul.iptv.data.net.TmdbEpisode?>(null, coming?.tmdbId, coming?.season, coming?.episode) {
+            val c = coming
+            val s = c?.season
+            value = if (c != null && s != null && episodes != null) runCatching { episodes.episodes(c.tmdbId, s).firstOrNull { it.episode == c.episode } }.getOrNull() else null
         }
         if (cardNow && coming != null) {
             NextEpisodeCard(
-                coming, { session.play(coming) }, Modifier.align(Alignment.TopEnd).padding(top = 40.dp, end = 60.dp),
+                coming, { session.play(coming) }, Modifier.align(Alignment.BottomEnd).padding(bottom = 80.dp, end = 60.dp),
                 if (offerOnScreen) remember { FocusRequester() } else promptFocus,
-                secondsLeft = left, onCancel = { dismissed = true },
+                secondsLeft = left, onCancel = { dismissed = true }, episode = nextInfo,
             )
         }
         if (skipNow != null && status != null) {
             val label = if (skipNow.opening) com.sokoul.pc.data.L("Skip Intro", "Passer le générique") else com.sokoul.pc.data.L("Skip Credits", "Passer la fin")
-            PillButton(
-                label.text(),
-                {
-                    if (status.lengthMs > 0) player?.seekTo((skipNow.end * 1000 / status.lengthMs).toFloat().coerceIn(0f, 1f))
-                    askFocus(focus)
-                },
-                Modifier.align(Alignment.BottomEnd).padding(end = 60.dp, bottom = 260.dp).testTag("player-skip"),
-                if (offerOnScreen || nextOnScreen) remember { FocusRequester() } else promptFocus,
-            )
+            val skip: () -> Unit = {
+                if (status.lengthMs > 0) player?.seekTo((skipNow.end * 1000 / status.lengthMs).toFloat().coerceIn(0f, 1f))
+                askFocus(focus)
+            }
+            val skipFocus = if (offerOnScreen || nextOnScreen) remember { FocusRequester() } else promptFocus
+            val episodeNow = episodeLine(request) ?: request?.title
+            if (cardNow) {
+                // The next episode's card holds the right: the end is skipped from the left, as on the mock-up.
+                Column(Modifier.align(Alignment.BottomStart).padding(start = Metrics.PageMargin, bottom = 80.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    episodeNow?.let { Label(it + com.sokoul.pc.data.L(" — end credits", " — générique de fin").text(), Type.Body, Palette.Secondary, maxLines = 1) }
+                    PillButton(label.text(), skip, Modifier.testTag("player-skip"), skipFocus)
+                }
+            } else {
+                PromptCard(
+                    label.text(), episodeNow, label.text(), skip, skipFocus,
+                    Modifier.align(Alignment.BottomEnd).padding(end = 60.dp, bottom = if (visible) 300.dp else 80.dp),
+                    tag = "player-skip-card", actionTag = "player-skip",
+                )
+            }
         }
         if (number.isNotEmpty()) {
             Label(number, Type.RowTitle.copy(fontSize = 64.sp), modifier = Modifier.align(Alignment.TopEnd).padding(top = 40.dp, end = 60.dp).testTag("player-number"))
@@ -836,6 +930,32 @@ fun PlayerScreen(
         val offer = session.upgrade
         if (offer?.stream != null && playingNow && menu == PlayerMenu.None) {
             UpgradeBanner(offer, session::acceptUpgrade, session::dismissUpgrade, Modifier.align(Alignment.TopEnd).padding(top = 44.dp, end = 60.dp), promptFocus)
+        }
+        // Another version took over after the film had started: said, with why, never silent.
+        val switched = session.switchNotice
+        LaunchedEffect(switched) { if (switched != null) { kotlinx.coroutines.delay(SUBTITLE_NOTICE_MS); session.dismissSwitchNotice() } }
+        if (switched != null && playingNow && menu == PlayerMenu.None && session.languageNotice == null) {
+            Row(
+                Modifier.align(Alignment.TopEnd).padding(top = 44.dp, end = 60.dp)
+                    .panelEnter(com.sokoul.pc.ui.PanelEntry.FromBelow).glassSurface(RoundedCornerShape(50), 40.dp)
+                    .padding(start = 34.dp, end = 14.dp, top = 12.dp, bottom = 12.dp).testTag("player-switch-notice"),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(36.dp),
+            ) {
+                Label(com.sokoul.pc.data.L("Another version · ", "Autre version · ").text() + switchReason(switched), com.sokoul.pc.theme.PanelType.Callout, maxLines = 1)
+                com.sokoul.pc.ui.PillButton(com.sokoul.pc.data.L("See Versions", "Voir les versions").text(), { session.dismissSwitchNotice(); menu = PlayerMenu.Versions }, Modifier.testTag("switch-versions"))
+            }
+        }
+        val subtitled = subtitleNotice
+        if (subtitled != null && session.languageNotice == null && switched == null && playingNow && menu == PlayerMenu.None) {
+            LanguageNoticeBanner(
+                subtitled,
+                subtitled = true,
+                onKeep = { subtitleNotice = null; askFocus(focus) },
+                onVersions = { subtitleNotice = null; menu = PlayerMenu.Versions },
+                modifier = Modifier.align(Alignment.TopEnd).padding(top = 44.dp, end = 60.dp),
+                requester = remember { FocusRequester() },
+            )
         }
         val heard = session.languageNotice
         if (heard != null && languageOnScreen && menu == PlayerMenu.None) {
@@ -934,6 +1054,8 @@ private fun Overlay(
     party: com.sokoul.pc.party.WatchParty? = null,
     fullscreen: Boolean? = null,
     onToggleFullscreen: () -> Unit = {},
+    /** The title's logo, shown in place of its name over films and episodes. */
+    logo: String? = null,
 ) {
     val playing = session.phase is Phase.Playing
     // A live drawer covers a whole side of the screen: the title and the controls fade out under it instead of showing
@@ -941,6 +1063,11 @@ private fun Overlay(
     val underDrawer = menu == PlayerMenu.Channels || menu == PlayerMenu.Programs
     val behind by androidx.compose.animation.core.animateFloatAsState(if (underDrawer) 0f else 1f, label = "under-drawer")
     Box(Modifier.fillMaxSize()) {
+        // What is being done ("Version 1 of 4 · 2160p"), up by the back arrow as on the mock-up, with its thin progress.
+        if (line != null) {
+            val start = if (com.sokoul.pc.Platform.IS_TV && !com.sokoul.pc.ui.Form.isPhone) Metrics.PageMargin else 132.dp
+            StatusBar(line.first, line.second, Modifier.align(Alignment.TopStart).padding(start = start, top = 50.dp).width(560.dp).graphicsLayer { alpha = behind })
+        }
         // A picture can be bright where the title and the controls are written.
         run {
             Box(
@@ -952,17 +1079,35 @@ private fun Overlay(
         Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(horizontal = Metrics.PageMargin).padding(bottom = 72.dp).graphicsLayer { alpha = behind }) {
             Row(verticalAlignment = Alignment.Bottom) {
                 Column(Modifier.fillMaxWidth()) {
+                    val vod = session.live == null && session.clip == null
+                    if (vod && logo != null) {
+                        // As on the mock-up: the title's own logo, then the episode in plain words under it.
+                        com.sokoul.pc.home.TitleLogo(logo, session.request?.title ?: title)
+                        val under = episodeLine(session.request) ?: (session.request?.kicker ?: kicker)?.takeIf { it != title && it != session.request?.title }
+                        under?.let {
+                            Spacer(Modifier.height(14.dp))
+                            Label(it, Type.RowTitle, Palette.OnBackground, Modifier.testTag("player-kicker"), maxLines = 1)
+                        }
+                    } else {
                     val episode = session.request?.takeIf { it.season != null && it.episode != null }?.let { "S${it.season}E${it.episode}" }
                     // A series always says which episode this is, even when nothing more is known of it.
                     ((session.request?.kicker ?: kicker)?.takeIf { it != title && it != session.request?.title } ?: episode)?.let { Label(it, Type.Meta, modifier = Modifier.testTag("player-kicker")) }
                     Spacer(Modifier.height(10.dp))
                     BasicText(session.clip?.title ?: session.live?.title?.let(com.sokoul.pc.live.TvCatalog::shortLabel) ?: session.request?.title ?: title, style = Type.RowTitle.copy(fontSize = 52.sp, color = Palette.OnBackground))
+                    }
                     session.live?.let { LiveLine(it, status?.liveDelayMs ?: 0, session.liveReplayProgram, session.isLocalRecording, status?.timeMs ?: 0, status?.lengthMs ?: 0) }
                     if (session.live == null && session.clip == null) SourceLine(session.current, status, session.provenLanguage)
                 }
             }
+            if (seekTarget != null && status != null) {
+                Box(Modifier.fillMaxWidth().padding(top = 10.dp)) {
+                    Label(
+                        com.sokoul.pc.data.L("← → move · hold to go faster · OK go to ${clockLabel(seekTarget)} · Back cancels", "← → déplacer · maintenir pour accélérer · OK aller à ${clockLabel(seekTarget)} · Retour annuler").text(),
+                        Type.Body, Palette.Secondary, Modifier.align(Alignment.CenterEnd).testTag("player-seek-help"), maxLines = 1,
+                    )
+                }
+            }
             Spacer(Modifier.height(24.dp))
-            if (line != null) StatusBar(line.first, line.second)
             if (playing && status != null && player != null && (session.live == null || session.isLiveReplay)) {
                 val remaining = playbackRemainingMs(status.timeMs, status.lengthMs)
                 if (remaining != null) ProgressLine(status.timeMs, status.lengthMs, seekTarget, onSeek = player::seekTo, skips = session.skips) { onEnterSeek(status.timeMs) }
@@ -1104,8 +1249,22 @@ private fun ProgressLine(
         if (seekTarget != null && lengthMs > 0) {
             val at = (seekTarget.toFloat() / lengthMs).coerceIn(0f, 1f)
             val delta = (seekTarget - timeMs) / 1000
-            Box(Modifier.fillMaxWidth(at.coerceAtLeast(SEEK_LABEL_MIN)).padding(bottom = 10.dp).testTag("player-seek-target")) {
-                Label(clockLabel(seekTarget) + "  (" + (if (delta >= 0) "+" else "−") + clockLabel(kotlin.math.abs(delta) * 1000) + ")", Type.Meta.copy(fontWeight = FontWeight.SemiBold), modifier = Modifier.align(Alignment.CenterEnd), maxLines = 1)
+            // The moment chosen in a white bubble standing over the cursor, the distance from now beside it.
+            androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth().padding(bottom = 14.dp)) {
+                var bubble by remember { mutableStateOf(0) }
+                val full = constraints.maxWidth
+                val x = (at * full - bubble / 2f).toInt().coerceIn(0, (full - bubble).coerceAtLeast(0))
+                Row(
+                    Modifier.offset { androidx.compose.ui.unit.IntOffset(x, 0) }
+                        .onSizeChanged { bubble = it.width }
+                        .clip(RoundedCornerShape(50)).background(Palette.OnBackground)
+                        .padding(horizontal = 24.dp, vertical = 10.dp).testTag("player-seek-target"),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Label(clockLabel(seekTarget), Type.RowTitle, Palette.OnFocus, maxLines = 1)
+                    Label((if (delta >= 0) "+" else "−") + clockLabel(kotlin.math.abs(delta) * 1000), Type.Body.copy(fontWeight = FontWeight.SemiBold), Palette.OnFocus.copy(alpha = 0.55f), maxLines = 1)
+                }
             }
         }
         Box(
@@ -1128,7 +1287,7 @@ private fun ProgressLine(
             SegmentMarks(skips, lengthMs, thick)
             if (seekTarget != null && lengthMs > 0) {
                 Box(Modifier.fillMaxHeight().fillMaxWidth((seekTarget.toFloat() / lengthMs).coerceIn(0f, 1f))) {
-                    Box(Modifier.align(Alignment.CenterEnd).width(6.dp).fillMaxHeight().background(Palette.Error))
+                    Box(Modifier.align(Alignment.CenterEnd).width(4.dp).fillMaxHeight().background(Palette.OnBackground))
                 }
             }
         }
@@ -1212,21 +1371,103 @@ internal val PlayerPopover = Modifier.padding(end = 60.dp, bottom = 250.dp)
 @Composable
 private fun SourceLine(version: PlayVersion?, status: com.sokoul.desktop.player.PlayerStatus?, proven: com.sokoul.iptv.domain.AudioLanguage?) {
     val v = version ?: return
-    val track = status?.audio?.firstOrNull { it.first == status.audioId }?.second?.let(::repairText)
-    val chips = listOfNotNull(
-        (proven ?: v.language)?.name,
-        qualityLabel(v.quality),
-        hdrLabel(v.hdr),
-        when (v.origin) { VersionOrigin.Iptv -> "IPTV"; VersionOrigin.Debrid -> "Real-Debrid"; VersionOrigin.Web -> "Web" },
-    )
-    Row(Modifier.padding(top = 12.dp).testTag("player-source"), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-        chips.forEachIndexed { i, c ->
-            Box(Modifier.clip(RoundedCornerShape(10.dp)).background(if (i == 0) Palette.OnBackground else Color(0x40FFFFFF)).padding(horizontal = 14.dp, vertical = 6.dp)) {
-                Label(c, Type.Body.copy(fontWeight = FontWeight.Bold), if (i == 0) Palette.OnFocus else Palette.OnBackground, maxLines = 1)
-            }
+    val raw = status?.audio?.firstOrNull { it.first == status.audioId }?.second
+    val atmos = v.name.contains("atmos", ignoreCase = true) || raw?.contains("atmos", ignoreCase = true) == true
+    // As on the mock-up: the language and the origin outlined, the sharpness filled, Dolby with its own mark, and the
+    // track heard said plainly ("AUDIO : FRANÇAIS 5.1"), not as the file names it.
+    Row(Modifier.padding(top = 16.dp).testTag("player-source"), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+        (proven ?: v.language)?.let { FormatBadge(it.name) }
+        qualityLabel(v.quality)?.let { FormatBadge(it, filled = true) }
+        when (v.hdr) {
+            com.sokoul.iptv.domain.HdrFormat.DOLBY_VISION -> DolbyBadge("Vision")
+            com.sokoul.iptv.domain.HdrFormat.HDR10 -> FormatBadge("HDR10")
+            null -> Unit
         }
-        track?.let { Label(com.sokoul.pc.data.L("Audio: $it", "Audio : $it").text(), Type.Body, Palette.BarText, maxLines = 1) }
+        if (atmos) DolbyBadge("Atmos")
+        FormatBadge(when (v.origin) { VersionOrigin.Iptv -> "IPTV"; VersionOrigin.Debrid -> "REAL-DEBRID"; VersionOrigin.Web -> "WEB" })
+        raw?.let(::audioBadgeText)?.let { FormatBadge(com.sokoul.pc.data.L("AUDIO: $it", "AUDIO : $it").text().uppercase()) }
+    }
+}
+
+/** A format sign of the player: outlined, or filled for the sharpness. */
+@Composable
+private fun FormatBadge(text: String, filled: Boolean = false) {
+    val shape = RoundedCornerShape(7.dp)
+    Box(
+        Modifier.height(38.dp).clip(shape)
+            .then(if (filled) Modifier.background(Palette.OnBackground) else Modifier.border(2.dp, Color(0xB3FFFFFF), shape))
+            .padding(horizontal = 12.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Label(text, Type.Body.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp), if (filled) Palette.OnFocus else Palette.OnBackground, maxLines = 1)
+    }
+}
+
+/** Dolby Vision or Dolby Atmos: the double-D mark, then the words. */
+@Composable
+private fun DolbyBadge(word: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp), modifier = Modifier.testTag("player-dolby")) {
+        androidx.compose.foundation.Canvas(Modifier.width(32.dp).height(22.dp)) {
+            val w = size.width
+            val h = size.height
+            val r = h / 2
+            val half = (w - w * 0.1f) / 2
+            val left = androidx.compose.ui.graphics.Path().apply {
+                moveTo(half, 0f); lineTo(half, h); lineTo(r, h)
+                arcTo(androidx.compose.ui.geometry.Rect(0f, 0f, 2 * r, h), 90f, 180f, false); close()
+            }
+            val right = androidx.compose.ui.graphics.Path().apply {
+                moveTo(w - half, 0f); lineTo(w - r, 0f)
+                arcTo(androidx.compose.ui.geometry.Rect(w - 2 * r, 0f, w, h), -90f, 180f, false); lineTo(w - half, h); close()
+            }
+            drawPath(left, Color.White)
+            drawPath(right, Color.White)
+        }
+        Label("Dolby", Type.Body.copy(fontWeight = FontWeight.ExtraBold), Palette.OnBackground, maxLines = 1)
+        Label(word, Type.Body, Palette.OnBackground, maxLines = 1)
     }
 }
 
 private const val BANNER_MS = 6_000L
+
+/**
+ * The title's logo lit and dimmed in turn, with a soft white halo that swells as it lights: the wait for a source, said
+ * without a spinner. One infinite transition read in the drawing layer only, so nothing recomposes per frame.
+ */
+@Composable
+private fun BreathingLogo(logo: String?, title: String, modifier: Modifier = Modifier) {
+    val breath = androidx.compose.animation.core.rememberInfiniteTransition(label = "breath")
+    val light by breath.animateFloat(
+        initialValue = 0f, targetValue = 1f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            androidx.compose.animation.core.tween(BREATH_MS, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+            androidx.compose.animation.core.RepeatMode.Reverse,
+        ),
+        label = "light",
+    )
+    Box(modifier.size(LOGO_WIDTH_DP.dp, LOGO_HEIGHT_DP.dp).testTag("player-searching-logo"), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier.fillMaxSize().graphicsLayer { alpha = 0.10f + 0.30f * light }
+                .background(androidx.compose.ui.graphics.Brush.radialGradient(listOf(Color(0x55FFFFFF), Color(0x00FFFFFF)))),
+        )
+        Box(
+            Modifier.graphicsLayer {
+                alpha = 0.45f + 0.55f * light
+                val scale = LOGO_SCALE * (0.97f + 0.05f * light)
+                scaleX = scale
+                scaleY = scale
+            },
+            contentAlignment = Alignment.Center,
+        ) {
+            com.sokoul.pc.home.TitleLogo(logo, title, align = Alignment.Center)
+        }
+    }
+}
+
+private const val BREATH_MS = 1_100
+/** How long the "subtitles in your language" notice stays. */
+private const val SUBTITLE_NOTICE_MS = 9_000L
+/** TitleLogo draws in 430 x 130; it is shown a little larger in the middle of the screen. */
+private const val LOGO_SCALE = 1.4f
+private const val LOGO_WIDTH_DP = 820
+private const val LOGO_HEIGHT_DP = 360

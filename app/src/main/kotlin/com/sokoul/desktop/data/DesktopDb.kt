@@ -10,8 +10,16 @@ import java.sql.ResultSet
  * Accès synchronisé : une seule connexion, appelée depuis Dispatchers.IO.
  */
 class DesktopDb(file: File) : AutoCloseable {
-    private val conn: Connection = DriverManager.getConnection("jdbc:sqlite:${file.absolutePath}").apply {
-        createStatement().use { it.execute("PRAGMA busy_timeout=5000"); it.execute("PRAGMA journal_mode=WAL"); it.execute("PRAGMA foreign_keys=ON") }
+    private val databaseDirectory = file.absoluteFile.parentFile
+    private val databaseUrl = "jdbc:sqlite:${file.absolutePath}"
+    private val writeAheadLog = File(file.absolutePath + "-wal")
+    private val conn: Connection = DriverManager.getConnection(databaseUrl).apply {
+        createStatement().use {
+            it.execute("PRAGMA busy_timeout=5000")
+            it.execute("PRAGMA journal_mode=WAL")
+            it.execute("PRAGMA journal_size_limit=$WAL_RETAINED_BYTES")
+            it.execute("PRAGMA foreign_keys=ON")
+        }
     }
     /** Provider catalogue reads use a separate WAL reader so a long EPG write cannot freeze browsing. */
     private val providerReadLock = Any()
@@ -22,7 +30,41 @@ class DesktopDb(file: File) : AutoCloseable {
     }
     private val providerReadConnection by providerReadConnectionLazy
 
+    /**
+     * The small reads the screens make (what was watched, settings, favourites) on their own WAL reader: on the main
+     * lock they waited for the guide import, and the Chromecast HD was killed for not answering a key (ANR, 2026-11-22).
+     */
+    private val lightReadLock = Any()
+    private val lightReadConnectionLazy = lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        DriverManager.getConnection("jdbc:sqlite:${file.absolutePath}").apply {
+            createStatement().use { it.execute("PRAGMA busy_timeout=5000"); it.execute("PRAGMA query_only=ON") }
+        }
+    }
+
+    /** A read that never waits for a writer. Inside a transaction of this thread, the writer's connection sees its own rows. */
+    private fun <T> light(sql: String, vararg args: Any?, map: (ResultSet) -> T): List<T> =
+        if (Thread.holdsLock(this)) query(conn, sql, *args, map = map)
+        else synchronized(lightReadLock) { query(lightReadConnectionLazy.value, sql, *args, map = map) }
+
+    private fun <T> catalogue(sql: String, vararg args: Any?, map: (ResultSet) -> T): List<T> =
+        if (Thread.holdsLock(this)) query(conn, sql, *args, map = map)
+        else synchronized(providerReadLock) { query(providerReadConnection, sql, *args, map = map) }
+
     init { migrate() }
+
+    internal fun hasRoomForBackgroundSync(): Boolean =
+        databaseDirectory.usableSpace >= BACKGROUND_SYNC_FREE_BYTES
+
+    /** Reclaim storage after large imports without queueing behind an active transaction or reader. */
+    internal fun checkpointStorage() {
+        if (writeAheadLog.length() <= WAL_RETAINED_BYTES) return
+        DriverManager.getConnection(databaseUrl).use { connection ->
+            connection.createStatement().use { statement ->
+                statement.execute("PRAGMA busy_timeout=0")
+                statement.executeQuery("PRAGMA wal_checkpoint(TRUNCATE)").use { it.next() }
+            }
+        }
+    }
 
     private fun migrate() = exec(
         """CREATE TABLE IF NOT EXISTS playlists(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, type TEXT NOT NULL,
@@ -56,6 +98,8 @@ class DesktopDb(file: File) : AutoCloseable {
         "CREATE INDEX IF NOT EXISTS movies_search ON movies(playlist_id, name)",
         "CREATE INDEX IF NOT EXISTS series_search ON series(playlist_id, name)",
         "CREATE TABLE IF NOT EXISTS tmdb_cache(key TEXT PRIMARY KEY, json TEXT NOT NULL, fetched_at INTEGER NOT NULL)",
+        // Real-Debrid torrents Sokoul asked for, and the film or episode each one last played: the daily cleanup's memory.
+        "CREATE TABLE IF NOT EXISTS rd_torrents(hash TEXT PRIMARY KEY, added_at INTEGER NOT NULL, played_key TEXT, played_at INTEGER)",
         // reprise des films et épisodes TMDB (lus via Real-Debrid ou l'IPTV) : rangée « Reprendre » de l'accueil
         """CREATE TABLE IF NOT EXISTS resume(key TEXT PRIMARY KEY, kind TEXT NOT NULL, tmdb_id INTEGER NOT NULL, season INTEGER,
             episode INTEGER, title TEXT NOT NULL, subtitle TEXT, image TEXT, position_ms INTEGER NOT NULL, duration_ms INTEGER NOT NULL,
@@ -105,8 +149,7 @@ class DesktopDb(file: File) : AutoCloseable {
 
     // --- playlists ---------------------------------------------------------------------------------------
 
-    @Synchronized
-    fun playlists(): List<Playlist> = query("SELECT * FROM playlists ORDER BY id") { it.toPlaylist() }
+    fun playlists(): List<Playlist> = light("SELECT * FROM playlists ORDER BY id") { it.toPlaylist() }
 
     @Synchronized
     fun upsertPlaylist(p: Playlist): Long {
@@ -140,9 +183,8 @@ class DesktopDb(file: File) : AutoCloseable {
 
     // --- catégories et chaînes -------------------------------------------------------------------------
 
-    @Synchronized
     fun categories(pid: Long): List<Category> =
-        query("SELECT * FROM categories WHERE playlist_id=? ORDER BY position", pid) {
+        light("SELECT * FROM categories WHERE playlist_id=? ORDER BY position", pid) {
             Category(it.getLong("playlist_id"), it.getString("id"), it.getString("name"), it.getInt("position"), it.getInt("hidden") != 0, it.getInt("locked") != 0)
         }
 
@@ -175,30 +217,27 @@ class DesktopDb(file: File) : AutoCloseable {
     fun setCategoryFlags(pid: Long, id: String, hidden: Boolean, locked: Boolean) =
         update("UPDATE categories SET hidden=?, locked=? WHERE playlist_id=? AND id=?", if (hidden) 1 else 0, if (locked) 1 else 0, pid, id)
 
-    @Synchronized
     fun channels(pid: Long, categoryId: String?): List<Channel> = when (categoryId) {
-        null, SpecialGroup.ALL -> query(
+        null, SpecialGroup.ALL -> catalogue(
             "SELECT c.* FROM channels c JOIN categories g ON g.playlist_id=c.playlist_id AND g.id=c.category_id " +
                 "WHERE c.playlist_id=? AND g.hidden=0 AND g.locked=0 ORDER BY g.position, c.position", pid,
         ) { it.toChannel() }
-        SpecialGroup.FAVORITES -> query(
+        SpecialGroup.FAVORITES -> catalogue(
             "SELECT c.* FROM channels c JOIN favorites f ON f.playlist_id=c.playlist_id AND f.type='LIVE' AND f.id=c.id " +
                 "WHERE c.playlist_id=? ORDER BY f.added_at", pid,
         ) { it.toChannel() }
-        else -> query("SELECT * FROM channels WHERE playlist_id=? AND category_id=? ORDER BY position", pid, categoryId) { it.toChannel() }
+        else -> catalogue("SELECT * FROM channels WHERE playlist_id=? AND category_id=? ORDER BY position", pid, categoryId) { it.toChannel() }
     }
 
     /** The channels sharing a normalized name, in visible groups. */
-    @Synchronized
-    fun channelsByNameKey(pid: Long, key: String): List<Channel> = query(
+    fun channelsByNameKey(pid: Long, key: String): List<Channel> = light(
         "SELECT c.* FROM channels c JOIN categories g ON g.playlist_id=c.playlist_id AND g.id=c.category_id " +
             "WHERE c.playlist_id=? AND c.name_key=? AND g.hidden=0 AND g.locked=0 ORDER BY c.position", pid, key,
     ) { it.toChannel() }
 
-    @Synchronized
     fun channelsByIds(pid: Long, ids: List<String>): List<Channel> {
         if (ids.isEmpty()) return emptyList()
-        return query("SELECT * FROM channels WHERE playlist_id=? AND id IN (${ids.joinToString(",") { "?" }})", pid, *ids.toTypedArray()) { it.toChannel() }
+        return light("SELECT * FROM channels WHERE playlist_id=? AND id IN (${ids.joinToString(",") { "?" }})", pid, *ids.toTypedArray()) { it.toChannel() }
     }
 
     @Synchronized
@@ -465,9 +504,18 @@ class DesktopDb(file: File) : AutoCloseable {
         var n = 0
         fun flush() {
             if (batch.isEmpty()) return
+            // The old guide goes in slices, each its own short hold of the lock: deleted at once, tens of thousands of rows
+            // held the database for seconds on the Chromecast's storage, and every read waited (ANR, 2026-11-22).
+            if (!cleared) {
+                while (true) {
+                    val gone = synchronized(this) {
+                        update("DELETE FROM programs WHERE rowid IN (SELECT rowid FROM programs WHERE playlist_id=? LIMIT $GUIDE_DELETE_SLICE)", pid)
+                    }
+                    if (gone < GUIDE_DELETE_SLICE) break
+                }
+            }
             synchronized(this) {
                 tx {
-                    if (!cleared) update("DELETE FROM programs WHERE playlist_id=?", pid)
                     // Named columns: on an older base, icon was added last (ALTER TABLE).
                     conn.prepareStatement("INSERT OR REPLACE INTO programs(playlist_id, channel_key, start, stop, title, description, icon) VALUES(?,?,?,?,?,?,?)").use { st ->
                         batch.forEach { p -> bind(st, pid, p.channelKey, p.start, p.end, p.title, p.description, p.icon); st.addBatch() }
@@ -501,13 +549,17 @@ class DesktopDb(file: File) : AutoCloseable {
         }
     }
 
+    /** Queued on the writer thread from any thread: for bookkeeping nobody waits for. */
+    private fun writeLater(block: () -> Unit) {
+        writer.execute { runCatching { synchronized(this) { block() } }.onFailure { System.err.println("Sokoul db write failed: ${it.javaClass.simpleName}") } }
+    }
+
     private val writer = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "sokoul-db-writer").apply { isDaemon = true } }
 
-    @Synchronized
     fun programs(pid: Long, keys: Collection<String>, from: Long, to: Long): List<Program> {
         if (keys.isEmpty()) return emptyList()
         val marks = keys.joinToString(",") { "?" }
-        return query(
+        return catalogue(
             "SELECT * FROM programs WHERE playlist_id=? AND channel_key IN ($marks) AND stop>? AND start<? ORDER BY start",
             pid, *keys.toTypedArray(), from, to,
         ) { programOf(it) }
@@ -527,9 +579,8 @@ class DesktopDb(file: File) : AutoCloseable {
 
     // --- favoris, progression, réglages ----------------------------------------------------------------
 
-    @Synchronized
     fun favoriteIds(pid: Long, type: String = "LIVE"): Set<String> =
-        query("SELECT id FROM favorites WHERE playlist_id=? AND type=?", pid, type) { it.getString(1) }.toSet()
+        light("SELECT id FROM favorites WHERE playlist_id=? AND type=?", pid, type) { it.getString(1) }.toSet()
 
     fun addFavorite(pid: Long, type: String, id: String, at: Long) =
         write { update("INSERT OR IGNORE INTO favorites VALUES(?,?,?,?)", pid, type, id, at) }
@@ -557,8 +608,8 @@ class DesktopDb(file: File) : AutoCloseable {
 
     // A setting known to be absent is cached too: reading it again under the lock blocked the interface behind a long
     // IPTV sync, and the TV was killed for not answering (ANR, 2026-11-09).
-    fun setting(key: String): String? = settingsCache[key]?.let { return it.orElse(null) } ?: synchronized(this) {
-        val v = query("SELECT value FROM settings WHERE key=?", key) { it.getString(1) }.firstOrNull()
+    fun setting(key: String): String? = settingsCache[key]?.let { return it.orElse(null) } ?: run {
+        val v = light("SELECT value FROM settings WHERE key=?", key) { it.getString(1) }.firstOrNull()
         settingsCache[key] = java.util.Optional.ofNullable(v)
         v
     }
@@ -592,13 +643,33 @@ class DesktopDb(file: File) : AutoCloseable {
         }
     }
 
-    @Synchronized
-    fun resume(key: String): Resume? = query("SELECT * FROM resume WHERE key=?", scoped(key)) { it.toResume() }.firstOrNull()
+    /**
+     * A torrent Sokoul asked Real-Debrid for. Always written by the writer thread, never waited for: called before each
+     * Real-Debrid try, it waited behind the guide's sync after a start and every 4K timed out, the IPTV playing instead
+     * (2026-11-24).
+     */
+    fun rdNoteAdded(hash: String) = writeLater {
+        update("INSERT OR IGNORE INTO rd_torrents(hash, added_at) VALUES(?,?)", hash.lowercase(), System.currentTimeMillis())
+    }
+
+    /** A torrent that gave the film or episode [resumeKey] its link; written later, as [rdNoteAdded]. */
+    fun rdNotePlayed(hash: String, resumeKey: String) = writeLater {
+        val now = System.currentTimeMillis()
+        update("INSERT INTO rd_torrents(hash, added_at, played_key, played_at) VALUES(?,?,?,?) " +
+            "ON CONFLICT(hash) DO UPDATE SET played_key=excluded.played_key, played_at=excluded.played_at", hash.lowercase(), now, resumeKey, now)
+    }
+
+    data class RdKnown(val addedAt: Long, val playedKey: String?, val playedAt: Long?)
+
+    fun rdKnown(hash: String): RdKnown? = light("SELECT added_at, played_key, played_at FROM rd_torrents WHERE hash=?", hash.lowercase()) {
+        RdKnown(it.getLong(1), it.getString(2), it.getLong(3).takeIf { _ -> !it.wasNull() })
+    }.firstOrNull()
+
+    fun resume(key: String): Resume? = light("SELECT * FROM resume WHERE key=?", scoped(key)) { it.toResume() }.firstOrNull()
 
     /** « Reprendre » : lectures commencées et non terminées, la plus récente d'abord ; une seule ligne par série. */
-    @Synchronized
     fun resumeList(limit: Int = 20): List<Resume> =
-        query("SELECT * FROM resume WHERE profile=? AND finished=0 AND position_ms > 0 ORDER BY updated_at DESC LIMIT ?", profile, limit * 3) { it.toResume() }
+        light("SELECT * FROM resume WHERE profile=? AND finished=0 AND position_ms > 0 ORDER BY updated_at DESC LIMIT ?", profile, limit * 3) { it.toResume() }
             .distinctBy { "${it.kind}:${it.tmdbId}" }.take(limit)
 
     // --- enregistrements ----------------------------------------------------------------------------------
@@ -631,9 +702,8 @@ class DesktopDb(file: File) : AutoCloseable {
     )
 
     /** Historique : tout ce qui a été regardé (terminé compris), le plus récent d'abord. */
-    @Synchronized
     fun history(limit: Int = 300): List<Resume> =
-        query("SELECT * FROM resume WHERE profile=? AND (finished=1 OR position_ms > 0) ORDER BY updated_at DESC LIMIT ?", profile, limit) { it.toResume() }
+        light("SELECT * FROM resume WHERE profile=? AND (finished=1 OR position_ms > 0) ORDER BY updated_at DESC LIMIT ?", profile, limit) { it.toResume() }
 
     @Synchronized
     fun deleteResume(key: String) = update("DELETE FROM resume WHERE key=?", scoped(key))
@@ -646,21 +716,18 @@ class DesktopDb(file: File) : AutoCloseable {
     fun forgetProfile(id: String) { if (id.isNotEmpty()) update("DELETE FROM resume WHERE profile=?", id) }
 
     /** Séries commencées (identifiants TMDB), pour « À venir ». */
-    @Synchronized
-    fun startedSeries(): List<Int> = query("SELECT DISTINCT tmdb_id FROM resume WHERE profile=? AND kind='tv'", profile) { it.getInt(1) }
+    fun startedSeries(): List<Int> = light("SELECT DISTINCT tmdb_id FROM resume WHERE profile=? AND kind='tv'", profile) { it.getInt(1) }
 
     /** Films vus jusqu'au bout (identifiants TMDB) : part déjà vue d'une saga. */
-    @Synchronized
     fun finishedMovies(): Set<Int> =
-        query("SELECT tmdb_id FROM resume WHERE profile=? AND kind='movie' AND finished=1", profile) { it.getInt(1) }.toHashSet()
+        light("SELECT tmdb_id FROM resume WHERE profile=? AND kind='movie' AND finished=1", profile) { it.getInt(1) }.toHashSet()
 
     /** Dernière lecture d'une œuvre (épisode terminé compris) : point de départ de « Reprendre » sur une série. */
-    @Synchronized
     fun allOf(kind: String, tmdbId: Int): List<Resume> =
-        query("SELECT * FROM resume WHERE profile=? AND kind=? AND tmdb_id=?", profile, kind, tmdbId) { it.toResume() }
+        light("SELECT * FROM resume WHERE profile=? AND kind=? AND tmdb_id=?", profile, kind, tmdbId) { it.toResume() }
 
     fun lastOf(kind: String, tmdbId: Int): Resume? =
-        query("SELECT * FROM resume WHERE profile=? AND kind=? AND tmdb_id=? ORDER BY updated_at DESC LIMIT 1", profile, kind, tmdbId) { it.toResume() }.firstOrNull()
+        light("SELECT * FROM resume WHERE profile=? AND kind=? AND tmdb_id=? ORDER BY updated_at DESC LIMIT 1", profile, kind, tmdbId) { it.toResume() }.firstOrNull()
 
     private fun ResultSet.toResume() = Resume(
         getString("key").substringAfter('|'), getString("kind"), getInt("tmdb_id"), (getObject("season") as? Number)?.toInt(), (getObject("episode") as? Number)?.toInt(),
@@ -670,6 +737,7 @@ class DesktopDb(file: File) : AutoCloseable {
     override fun close() {
         conn.close()
         if (providerReadConnectionLazy.isInitialized()) providerReadConnection.close()
+        if (lightReadConnectionLazy.isInitialized()) lightReadConnectionLazy.value.close()
     }
 
     // --- outils -------------------------------------------------------------------------------------
@@ -708,8 +776,12 @@ class DesktopDb(file: File) : AutoCloseable {
     )
 
     companion object {
+        private const val WAL_RETAINED_BYTES = 32L * 1024 * 1024
+        private const val BACKGROUND_SYNC_FREE_BYTES = 256L * 1024 * 1024
         /** Programmes written per lock: a few milliseconds each, so the interface never waits long behind the guide. */
-        private const val GUIDE_BATCH = 2000
+        /** Programmes written per hold of the lock: short enough that a read waits a fraction of a second, not seconds. */
+        private const val GUIDE_BATCH = 500
+        private const val GUIDE_DELETE_SLICE = 2000
         /** Programmes read per step when walking a guide window in start order. */
         private const val PROGRAM_SCAN_BATCH = 500
         /** Longer guide rows are provider placeholders, not programmes. */

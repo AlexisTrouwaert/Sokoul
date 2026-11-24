@@ -54,6 +54,9 @@ data class PlaybackBudgets(
     /** A film that stops moving for this long moves to the next version, at the same position. */
     val stallMs: Long = 15_000,
     val tickMs: Long = 500,
+    /** Extra time for an in-flight Real-Debrid result when the first usable source is Web. */
+    /** How long a web pick waits for Real-Debrid, which answers in 2 to 20 s: 1.2 s let a site play first. */
+    val debridSettleMs: Long = 4_000,
 )
 
 /**
@@ -115,7 +118,32 @@ class PlaybackSession(
     /** Real-Debrid network errors in a row: past three, it is not asked again for this playback. */
     private var debridNetworkFails = 0
 
+    /** Streaming-site links that failed in a row: past [MAX_WEB_FAILS], the sites are left for this playback. */
+    private var webFails = 0
+
+    /** Real-Debrid refusals by the rights-holders' list (451) during this start. */
+    private var debridRefusals = 0
+    /** Real-Debrid left aside after many refusals, to be asked again when nothing else plays. */
+    private var debridSetAside = false
+
     private fun noteNetwork(v: PlayVersion, f: PlayFailure) {
+        // Poor Things, 2026-11-24: 23 French files refused one after the other by Real-Debrid's list, 78 s before the
+        // IPTV VF played. Past [MAX_REFUSALS], the other sources heard in a wanted language go first.
+        if (v.origin == VersionOrigin.Debrid && f is PlayFailure.Blocked && ++debridRefusals >= MAX_REFUSALS && !debridSetAside) {
+            val p = prefs()
+            val other = versions.any { o ->
+                o.origin != VersionOrigin.Debrid && o.origin !in blocked && o.rejected == null && o.key !in failed &&
+                    VersionRanking.heard(o, p, frenchSystem(), memory?.fact(memoryKey(o)), workLanguage) == 0
+            }
+            if (other) {
+                StartClock.note("real-debrid set aside after $debridRefusals refusals")
+                debridSetAside = true
+                blocked += VersionOrigin.Debrid
+            }
+        }
+        // Seven dead site links were tried one after the other before the IPTV VF played (Pachinko, 2026-11-24):
+        // when the sites' links keep failing, the next ones are as dead.
+        if (v.origin == VersionOrigin.Web && ++webFails >= MAX_WEB_FAILS) blocked += VersionOrigin.Web
         if (v.origin != VersionOrigin.Debrid) return
         if (f is PlayFailure.Network) {
             if (++debridNetworkFails >= MAX_NETWORK_FAILS) blocked += VersionOrigin.Debrid
@@ -164,6 +192,16 @@ class PlaybackSession(
 
     fun dismissLanguageNotice() { languageNotice = null }
 
+    /**
+     * Why the film went on with another version after it had started (it froze, was cut, was not the right file): said
+     * on screen when the next one plays, never a silent change. Null when nothing was switched.
+     */
+    var switchNotice by mutableStateOf<PlayFailure?>(null)
+        private set
+    fun dismissSwitchNotice() { switchNotice = null }
+    /** The failure of a version that had played, waiting for the next one to show. */
+    private var switchedFrom: PlayFailure? = null
+
     fun listenAnyway() {
         engine?.endPreview()
         languageNotice = null
@@ -188,6 +226,8 @@ class PlaybackSession(
         leaveLive()
         request = target
         StartClock.start("play " + target.kind + " " + target.tmdbId + (target.season?.let { " S${it}E${target.episode}" } ?: ""))
+        switchNotice = null
+        switchedFrom = null
         resetAttempts()
         memory?.clearTransientFailures("${target.resumeKey}|")
         versions = emptyList()
@@ -201,7 +241,8 @@ class PlaybackSession(
         phase = Phase.Searching(0)
         startSearch(target, refresh = false)
         job = scope.launch {
-            positionMs = withContext(Dispatchers.IO) { readResume(target.resumeKey) }?.takeIf { !it.finished && it.positionMs > RESUME_FROM_MS }?.positionMs ?: 0
+            positionMs = if (target.fromStart) 0 else withContext(Dispatchers.IO) { readResume(target.resumeKey) }?.takeIf { !it.finished && it.positionMs > RESUME_FROM_MS }?.positionMs ?: 0
+            StartClock.note("resume read")
             if (target.chooseFirst || prefs().startMode == StartMode.Ask) {
                 awaitFirstResults()
                 phase = Phase.Choosing(null)
@@ -493,6 +534,7 @@ class PlaybackSession(
         previewKey = null
         live = channel
         liveAround = around
+        if (!shown) phase = Phase.Tuning(channel.title)
         job = scope.launch {
             if (shown) {
                 e.endPreview()
@@ -502,7 +544,6 @@ class PlaybackSession(
                 return@launch
             }
             if (streamOpen) stopEngine()
-            phase = Phase.Tuning(channel.title)
             try {
                 if (channel.stream.url.startsWith("http", true)) clearForLive()
             } catch (f: PlayFailureException) {
@@ -801,6 +842,9 @@ class PlaybackSession(
 
     private fun resetAttempts() {
         debridNetworkFails = 0
+        webFails = 0
+        debridRefusals = 0
+        debridSetAside = false
         forced = null
         failed.clear()
         quickTried.clear()
@@ -844,10 +888,16 @@ class PlaybackSession(
             // The work's language first: "original" in the wanted languages ranks the versions by it.
             workLanguage = runCatching { originalLanguage(target) }.getOrElse { if (it is CancellationException) throw it else null }
             try {
+                // Ranking ~900 versions took up to 1.6 s on the Chromecast's CPU, on the main thread, at every answer of a
+                // service (3.6 s in all for Interstellar, 2026-11-22): a long list is ranked on a background thread.
                 finder.find(target, refresh).collect { update ->
+                    val t0 = System.currentTimeMillis()
+                    // A short list is ranked at once, with no thread hop; only the long ones go aside.
+                    val ranked = if (update.versions.size < RANK_ASIDE_FROM) rank(update.versions) else rankAside(update.versions).also { noteRememberedFailures(update.versions) }
+                    (System.currentTimeMillis() - t0).takeIf { it > 30 }?.let { StartClock.note("ranked ${update.versions.size} in $it ms") }
                     sourceNotices = update.notices
+                    versions = ranked
                     search.value = update.copy(done = false)
-                    versions = rank(update.versions)
                     if (phase is Phase.Searching) phase = Phase.Searching(update.versions.size)
                 }
             } catch (e: CancellationException) {
@@ -869,6 +919,31 @@ class PlaybackSession(
     fun sourceLanguageVerified(version: PlayVersion): Boolean =
         (current?.key == version.key && provenLanguage != null) || memory?.fact(memoryKey(version))?.language != null
 
+    /** [rank] on a background thread, with what it reads taken here first. It touches no state of the session. */
+    private suspend fun rankAside(list: List<PlayVersion>): List<PlayVersion> {
+        val p = prefs()
+        val french = frenchSystem()
+        val expectedNow = expected
+        val language = workLanguage
+        val preferences = sourcePreferences
+        val mem = memory
+        val resumeKey = request?.resumeKey
+        return withContext(Dispatchers.Default) {
+            val found = SourceRules.dedupe(list)
+            val fact = { v: PlayVersion -> mem?.fact("$resumeKey|${v.key}") }
+            val ranked = VersionRanking.rank(found, p, french, p.startMode != StartMode.WaitBest && !p.bestQualityFirst, caps, fact, expectedNow, language)
+            SourcePreferences.rank(ranked, preferences, p, french, caps,
+                fact = fact,
+                failed = { fact(it)?.let { f -> f.failure != null && f.until > System.currentTimeMillis() } == true },
+                workLanguage = language)
+        }
+    }
+
+    /** Why a version is at the end of the list shows beside it (on the main thread: [failures] is the session's). */
+    private fun noteRememberedFailures(list: List<PlayVersion>) {
+        list.forEach { v -> memory?.failure(memoryKey(v))?.let { failures.putIfAbsent(v.key, it) } }
+    }
+
     private fun rank(list: List<PlayVersion>, readyFirst: Boolean? = null): List<PlayVersion> {
         val p = prefs()
         val found = SourceRules.dedupe(list)
@@ -888,21 +963,45 @@ class PlaybackSession(
      * latest. With nothing found by then, it goes on waiting, and no service is ever cut.
      */
     private suspend fun awaitFirstResults() {
+        val playbackPrefs = prefs()
+        if (request?.chooseFirst == true || playbackPrefs.startMode == StartMode.Ask) {
+            withTimeoutOrNull(budgets.firstChoiceMs) { search.first { it.done || it.versions.isNotEmpty() } }
+            return
+        }
         val first = withTimeoutOrNull(budgets.firstChoiceMs) { search.first { it.done || it.versions.isNotEmpty() } }
+        // Only a version in the first wanted language ends the wait early. A VO already in the account stopped it after
+        // 1 s with 10 versions found, before any French one had come, and Teen Titans Go! played in English (2026-11-22).
+        val wanted = { v: PlayVersion -> AudioMatch.verdict(v, playbackPrefs.intent, memory?.fact(memoryKey(v)), workLanguage).heard == 0 }
         // A version already in the account goes at once: nothing quicker can come.
-        val held = { u: SearchUpdate -> u.versions.any { it.readiness == Readiness.Ready && it.origin == VersionOrigin.Debrid && it.rejected == null } }
-        if (prefs().bestQualityFirst) {
+        val held = { u: SearchUpdate -> u.versions.any { it.readiness == Readiness.Ready && it.origin == VersionOrigin.Debrid && it.rejected == null && wanted(it) } }
+        if (playbackPrefs.bestQualityFirst) {
             // The best picture first: the first answers were often the 1080p already in the account, and the 4K found a
             // moment later was never waited for. The search gets a little longer, unless a 4K in the account is there.
             // The best this screen shows: a 1080p set waits for a 1080p in the account, a 4K one for a 4K.
-            val top = if (caps.maxHeight >= 2160) com.sokoul.iptv.domain.VideoQuality.UHD_4K else com.sokoul.iptv.domain.VideoQuality.FHD_1080
+            val top = if (caps.decodes4k) com.sokoul.iptv.domain.VideoQuality.UHD_4K else com.sokoul.iptv.domain.VideoQuality.FHD_1080
             val heldTop = { u: SearchUpdate ->
-                u.versions.any { it.readiness == Readiness.Ready && it.origin == VersionOrigin.Debrid && it.rejected == null && it.quality == top }
+                u.versions.any { it.readiness == Readiness.Ready && it.origin == VersionOrigin.Debrid && it.rejected == null && it.quality == top && wanted(it) }
             }
-            if (first != null && !first.done && !heldTop(first)) withTimeoutOrNull(budgets.bestSettleMs) { search.first { it.done || heldTop(it) } }
+            // The long wait is for a better picture still to come. When versions at the best this screen shows are already
+            // there (a 1080p set with 1080p found), nothing better can come: the usual short settle is enough
+            // (4.5 s were spent waiting on the Chromecast HD for Interstellar, 2026-11-22).
+            // Le Prestige, 2026-11-22: the first answer had no 1080p, those came 0.3 s later, and the long wait ran to its end.
+            val topFound = { u: SearchUpdate -> u.versions.any { it.origin == VersionOrigin.Debrid && it.rejected == null && it.quality == top && wanted(it) } }
+            if (first != null && !first.done && !heldTop(first)) withTimeoutOrNull(budgets.bestSettleMs) {
+                val withTop = search.first { it.done || heldTop(it) || topFound(it) }
+                if (!withTop.done && !heldTop(withTop)) withTimeoutOrNull(budgets.settleMs) { search.first { it.done || heldTop(it) } }
+            }
         } else if (first != null && !first.done && !held(first)) withTimeoutOrNull(budgets.settleMs) { search.first { it.done || held(it) } }
         if (first == null && search.value.versions.isEmpty()) {
             withTimeoutOrNull(budgets.searchMs) { search.first { it.done || it.versions.isNotEmpty() } }
+        }
+        val next = StartPolicy.next(versions, playbackPrefs.startMode, failed, quickTried, blocked, failedHosts)?.version
+        if (next?.origin == VersionOrigin.Web && search.value.debridPending && VersionOrigin.Debrid !in blocked) {
+            withTimeoutOrNull(budgets.debridSettleMs) {
+                // Done as soon as Real-Debrid has a version heard right that is not rejected: it then ranks before the site.
+                search.first { u -> !u.debridPending || held(u) || u.versions.any { it.origin == VersionOrigin.Debrid && it.rejected == null && wanted(it) } }
+            }
+            versions = rank(search.value.versions)
         }
     }
 
@@ -911,21 +1010,32 @@ class PlaybackSession(
         var ready = resolved
         expected = request?.let { r -> runCatching { expectedMinutes(r) }.getOrNull() }
         workLanguage = request?.let { r -> runCatching { originalLanguage(r) }.getOrNull() }
+        StartClock.note("length and language known")
         versions = rank(search.value.versions)
-        awaitFirstResults()
+        if (pick == null) awaitFirstResults()
+        StartClock.note("first results: " + search.value.versions.size + (if (search.value.done) " (done)" else ""))
         while (true) {
             if (pick == null) race()?.let { (version, stream) ->
                 pick = StartChoice(version, keep = false)
                 ready = stream
             }
-            val choice = pick ?: next()
+            var choice = pick ?: next()
             pick = null
+            if (choice == null && debridSetAside) {
+                // Everything else failed: Real-Debrid's remaining versions are tried after all.
+                debridSetAside = false
+                blocked -= VersionOrigin.Debrid
+                StartClock.note("real-debrid asked again")
+                choice = next()
+            }
             if (choice == null) {
                 giveUp()
                 return
             }
             StartClock.note("try " + choice.version.summary().take(TRACE_NAME) + if (choice.keep) " (wait)" else "")
             val outcome = attempt(choice, ready, automatic = choice !== first)
+            // It had played: the next version taking over is told on screen, with why.
+            if (outcome != null && (phase as? Phase.Playing)?.version?.key == choice.version.key) switchedFrom = outcome
             StartClock.note(if (outcome == null) "ended" else "failed " + outcome.javaClass.simpleName)
             ready = null
             if (outcome == null) {
@@ -935,7 +1045,7 @@ class PlaybackSession(
             lastFailure = outcome
             lastVersion = choice.version
             failures[choice.version.key] = outcome
-            memory?.noteFailure(memoryKey(choice.version), outcome)
+            sameFile(choice.version).forEach { k -> memory?.noteFailure("${request?.resumeKey}|$k", outcome) }
             if (SourceRules.blamesHost(outcome)) choice.version.providerHost?.let { failedHosts += it }
             // A version picked by hand that fails is not silently replaced by the automatic choice the viewer left.
             if (outcome is PlayFailure.EngineMissing || (byHand && choice === first)) {
@@ -944,7 +1054,7 @@ class PlaybackSession(
             }
             quickTried += choice.version.key
             // Only "not ready yet" leaves a version in the running, to be waited for. Everything is forgiven on Retry.
-            if (outcome !is PlayFailure.NotReady || choice.keep) failed += choice.version.key
+            if (outcome !is PlayFailure.NotReady || choice.keep) failed += sameFile(choice.version)
             if (outcome.blocksOrigin) blocked += choice.version.origin
             noteNetwork(choice.version, outcome)
         }
@@ -958,7 +1068,8 @@ class PlaybackSession(
     private suspend fun race(): Pair<PlayVersion, StreamRequest>? {
         val mode = prefs().startMode.takeIf { request?.chooseFirst != true } ?: StartMode.Ask
         val remembered = versions.filter { memory?.failure(memoryKey(it)) != null }.map { it.key }.toSet()
-        val group = StartPolicy.race(versions, mode, failed + remembered, quickTried, blocked, failedHosts, raceSize(), sameQuality = prefs().bestQualityFirst)
+        val group = StartPolicy.race(versions, mode, failed + remembered, quickTried, blocked, failedHosts, raceSize(), sameQuality = prefs().bestQualityFirst,
+            heard = { VersionRanking.heard(it, prefs(), frenchSystem(), memory?.fact(memoryKey(it)), workLanguage) })
         if (group.isEmpty()) return null
         StartClock.note("race of " + group.size)
         current = group.first()
@@ -987,10 +1098,10 @@ class PlaybackSession(
                             val f = (e as PlayFailureException).failure
                             StartClock.note("race lost " + f.javaClass.simpleName + " " + v.summary().take(TRACE_NAME))
                             failures[v.key] = f
-                            memory?.noteFailure(memoryKey(v), f)
+                            sameFile(v).forEach { k -> memory?.noteFailure("${request?.resumeKey}|$k", f) }
                             if (SourceRules.blamesHost(f)) v.providerHost?.let { failedHosts += it }
                             quickTried += v.key
-                            if (f !is PlayFailure.NotReady) failed += v.key
+                            if (f !is PlayFailure.NotReady) failed += sameFile(v)
                             if (f.blocksOrigin) blocked += v.origin
                             noteNetwork(v, f)
                             lastFailure = f
@@ -1099,6 +1210,7 @@ class PlaybackSession(
             e.endPreview()
         }
         phase = Phase.Playing(version)
+        switchedFrom?.let { cause -> switchNotice = cause; switchedFrom = null; StartClock.note("switched after: " + cause.javaClass.simpleName) }
         StartClock.note("first image")
         offerUpgrade(version)
         return watch(e, id, version, opening, automatic)
@@ -1215,11 +1327,27 @@ class PlaybackSession(
         AudioMatch.missingWanted(audio, prefs().intent, workLanguage)
 
     /** Before activation: the file lacks every wanted language, and another version still may have one. */
+    /**
+     * The keys of every listing of this version's file: two services list one torrent under two keys ("hash:0" and
+     * "hash:-1"), and the same VO was tried twice after it had failed (Les Infiltrés, 2026-11-22).
+     */
+    private fun sameFile(version: PlayVersion): List<String> {
+        if (version.origin != VersionOrigin.Debrid) return listOf(version.key)
+        val hash = version.key.substringBefore(':').lowercase().takeIf { it.length >= 32 } ?: return listOf(version.key)
+        return versions.filter { it.origin == VersionOrigin.Debrid && it.key.substringBefore(':').lowercase() == hash && it.summary() == version.summary() }.map { it.key } + version.key
+    }
+
     private fun lacksWantedLanguage(version: PlayVersion, audio: List<Pair<Int, String>>): Boolean {
-        if (!missingWantedLanguage(audio) || languageMoves >= MAX_LANGUAGE_MOVES) return false
+        if (languageMoves >= MAX_LANGUAGE_MOVES || audio.isEmpty()) return false
         val intent = prefs().intent
-        val matches = { v: PlayVersion -> AudioMatch.verdict(v, intent, memory?.fact(memoryKey(v)), workLanguage).matches }
-        return versions.any { it.key != version.key && it.key !in failed && it.origin !in blocked && it.readiness in READY_TO_TRY && matches(it) }
+        // The first wanted language decides, not any of them: with "French, then original", a "MULTI" holding Ukrainian,
+        // Russian and English played in English while French versions were still untried (Les Infiltrés, 2026-11-22).
+        val first = intent.resolved(workLanguage).firstOrNull() ?: return false
+        // An unnamed track may be the wanted one: it disproves nothing.
+        if (audio.any { com.sokoul.desktop.player.AudioChoice.languageOf(it.second) == null }) return false
+        if (audio.any { com.sokoul.desktop.player.AudioChoice.matches(first, it.second) }) return false
+        val inFirst = { v: PlayVersion -> AudioMatch.verdict(v, intent, memory?.fact(memoryKey(v)), workLanguage).heard == 0 }
+        return versions.any { it.key != version.key && it.key !in failed && it.origin !in blocked && it.readiness in READY_TO_TRY && inFirst(it) }
     }
 
     /** With the "start what is ready" preference, a sharper version is fetched behind the film and offered when ready. */
@@ -1242,8 +1370,12 @@ class PlaybackSession(
     }
 
     private companion object {
+        /** From this many versions, ranking runs on a background thread (see [rankAside]). */
+        const val RANK_ASIDE_FROM = 200
         const val TRACE_NAME = 40
         const val MAX_NETWORK_FAILS = 3
+        const val MAX_WEB_FAILS = 3
+        const val MAX_REFUSALS = 6
         const val SAVE_EVERY_MS = 10_000L
         const val RESUME_FROM_MS = 30_000L
         /** Waiting videos and error clips are short; no film is. */

@@ -16,7 +16,9 @@ object StartClock {
     }
 
     fun note(step: String) {
-        steps += "+" + (System.currentTimeMillis() - startedAt) + " ms " + step
+        val line = "+" + (System.currentTimeMillis() - startedAt) + " ms " + step
+        steps += line
+        com.sokoul.pc.Platform.startDiagnostic(line)
         while (steps.size > MAX) steps.poll()
     }
 

@@ -26,11 +26,16 @@ object SourcePreferences {
     fun rank(ranked: List<PlayVersion>, order: (Boolean) -> SourcePreferenceOrder, prefs: PlaybackPrefs,
              french: Boolean, caps: DeviceCaps, fact: (PlayVersion) -> SourceFact?, failed: (PlayVersion) -> Boolean,
              workLanguage: String? = null): List<PlayVersion> {
+        // The order is read once per ranking: read at each comparison, it was ~14 database reads twice per comparison,
+        // 1.6 s for 900 versions on the Chromecast (2026-11-22).
+        val orders = HashMap<Boolean, SourcePreferenceOrder>(2)
+        val order = { anime: Boolean -> orders.getOrPut(anime) { order(anime) } }
         // Only versions whose audio is judged the same (AudioMatch) are ordered by site and hoster: a foreign dub is
-        // never lifted above a plain release by a site priority.
-        fun guard(v: PlayVersion): List<Any?> {
+        // never lifted above a plain release by a site priority. Each version's guard is worked out once.
+        val guards = java.util.IdentityHashMap<PlayVersion, List<Any?>>()
+        fun guard(v: PlayVersion): List<Any?> = guards.getOrPut(v) {
             val audio = AudioMatch.verdict(v, prefs.intent, fact(v), workLanguage)
-            return listOf(v.origin, v.rejected, failed(v), audio.heard, audio.original, audio.foreignDub, audio.proof,
+            listOf(v.origin, v.rejected, failed(v), audio.heard, audio.original, audio.foreignDub, audio.proof,
                 VersionRanking.overLimits(v, prefs), v.readiness, SourceRules.pictureRank(v.hdr, caps), v.confidence, v.quality, v.community)
         }
         val result = ArrayList<PlayVersion>()
