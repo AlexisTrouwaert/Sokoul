@@ -14,7 +14,7 @@ import java.net.URI
 import java.net.URLDecoder
 import java.util.concurrent.TimeUnit
 
-data class SportsEvent(val id: String, val name: String, val sport: String, val live: Boolean, val startsAt: Long?)
+data class SportsEvent(val id: String, val name: String, val sport: String, val live: Boolean, val startsAt: Long?, val poster: String? = null)
 data class SportsServer(val key: String, val title: String)
 enum class SportsFailure { NotConfigured, VipRequired, Unavailable, InvalidResponse }
 data class SportsResult<T>(val value: T? = null, val failure: SportsFailure? = null)
@@ -26,7 +26,8 @@ internal object SportsParse {
         val id = text(item,"id")?.takeIf { it.matches(Regex("streamed_[a-zA-Z0-9_-]{1,250}")) } ?: return@mapNotNull null
         val title = text(item,"name")?.takeIf(String::isNotBlank)?.take(200) ?: return@mapNotNull null
         SportsEvent(id,title,text(item,"_sport").orEmpty().take(60), (item["_isLive"] as? JsonPrimitive)?.booleanOrNull == true,
-            (item["_timestamp"] as? JsonPrimitive)?.longOrNull?.takeIf { it > 0 })
+            (item["_timestamp"] as? JsonPrimitive)?.longOrNull?.takeIf { it > 0 },
+            text(item, "poster")?.takeIf { it.startsWith("https://") && it.length <= 2048 })
     }.distinctBy { it.id }.take(500)
 
     fun servers(root: JsonObject): List<SportsServer> = (root["streams"] as? JsonArray).orEmpty().mapNotNull { entry ->

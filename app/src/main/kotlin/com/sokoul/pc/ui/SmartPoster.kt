@@ -38,15 +38,16 @@ sealed interface PosterArt {
     /** A textless poster with the title's logo centered on top. */
     data class WithLogo(override val image: String, val logo: String) : PosterArt
 
-    /** A textless poster and no logo: the title in styled text. */
-    data class WithTitle(override val image: String, val title: String) : PosterArt
+    /** A textless poster, backdrop or placeholder with the title in styled text. */
+    data class WithTitle(override val image: String?, val title: String) : PosterArt
 
     /** No textless poster: the original poster, which already carries its title. */
     data class Original(override val image: String?) : PosterArt
 }
 
 fun posterArt(item: TmdbItem, info: TmdbInfo?): PosterArt {
-    val clean = info?.cleanPoster ?: return PosterArt.Original(item.poster)
+    val clean = info?.cleanPoster ?: return item.poster?.let { PosterArt.Original(it) }
+        ?: PosterArt.WithTitle(info?.backdrop ?: item.backdrop, item.title)
     val logo = info.logo
     return if (logo != null) PosterArt.WithLogo(clean, logo) else PosterArt.WithTitle(clean, item.title)
 }
@@ -95,32 +96,40 @@ fun BoxScope.SmartPoster(catalog: CatalogApi, item: TmdbItem) {
         is PosterArt.WithLogo -> {
             Box(Modifier.fillMaxSize().background(LogoFade))
             val logo by produceState(ImageLoader.cached(art.logo), art.logo) { value = ImageLoader.load(art.logo) }
-            logo?.let {
+            val bitmap = logo
+            if (bitmap != null) {
                 Image(
-                    it, item.title,
+                    bitmap, item.title,
                     Modifier.align(Alignment.Center).padding(horizontal = 20.dp).fillMaxWidth().height(130.dp),
                     Alignment.Center, ContentScale.Fit,
                 )
+            } else {
+                PosterTitle(item.title)
             }
         }
         is PosterArt.WithTitle -> {
             Box(Modifier.fillMaxSize().background(LogoFade))
-            BasicText(
-                art.title,
-                Modifier.align(Alignment.Center).padding(horizontal = 16.dp).fillMaxWidth(),
-                style = androidx.compose.ui.text.TextStyle(
-                    fontFamily = InterDisplay,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 30.sp,
-                    lineHeight = 33.sp,
-                    letterSpacing = 0.5.sp,
-                    textAlign = TextAlign.Center,
-                    color = Color.White,
-                    shadow = Shadow(Color(0x99000000), Offset(0f, 2f), 8f),
-                ),
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-            )
+            PosterTitle(art.title)
         }
     }
+}
+
+@Composable
+private fun BoxScope.PosterTitle(title: String) {
+    BasicText(
+        title,
+        Modifier.align(Alignment.Center).padding(horizontal = 16.dp).fillMaxWidth(),
+        style = androidx.compose.ui.text.TextStyle(
+            fontFamily = InterDisplay,
+            fontWeight = FontWeight.Bold,
+            fontSize = 30.sp,
+            lineHeight = 33.sp,
+            letterSpacing = 0.5.sp,
+            textAlign = TextAlign.Center,
+            color = Color.White,
+            shadow = Shadow(Color(0x99000000), Offset(0f, 2f), 8f),
+        ),
+        maxLines = 3,
+        overflow = TextOverflow.Ellipsis,
+    )
 }

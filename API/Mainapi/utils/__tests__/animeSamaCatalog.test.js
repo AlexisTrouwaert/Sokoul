@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const {
-  parseSeasonPanels, parseAvailableLanguages, parseEpisodePlayers, resolveEpisodeReferences, parseReference,
+  parseSeasonPanels, parseAvailableLanguages, seasonLanguages, parseEpisodePlayers, resolveEpisodeReferences, parseReference,
 } = require('../../services/animeSamaCatalog');
 
 const fixture = (name) => fs.readFileSync(path.join(__dirname, 'fixtures', 'animeSama', name), 'utf8');
@@ -25,6 +25,20 @@ test('season cards exclude commented and template panels and keep numbers only f
 test('declared languages are read from the season page', () => {
   assert.deepEqual(parseAvailableLanguages(fixture('season-vf.html')), ['vostfr', 'vf', 'vf2']);
   assert.equal(parseAvailableLanguages('<html></html>'), null);
+});
+
+test('declared numbered French editions remain available beyond VF2', () => {
+  const declared = parseAvailableLanguages('<script>var languesDispo = ["vostfr","vf3","vf3","vkr","unsafe/path"];</script>');
+  assert.deepEqual(seasonLanguages(declared), ['vostfr', 'vkr', 'vf3']);
+  assert.ok(seasonLanguages(null).includes('vf2'));
+});
+
+test('the season panel keeps the French edition when it is linked directly', () => {
+  const [panel] = parseSeasonPanels('panneauAnime("Saison 1", "saison1/vf3");', 'https://anime-sama.to/catalogue/example/');
+  assert.equal(panel.url, 'https://anime-sama.to/catalogue/example/saison1');
+  assert.equal(panel.number, 1);
+  assert.equal(panel.language, 'vf3');
+  assert.ok(seasonLanguages(null, panel.language).includes('vf3'));
 });
 
 test('tokenised references keep episode positions, skip blanks and put removed videos last', () => {

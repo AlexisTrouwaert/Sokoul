@@ -105,6 +105,18 @@ class MultiSourceSearchTest {
         assertFalse(paths.isEmpty())
     }
 
+    @Test fun `cached results keep their resolved episode query without looking up the anime twice`() = runBlocking<Unit> {
+        val resolved = query.copy(absolute = 1, kitsu = EntryEpisode(12, 1))
+        val anime = AnimeSearch(AnimeCheck(listOf("One Piece"), 1999, 1, 1, 1))
+        val initial = debrid.search(query, info, refresh = true) { AnimeLookup(resolved, anime) }.toList().last()
+        var repeatedLookup = false
+        val cached = debrid.search(query, info, refresh = false) { repeatedLookup = true; null }.toList().single()
+        assertFalse(repeatedLookup)
+        assertEquals(resolved, cached.query)
+        assertEquals(initial.streams, cached.streams)
+        assertTrue(cached.done)
+    }
+
     @Test fun `a disabled service gets no call at all`() {
         db.putSetting(DesktopDebrid.SERVICES, "COMET")
         search(null)

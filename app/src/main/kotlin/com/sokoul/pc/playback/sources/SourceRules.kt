@@ -8,7 +8,16 @@ import com.sokoul.iptv.domain.VideoQuality
 import java.util.concurrent.ConcurrentHashMap
 
 /** What this screen and this decoder can really show. */
-data class DeviceCaps(val hdr10: Boolean, val dolbyVision: Boolean, val maxHeight: Int) {
+data class DeviceCaps(
+    val hdr10: Boolean,
+    val dolbyVision: Boolean,
+    val maxHeight: Int,
+    /**
+     * A hardware decoder takes a 2160p picture. False on a 1080p stick (Chromecast HD, 2026-11-22): each 4K file failed
+     * in the decoder after a few seconds, and twelve were tried one after the other before a 1080p played.
+     */
+    val decodes4k: Boolean = true,
+) {
     companion object {
         /** Windows draws through RV32 with no tone mapping: HDR would be washed out. */
         val Pc = DeviceCaps(hdr10 = false, dolbyVision = false, maxHeight = 2160)
@@ -40,6 +49,8 @@ object SourceRules {
     /** How long a failure counts against a version: what is in the file stays true, what comes from a server passes. */
     fun memoryMs(f: PlayFailure): Long = when (f) {
         PlayFailure.FakeFile, PlayFailure.WrongLanguage -> 30 * DAY
+        // Real-Debrid's name filter changes, and an account pause looked the same: a few hours, not a month.
+        PlayFailure.Blocked -> 6 * 3_600_000L
         PlayFailure.DeadLink, is PlayFailure.Refused -> DAY
         // "Unknown": the player could not open the file itself (a codec the TV lacks): 7 s lost at each start otherwise.
         PlayFailure.Cut, PlayFailure.TimedOut, PlayFailure.Unknown -> 6 * 3_600_000L
@@ -95,14 +106,21 @@ object SourceRules {
 
     /** Rank of a picture on this device, lower first. A format it cannot show comes after plain SDR. */
     fun pictureRank(hdr: HdrFormat?, caps: DeviceCaps): Int = when (hdr) {
-        HdrFormat.DOLBY_VISION -> if (caps.dolbyVision) 0 else 3
+        // A Dolby Vision file where DV does not play: after HDR10, as a profile 5 file has no HDR10 base to fall back on.
+        HdrFormat.DOLBY_VISION -> if (caps.dolbyVision) 0 else 4
         HdrFormat.HDR10 -> if (caps.hdr10) 1 else 3
         null -> 2
     }
 
-    /** A sharpness the screen cannot show brings nothing: it only costs. */
-    fun usefulQuality(q: VideoQuality?, caps: DeviceCaps): VideoQuality? =
-        if (q == VideoQuality.UHD_4K && caps.maxHeight < 2160) VideoQuality.FHD_1080 else q
+    /**
+     * What a sharpness is worth on this device. A 4K file it cannot decode is a last resort, ranked with the SD ones.
+     * A 4K it decodes stays 4K even on a smaller screen: the owner wants it, and a 4K Blu-ray scaled down looks better
+     * than a 1080p WEB (Google TV Streamer on a 720p set started a 1080p, 2026-11-23).
+     */
+    fun usefulQuality(q: VideoQuality?, caps: DeviceCaps): VideoQuality? = when {
+        q == VideoQuality.UHD_4K && !caps.decodes4k -> VideoQuality.SD
+        else -> q
+    }
 
     /** Only stable identities prove duplicates; matching size and picture metadata do not. */
     fun dedupe(versions: List<PlayVersion>): List<PlayVersion> {
@@ -110,7 +128,10 @@ object SourceRules {
     }
 
     /** A failure of the link itself says the service is the problem: the next attempt comes from another one. */
-    fun blamesHost(f: PlayFailure) = f === PlayFailure.FakeFile || f === PlayFailure.DeadLink || f is PlayFailure.Refused
+    fun blamesHost(f: PlayFailure) = f === PlayFailure.FakeFile || dead(f) || f is PlayFailure.Refused
+
+    /** A link that is gone leaves the list of versions while it is remembered: it can come back, so it is hidden, not dropped. */
+    fun dead(f: PlayFailure?) = f === PlayFailure.DeadLink || f === PlayFailure.Blocked
 }
 
 /** What is known of each version from one launch to the next. A version that lied or broke does not get to do it twice. */
@@ -149,12 +170,23 @@ class SourceMemory(private val read: () -> String?, private val write: (String) 
         save()
     }
 
-    /** A fresh search clears temporary link trouble while keeping proven audio/quality and stable content errors. */
-    fun clearTransientFailures(prefix: String) {
+    /**
+     * A fresh search clears temporary link trouble while keeping proven audio/quality and stable content errors.
+     * Dead links (a dead file, a Real-Debrid refusal) keep their own memory: they stay hidden until then, or until
+     * [clearDeadLinks]; a file this player cannot open stays as well (Les Infiltrés: 12 s lost at each start).
+     */
+    fun clearTransientFailures(prefix: String) = clear(prefix) {
+        it != PlayFailure.FakeFile && it != PlayFailure.WrongLanguage && it != PlayFailure.Unknown && !SourceRules.dead(it)
+    }
+
+    /** The viewer asks to try the dead links of a title again. */
+    fun clearDeadLinks(prefix: String) = clear(prefix, SourceRules::dead)
+
+    private fun clear(prefix: String, which: (PlayFailure) -> Boolean) {
         load()
         var changed = false
         facts.entries.toList().filter { it.key.startsWith(prefix) }.forEach { (key, fact) ->
-            if (fact.failure != null && fact.failure != PlayFailure.FakeFile && fact.failure != PlayFailure.WrongLanguage) {
+            if (fact.failure != null && which(fact.failure)) {
                 facts[key] = fact.copy(failure = null, until = 0)
                 changed = true
             }
@@ -190,6 +222,8 @@ class SourceMemory(private val read: () -> String?, private val write: (String) 
         PlayFailure.FakeFile -> "fake"
         PlayFailure.WrongLanguage -> "lang"
         PlayFailure.DeadLink -> "dead"
+        // A new code: the "blocked" kept until 2026-11-24 were mostly Real-Debrid's account pause, and are forgotten.
+        PlayFailure.Blocked -> "rdblock"
         PlayFailure.Cut -> "cut"
         PlayFailure.TimedOut -> "time"
         PlayFailure.Unknown -> "unknown"
@@ -201,6 +235,7 @@ class SourceMemory(private val read: () -> String?, private val write: (String) 
         c == "fake" -> PlayFailure.FakeFile
         c == "lang" -> PlayFailure.WrongLanguage
         c == "dead" -> PlayFailure.DeadLink
+        c == "rdblock" -> PlayFailure.Blocked
         c == "cut" -> PlayFailure.Cut
         c == "time" -> PlayFailure.TimedOut
         c == "unknown" -> PlayFailure.Unknown

@@ -41,9 +41,11 @@ import com.sokoul.pc.playback.session.Transfer
 import com.sokoul.pc.playback.session.VersionOrigin
 import com.sokoul.pc.playback.sources.VersionRanking
 import com.sokoul.pc.playback.sources.failureOf
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.runBlocking
@@ -52,6 +54,7 @@ import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -59,7 +62,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PlaybackTest {
-    private fun scope() = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    // PlaybackSession runs its search and playback coroutines on the UI dispatcher in the app.
+    private val dispatcher = Dispatchers.Default.limitedParallelism(1)
+    private val testJobs = SupervisorJob()
+    private fun scope() = CoroutineScope(SupervisorJob(testJobs) + dispatcher)
+
+    @After
+    fun cancelPlaybackJobs() = runBlocking { testJobs.cancelAndJoin() }
     private val request = PlayRequest("movie", 1, null, null, "Title", null, null)
     private val fast = PlaybackBudgets(firstChoiceMs = 200, searchMs = 300, firstImageMs = 400, trackMs = 150, stallMs = 300, tickMs = 20)
 
@@ -481,21 +490,19 @@ class PlaybackTest {
     @Test
     fun a_download_shows_its_percentage_then_plays() {
         val engine = FakeEngine()
-        val seen = mutableListOf<Int>()
+        val progressSeen = CompletableDeferred<Unit>()
         val v = PlayVersion("a", VersionOrigin.Debrid, "a", readiness = Readiness.NotCached) { keep, progress ->
             assertTrue("a version that is not ready is waited for", keep)
-            listOf(10, 60).forEach {
-                progress(Transfer(it, speedBps = 1_000_000, bytes = 1_000_000_000))
-                delay(60)
-            }
+            progress(Transfer(60, speedBps = 1_000_000, bytes = 1_000_000_000))
+            progressSeen.await()
             StreamRequest("a", null, null, "t", live = false)
         }
         val s = session(engine, finder(v))
         s.play(request)
         waitUntil("60 %") {
-            (s.phase as? Phase.Downloading)?.transfer?.percent?.let { p -> if (seen.lastOrNull() != p) seen += p }
-            seen.contains(60)
+            (s.phase as? Phase.Downloading)?.transfer?.percent == 60
         }
+        progressSeen.complete(Unit)
         waitUntil("plays") { s.phase is Phase.Playing }
         assertEquals("a", engine.played.single().url)
         s.close()
@@ -746,7 +753,7 @@ class PlaybackTest {
             PlayVersion(key, VersionOrigin.Debrid, key, lang, VideoQuality.FHD_1080, readiness = Readiness.Unknown, community = community, confidence = confidence) { _, _ -> StreamRequest(key, null, null, "t") }
         val ranked = VersionRanking.rank(
             listOf(anime("plain-vo", AudioLanguage.VO), anime("seadex-vo", AudioLanguage.VO, community = true), anime("vf", AudioLanguage.VF), anime("doubt-vf", AudioLanguage.VF, confidence = 2)),
-            PlaybackPrefs(), frenchSystem = true,
+            frenchFirst, frenchSystem = true,
         ).map { it.key }
         // The language wanted first; at the same language, a file that says it is the episode, then SeaDex's choice.
         assertEquals(listOf("vf", "doubt-vf", "seadex-vo", "plain-vo"), ranked)
@@ -882,6 +889,23 @@ class PlaybackTest {
     }
 
     @Test
+    fun a_web_result_gives_an_in_flight_debrid_version_time_to_arrive() {
+        val engine = FakeEngine()
+        val web = testVersion("web", "web", origin = VersionOrigin.Web)
+        val debrid = testVersion("rd", "rd", origin = VersionOrigin.Debrid)
+        val finder = SourceFinder { _, _ -> flow {
+            emit(SearchUpdate(listOf(web), done = false, debridPending = true))
+            delay(100)
+            emit(SearchUpdate(listOf(web, debrid), done = true))
+        } }
+        val session = PlaybackSession(engine, finder, scope(), prefs = { frenchFirst },
+            budgets = fast.copy(settleMs = 25, debridSettleMs = 250))
+        session.play(request)
+        waitUntil("Real-Debrid plays") { session.phase is Phase.Playing }
+        assertEquals(listOf("rd"), engine.played.map { it.url })
+    }
+
+    @Test
     fun ready_comes_first_by_default_and_quality_when_waiting_for_the_best() {
         val all = listOf(v("4k", AudioLanguage.VF, VideoQuality.UHD_4K, Readiness.NotCached), v("hd", AudioLanguage.VF, VideoQuality.FHD_1080, Readiness.Ready))
         assertEquals("hd", VersionRanking.rank(all, PlaybackPrefs(), true).first().key)
@@ -914,7 +938,7 @@ class PlaybackTest {
     fun a_sharper_version_is_offered_when_it_is_heard_the_same() {
         val playing = v("hd-multi", AudioLanguage.MULTI, VideoQuality.FHD_1080, Readiness.Ready)
         val best = listOf(v("4k-vf", AudioLanguage.VF, VideoQuality.UHD_4K, Readiness.NotCached), v("4k-vo", AudioLanguage.VO, VideoQuality.UHD_4K, Readiness.Ready), playing)
-        val heard = { x: PlayVersion -> VersionRanking.heard(x, PlaybackPrefs(), true) }
+        val heard = { x: PlayVersion -> VersionRanking.heard(x, frenchFirst, true) }
         assertEquals("4k-vf", StartPolicy.upgrade(best, playing, emptySet(), heard)?.key)
         val vfPlaying = v("hd-vf", AudioLanguage.VF, VideoQuality.FHD_1080, Readiness.Ready)
         assertEquals("never to a language less wanted", null, StartPolicy.upgrade(listOf(best[1], vfPlaying), vfPlaying, emptySet(), heard)?.key)
@@ -930,7 +954,7 @@ class PlaybackTest {
     @Test
     fun preferred_language_precedes_size_and_quality_limits() {
         val all = listOf(v("vf", AudioLanguage.VF, VideoQuality.UHD_4K, size = 60_000_000_000), v("sub", AudioLanguage.VOSTFR, VideoQuality.HD_720, size = 1_000_000_000))
-        assertEquals("vf", VersionRanking.rank(all, PlaybackPrefs(maxSize = MaxSize.G25, maxQuality = MaxQuality.P1080), true).first().key)
+        assertEquals("vf", VersionRanking.rank(all, frenchFirst.copy(maxSize = MaxSize.G25, maxQuality = MaxQuality.P1080), true).first().key)
     }
 
     @Test
@@ -1010,6 +1034,8 @@ class PlaybackTest {
     fun iptv_entries_match_by_tmdb_id_else_by_title_and_year() {
         val titles = listOf("Dune", "Dune: Part One")
         assertTrue(IptvMatch.matches("FR - Dune (2021) 4K", null, 2021, 438631, titles, 2021))
+        assertTrue(IptvMatch.matches("4K-NF| Dune (2021) 3840x1600", null, 2021, 438631, titles, 2021))
+        assertFalse(IptvMatch.matches("4K-NF| Dune (1984) 3840x1600", null, 1984, 438631, titles, 2021))
         val gumballTitles = listOf("The Amazing World of Gumball", "Le Monde incroyable de Gumball")
         assertEquals("the amazing world of gumball", IptvMatch.clean("FR| The Amazing World of Gumball"))
         assertTrue(IptvMatch.matches("FR| The Amazing World of Gumball", null, 2011, 37606, gumballTitles, 2011))
@@ -1219,7 +1245,9 @@ class PlaybackTest {
     fun real_debrid_codes_become_causes() {
         assertEquals(PlayFailure.KeyRefused, DebridTransfers.failureOf(RdException(401, "x")))
         assertEquals(PlayFailure.DebridLimit, DebridTransfers.failureOf(RdException(403, "x", 21)))
-        assertEquals(PlayFailure.DeadLink, DebridTransfers.failureOf(RdException(403, "x", 35)))
+        // 35, "infringing_file" (HTTP 451): blocked by a rights holder, for good; remembered a month, not a day.
+        assertEquals(PlayFailure.Blocked, DebridTransfers.failureOf(RdException(451, "x", 35)))
+        assertEquals(PlayFailure.DeadLink, DebridTransfers.failureOf(RdException(403, "x", 28)))
     }
 
     @Test

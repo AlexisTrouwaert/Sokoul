@@ -91,6 +91,10 @@ data class TmdbInfo(
     val spokenLanguages: List<String> = emptyList(),
     /** The film's directors, with what their page needs. */
     val directors: List<TmdbPerson> = emptyList(),
+    /** Who wrote it (screenplay, story, novel), who produced it, who wrote its music: the credits of the Details section. */
+    val writers: List<String> = emptyList(),
+    val producers: List<String> = emptyList(),
+    val composers: List<String> = emptyList(),
     val voteCount: Int? = null,
     /** Noms des mots-clés TMDB, en minuscules (« heist », « time travel »). */
     val keywords: List<String>? = null,
@@ -308,6 +312,12 @@ class TmdbClient @Inject constructor(
         } ?: emptyList()
     }
 
+    /** A studio's logo (a transparent PNG) from its TMDB company page. Cache 30 days. */
+    suspend fun companyLogo(apiKey: String, id: Int): String? {
+        if (apiKey.isBlank()) return null
+        return safe { get(apiKey, "/3/company/$id", emptyMap(), ttlMs = 30 * 24 * HOUR)?.str("logo_path")?.let { "$IMG/w500$it" } }
+    }
+
     /** Identifiant IMDb (« tt0816692 ») d'une œuvre TMDB, pour les extensions de sources. Cache 30 jours. */
     suspend fun imdbId(apiKey: String, kind: String, id: Int): String? {
         if (apiKey.isBlank()) return null
@@ -414,7 +424,7 @@ class TmdbClient @Inject constructor(
                     still = x.str("still_path")?.let { "$IMG/w500$it" }, runtimeMin = x.int("runtime"), airDate = x.str("air_date"),
                     productionCode = x.str("production_code"),
                 )
-            }
+            }.filter { it.season == season && it.episode > 0 }.distinctBy { it.episode }.sortedBy { it.episode }
         } ?: emptyList()
     }
 
@@ -439,9 +449,19 @@ class TmdbClient @Inject constructor(
 
     /** Œuvre portant exactement ce titre (français ou original), la plus populaire : sert à rapprocher un nom (TasteDive). */
     /** Recherche films et séries ensemble (une page, cache 1 jour) : rangée Real-Debrid de la recherche. */
-    suspend fun searchMulti(apiKey: String, query: String, page: Int = 1): List<TmdbItem> {
-        if (apiKey.isBlank() || query.trim().length < 2) return emptyList()
-        return safe { items(get(apiKey, "/3/search/multi", mapOf("query" to query.trim(), "page" to page.toString()), ttlMs = 24 * HOUR), "movie") } ?: emptyList()
+    suspend fun searchMulti(apiKey: String, query: String, page: Int = 1): List<TmdbItem> =
+        safe { searchPage(apiKey, query, page).items }.orEmpty()
+
+    data class SearchPage(val items: List<TmdbItem> = emptyList(), val totalPages: Int = 0)
+
+    suspend fun searchPage(apiKey: String, query: String, page: Int, seriesOnly: Boolean = false): SearchPage {
+        val term = query.trim()
+        if (apiKey.isBlank() || term.length < 2) return SearchPage()
+        val kind = if (seriesOnly) "tv" else "multi"
+        return withContext(Dispatchers.IO) {
+            val answer = checkNotNull(get(apiKey, "/3/search/$kind", mapOf("query" to term, "page" to page.toString()), ttlMs = 24 * HOUR))
+            SearchPage(items(answer, if (seriesOnly) "tv" else "movie"), answer.int("total_pages") ?: page)
+        }
     }
 
     suspend fun findByName(apiKey: String, kind: String, title: String): TmdbItem? {
@@ -609,12 +629,19 @@ class TmdbClient @Inject constructor(
                 .sortedByDescending { it.logo != null }.distinctBy { it.name },
             directors = (credits?.get("crew") as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }.filter { it.str("job") == "Director" }
                 .mapNotNull { c -> TmdbPerson(c.str("name") ?: return@mapNotNull null, null, c.str("profile_path")?.let { p -> "$IMG/w185$p" }, c.int("id")) },
+            writers = crewNames(credits, WRITING_JOBS),
+            producers = crewNames(credits, setOf("Producer")).take(CREDIT_NAMES),
+            composers = crewNames(credits, setOf("Original Music Composer", "Music")),
             keywords = (o["keywords"] as? JsonObject)?.let { k ->
                 // films : « keywords », séries : « results »
                 ((k["keywords"] ?: k["results"]) as? JsonArray).orEmpty().mapNotNull { (it as? JsonObject)?.str("name")?.lowercase()?.trim() }
             },
         )
     }
+
+    private fun crewNames(credits: JsonObject?, jobs: Set<String>): List<String> =
+        (credits?.get("crew") as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }.filter { it.str("job") in jobs }
+            .mapNotNull { it.str("name") }.distinct().take(CREDIT_NAMES)
 
     /** The earliest digital (4), physical (5) or TV (6) release date of a film, in any country. */
     private fun homeRelease(o: JsonObject): String? =
@@ -653,6 +680,9 @@ class TmdbClient @Inject constructor(
         /** Genres TV écartés des filmographies : actualité, téléréalité, talk-show. */
         private val NOT_FICTION_TV = setOf(10763, 10764, 10767)
         private val DIRECTING_JOBS = setOf("Director", "Creator")
+        private val WRITING_JOBS = setOf("Screenplay", "Writer", "Story", "Novel", "Characters", "Original Story")
+        /** Names kept per credit in the Details section: past four, a line becomes a list nobody reads. */
+        private const val CREDIT_NAMES = 4
         private const val HOUR = 3600_000L
     }
 }

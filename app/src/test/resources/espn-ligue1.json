@@ -1,0 +1,157 @@
+{
+ "events": [
+  {
+   "id": "401876397",
+   "date": "2026-11-22T14:00Z",
+   "competitions": [
+    {
+     "status": {
+      "displayClock": "90'+8'",
+      "type": {
+       "state": "post",
+       "completed": true,
+       "name": "STATUS_FULL_TIME",
+       "shortDetail": "FT"
+      }
+     },
+     "venue": {
+      "fullName": "Stade Jean Bouin"
+     },
+     "broadcasts": [
+      {
+       "names": [
+        "beIn Sports"
+       ]
+      }
+     ],
+     "competitors": [
+      {
+       "homeAway": "home",
+       "score": "4",
+       "team": {
+        "abbreviation": "PAR",
+        "shortDisplayName": "Paris FC",
+        "displayName": "Paris FC",
+        "color": "000000",
+        "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/6851.png"
+       }
+      },
+      {
+       "homeAway": "away",
+       "score": "0",
+       "team": {
+        "abbreviation": "ANG",
+        "shortDisplayName": "Angers",
+        "displayName": "Angers",
+        "color": "1a1a1a",
+        "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/7868.png"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "401876401",
+   "date": "2026-11-22T16:15Z",
+   "competitions": [
+    {
+     "status": {
+      "displayClock": "90'+5'",
+      "type": {
+       "state": "post",
+       "completed": true,
+       "name": "STATUS_FULL_TIME",
+       "shortDetail": "FT"
+      }
+     },
+     "venue": {
+      "fullName": "Stade du Moustoir - Yves Allainmat"
+     },
+     "broadcasts": [
+      {
+       "names": [
+        "beIn Sports"
+       ]
+      }
+     ],
+     "competitors": [
+      {
+       "homeAway": "home",
+       "score": "1",
+       "team": {
+        "abbreviation": "LOR",
+        "shortDisplayName": "Lorient",
+        "displayName": "Lorient",
+        "color": "f46100",
+        "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/273.png"
+       }
+      },
+      {
+       "homeAway": "away",
+       "score": "1",
+       "team": {
+        "abbreviation": "REN",
+        "shortDisplayName": "Rennes",
+        "displayName": "Stade Rennais",
+        "color": "ef2f24",
+        "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/169.png"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "401876400",
+   "date": "2026-11-22T19:45Z",
+   "competitions": [
+    {
+     "status": {
+      "displayClock": "90'+6'",
+      "type": {
+       "state": "post",
+       "completed": true,
+       "name": "STATUS_FULL_TIME",
+       "shortDetail": "FT"
+      }
+     },
+     "venue": {
+      "fullName": "Stade Vélodrome"
+     },
+     "broadcasts": [
+      {
+       "names": [
+        "beIn Sports"
+       ]
+      }
+     ],
+     "competitors": [
+      {
+       "homeAway": "home",
+       "score": "2",
+       "team": {
+        "abbreviation": "OLM",
+        "shortDisplayName": "Marseille",
+        "displayName": "Marseille",
+        "color": "ffffff",
+        "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/176.png"
+       }
+      },
+      {
+       "homeAway": "away",
+       "score": "3",
+       "team": {
+        "abbreviation": "MNS",
+        "shortDisplayName": "Le Mans",
+        "displayName": "Le Mans",
+        "color": "d62b11",
+        "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/2697.png"
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

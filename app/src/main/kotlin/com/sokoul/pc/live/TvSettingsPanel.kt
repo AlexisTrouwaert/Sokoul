@@ -39,6 +39,7 @@ internal fun TvSettingsPanel(deps: AppDeps, onOpen: (String) -> Unit, onClose: (
         width = TvPanelSize.Standard.width, height = TvPanelSize.Standard.height,
         footer = L("OK to change · Back to guide", "OK pour modifier · Retour au guide").text(),
         modifier = Modifier.testTag("tv-settings"),
+        action = { com.sokoul.pc.ui.PanelChip(L("Back", "Retour").text(), onClick = onClose) },
     ) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             TvSectionLabel(L("Channel up / down", "Chaîne suivante / précédente").text())
@@ -65,6 +66,8 @@ internal fun TvSettingsPanel(deps: AppDeps, onOpen: (String) -> Unit, onClose: (
             TvActionRow(L("Subscription and guide", "Abonnement et guide").text(),
                 L("Status, stream format, guide offset, refresh", "État, format du flux, décalage du guide, actualisation").text(),
                 modifier = Modifier.testTag("tv-settings-account")) { onOpen("account") }
+            TvActionRow(L("Provider movies", "Films du fournisseur").text()) { onOpen("movies") }
+            TvActionRow(L("Provider series", "Séries du fournisseur").text()) { onOpen("series") }
         }
     }
 }

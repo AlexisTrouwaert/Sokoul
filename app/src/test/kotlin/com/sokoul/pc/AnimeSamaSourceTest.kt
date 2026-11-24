@@ -34,7 +34,16 @@ class AnimeSamaSourceTest {
         assertEquals(AnimeSamaParse.Target(1, 5, 1), AnimeSamaParse.target(explicit, listOf("One Piece"), false, 2, 1, 62))
         assertEquals(AnimeSamaParse.Target(1, 5, 1), AnimeSamaParse.target(explicit, listOf("One Piece"), false, 2, 1, null))
     }
-    @Test fun pendingCatalogueIsPolledOnlyForAnExactlyMatchedWork() = runBlocking {
+    @Test fun aSeasonSplitInPartsKeepsEveryPartInTheCount() {
+        val twelve = List(12) { "{}" }.joinToString(",")
+        val root = Json.parseToJsonElement("""[{"name":"Frieren","seasons":[{"name":"Saison 1","episodes":[$twelve]},{"name":"Saison 1 Partie 2","episodes":[$twelve]},{"name":"Saison 2","episodes":[$twelve]}]}]""") as JsonArray
+        // Absolute 14 is the second part's 2nd episode; absolute 25 the first of season 2.
+        assertEquals(AnimeSamaParse.Target(1, 2, 2), AnimeSamaParse.target(root, listOf("Frieren"), false, 1, 14, 14))
+        assertEquals(AnimeSamaParse.Target(1, 3, 1), AnimeSamaParse.target(root, listOf("Frieren"), false, 2, 1, 25))
+        // Without an absolute number, the season's own numbering runs across its parts.
+        assertEquals(AnimeSamaParse.Target(1, 2, 2), AnimeSamaParse.target(root, listOf("Frieren"), false, 1, 14, null))
+    }
+        @Test fun pendingCatalogueIsPolledOnlyForAnExactlyMatchedWork() = runBlocking {
         val server = MockWebServer()
         server.start()
         try {

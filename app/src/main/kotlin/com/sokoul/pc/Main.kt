@@ -147,6 +147,13 @@ fun main() {
         ) {
             androidx.compose.runtime.LaunchedEffect(Unit) {
                 awtWindow = window
+                // In front or not, for what only decorates (AppFocus): focus and minimizing both count.
+                fun front() { com.sokoul.pc.ui.AppFocus.active.value = window.isFocused && (window.extendedState and java.awt.Frame.ICONIFIED) == 0 }
+                window.addWindowFocusListener(object : java.awt.event.WindowFocusListener {
+                    override fun windowGainedFocus(e: java.awt.event.WindowEvent?) = front()
+                    override fun windowLostFocus(e: java.awt.event.WindowEvent?) = front()
+                })
+                window.addWindowStateListener { front() }
                 com.sokoul.pc.dev.DebugDriver.registry = { ready?.deps?.bridge?.registry }
                 com.sokoul.pc.dev.DebugDriver.start(window)
                 // MCP access for AI assistants, only when SOKOUL_MCP is set (see McpServer).

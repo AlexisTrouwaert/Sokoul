@@ -185,6 +185,11 @@ fun PanelOption(
     titleStyle: androidx.compose.ui.text.TextStyle = PanelType.Option,
     onFocused: (Boolean) -> Unit = {},
     leading: (@Composable (Color) -> Unit)? = null,
+    /** The leading slot's size: an icon by default, a 16:9 picture for an episode. */
+    leadingWidth: androidx.compose.ui.unit.Dp = 40.dp,
+    leadingHeight: androidx.compose.ui.unit.Dp = 40.dp,
+    /** Drawn at the end of the row (a switch, a choice glyph), given the row's ink and whether it is focused. */
+    trailing: (@Composable (ink: Color, focused: Boolean) -> Unit)? = null,
     onClick: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -212,12 +217,13 @@ fun PanelOption(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(18.dp),
     ) {
-        leading?.let { Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) { it(ink) } }
+        leading?.let { Box(Modifier.size(leadingWidth, leadingHeight), contentAlignment = Alignment.Center) { it(ink) } }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Label(title, titleStyle, ink, maxLines = titleLines)
             subtitle?.takeIf { it.isNotBlank() }?.let { Label(it, PanelType.Callout, soft, maxLines = 2) }
         }
-        value?.takeIf { it.isNotBlank() }?.let { Label(it, PanelType.Callout, soft, Modifier.widthIn(max = 320.dp), maxLines = 1) }
+        value?.takeIf { it.isNotBlank() }?.let { Label(it, PanelType.Callout, soft, Modifier.widthIn(max = 420.dp), maxLines = 1) }
+        trailing?.invoke(soft, focused)
         if (selected) Icon(Icons.Filled.Check, null, Modifier.size(30.dp), tint = ink)
         else if (chevron) Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, Modifier.size(34.dp), tint = soft)
     }

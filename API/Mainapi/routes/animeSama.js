@@ -20,7 +20,7 @@ const { ANIME_SAMA_CACHE_DIR, generateCacheKey } = require('../utils/cacheManage
 const { memoryCache } = require('../config/redis');
 const { buildResolvedMaps } = require('../utils/embedExtraction');
 const { relayAuthority } = require('../utils/relayAuthority');
-const { parseSeasonPanels, parseAvailableLanguages, parseEpisodePlayers, resolveEpisodeReferences } = require('../services/animeSamaCatalog');
+const { parseSeasonPanels, parseAvailableLanguages, seasonLanguages, parseEpisodePlayers, resolveEpisodeReferences } = require('../services/animeSamaCatalog');
 const DEBUG_ANIMESAMA = process.env.DEBUG_ANIMESAMA === 'true';
 
 // Anime-Sama est le seul catalogue dont les lecteurs sont des chaînes brutes
@@ -203,8 +203,6 @@ const lang2ids = {
   [LANG.VOST_SPA]: [LANG_ID.VOST_SPA],
   [LANG.VJ]: [LANG_ID.VJ]
 };
-
-const langIds = ['vostfr', 'vf', 'vosteng', 'vostspa', 'vj', 'va', 'vf1', 'vf2', 'vkr'];
 
 // Helper function to validate player URLs
 const isValidPlayerUrl = (url) => {
@@ -411,10 +409,10 @@ class Episode {
 }
 
 class Season {
-  constructor(url, name = "", serieName = "", client = null) {
+  constructor(url, name = "", serieName = "", client = null, language = null) {
     const normalizedUrl = url.endsWith('/') ? url : url + '/';
     this.baseUrl = normalizedUrl;
-    this.pages = langIds.map(lang => normalizedUrl + lang + "/");
+    this.language = language;
     this.siteUrl = url.split('/').slice(0, 3).join('/') + '/';
 
     this.name = name || url.split('/').slice(-2)[0];
@@ -450,14 +448,13 @@ class Season {
 
   async episodes(strict = false) {
     // The first page declares which languages exist (`languesDispo`): only those are fetched.
-    const firstPage = this.pages[0];
+    const firstLanguage = this.language || 'vostfr';
+    const firstPage = this.baseUrl + firstLanguage + '/';
     const firstHtml = await this._fetchPage(firstPage, strict);
-    const declared = parseAvailableLanguages(firstHtml);
-    const wanted = declared ? new Set([langIds[0], ...declared]) : null;
-    const episodesPagesPromises = langIds.map((lang, i) => {
-      if (i === 0) return this._getPlayersLinksFrom(firstPage, strict, firstHtml);
-      if (wanted && !wanted.has(lang)) return Promise.resolve([]);
-      return this._getPlayersLinksFrom(this.pages[i], strict);
+    const langIds = seasonLanguages(parseAvailableLanguages(firstHtml), this.language);
+    const episodesPagesPromises = langIds.map((lang) => {
+      if (lang === firstLanguage) return this._getPlayersLinksFrom(firstPage, strict, firstHtml);
+      return this._getPlayersLinksFrom(this.baseUrl + lang + '/', strict);
     });
     // Attendre aussi les langues restantes avant de libérer la tâche commune.
     const outcomes = await Promise.allSettled(episodesPagesPromises);
@@ -538,7 +535,7 @@ class Catalogue {
       const responseData = response.data;
 
       const seasons = parseSeasonPanels(responseData, this.url).map(panel => {
-        const season = new Season(panel.url, panel.name, this.name, this.client);
+        const season = new Season(panel.url, panel.name, this.name, this.client, panel.language);
         season.number = panel.number;
         return season;
       });

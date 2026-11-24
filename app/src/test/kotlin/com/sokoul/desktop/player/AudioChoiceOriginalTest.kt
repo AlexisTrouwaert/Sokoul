@@ -33,4 +33,13 @@ class AudioChoiceOriginalTest {
     fun `no French track keeps libVLC's choice`() {
         assertNull(AudioChoice.pickOriginal(listOf(1 to "English - [English]", 2 to "Spanish - [Spanish]")))
     }
+
+    @Test
+    fun `an unnamed track names no language`() {
+        // A VF from a streaming site with one track "Piste 1" was stopped as "no French" (Memento on the TV, 2026-11-22).
+        assertNull(AudioChoice.languageOf("Piste 1"))
+        assertNull(AudioChoice.languageOf("Track 2"))
+        assertNull(AudioChoice.languageOf("1"))
+        assertEquals(false, com.sokoul.pc.playback.sources.AudioMatch.missingWanted(listOf(1 to "Piste 1"), com.sokoul.desktop.data.AudioIntent(listOf("fr")), "en"))
+    }
 }

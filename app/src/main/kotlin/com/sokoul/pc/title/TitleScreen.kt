@@ -39,6 +39,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
@@ -145,8 +146,8 @@ private const val PREFETCH_AFTER_MS = 1_500L
 private val SEASON_ROOM = 96.dp
 private const val SLIDE_DISTANCE = 1720f
 private val HeroAreaHeight = 1040.dp
-private const val ENTER_MILLIS = 720
-private const val TEXT_DELAY_MILLIS = 1500L
+private const val ENTER_MILLIS = 420
+private const val TEXT_DELAY_MILLIS = 300L
 private const val LINK_TRIES = 4
 private const val LINK_RETRY_MS = 15_000L
 
@@ -192,26 +193,38 @@ fun TitleScreen(
 ) {
     var index by remember { mutableIntStateOf(startIndex.coerceIn(items.indices)) }
     val item = items[index]
+    val identity = item.kind() to item.id
     // Details of the titles around, read ahead: stepping to one then shows its final artwork at once, instead of its
     // list image replaced by the textless one a moment later (two loads and two fades, the GPU's cost on the TV).
-    val known = remember(items) { java.util.concurrent.ConcurrentHashMap<Int, TmdbInfo>() }
-    val info by produceState(known[item.id], item.id) { value = deps.catalog.details(item.kind(), item.id)?.also { known[item.id] = it } }
+    val known = remember(items) { java.util.concurrent.ConcurrentHashMap<Pair<String, Int>, TmdbInfo>() }
+    val info by androidx.compose.runtime.key(identity) {
+        produceState(known[identity]) {
+            value = deps.catalog.details(identity.first, identity.second)?.also { known[identity] = it }
+        }
+    }
     val cardWidthPx = with(androidx.compose.ui.platform.LocalDensity.current) { CardWidth.roundToPx() }
     LaunchedEffect(index) {
         listOf(index + 1, index - 1, index + 2).mapNotNull(items::getOrNull).forEach { near ->
             launch {
-                val details = known[near.id] ?: runCatching { deps.catalog.details(near.kind(), near.id) }.getOrNull()?.also { known[near.id] = it }
+                val nearIdentity = near.kind() to near.id
+                val details = known[nearIdentity] ?: runCatching { deps.catalog.details(nearIdentity.first, nearIdentity.second) }
+                    .getOrNull()?.also { known[nearIdentity] = it }
                 (details?.backdrop ?: near.backdrop)?.let { runCatching { ImageLoader.load(it, cardWidthPx) } }
             }
         }
     }
-    val saga by produceState<SagaTile?>(null, item.id, info) { value = deps.catalog.sagaOfTitle(item.kind(), item.id, info) }
-    val extras by produceState(com.sokoul.pc.data.TitleExtras(), item.id, info) { value = deps.catalog.titleExtras(item.kind(), item.id, info) }
-    var full by remember { mutableStateOf(false) }
+    val saga by androidx.compose.runtime.key(identity) {
+        produceState<SagaTile?>(null, info) { value = deps.catalog.sagaOfTitle(identity.first, identity.second, info) }
+    }
+    val extras by androidx.compose.runtime.key(identity) {
+        produceState(com.sokoul.pc.data.TitleExtras(), info) { value = deps.catalog.titleExtras(identity.first, identity.second, info) }
+    }
+    // Upright on a tablet the page opens whole, picture on top and the rest under it (Figma "Fiche · tablette portrait").
+    var full by remember { mutableStateOf(com.sokoul.pc.ui.Form.tabletPortrait) }
     var modalOpen by remember { mutableStateOf(false) }
     var trailersOpen by remember { mutableStateOf(false) }
     val trailersButton = remember { FocusRequester() }
-    var trailerAllowed by remember(item.id) { mutableStateOf(true) }
+    var trailerAllowed by remember(identity) { mutableStateOf(true) }
     var rowsFocused by remember { mutableStateOf(false) }
     val scroll = rememberScrollState()
     val scope = rememberCoroutineScope()
@@ -231,7 +244,9 @@ fun TitleScreen(
     // page below is hidden by it, and need not be drawn any more.
     val covers by remember { derivedStateOf { enter.value >= 1f } }
     LaunchedEffect(covers) { onCovers(covers) }
-    val blockColor by produceState(Palette.PillFill, item.id) { value = DominantColor.of(info?.backdrop ?: item.backdrop ?: item.poster) }
+    val blockColor by androidx.compose.runtime.key(identity) {
+        produceState(Palette.PillFill) { value = DominantColor.of(info?.backdrop ?: item.backdrop ?: item.poster) }
+    }
     // The page takes a trace of the artwork's colour over its dark base (docs/design/tv-home.md, 1.5): flat fills
     // only, the same number as before, so the TV's GPU draws nothing more. The text stays on an almost black page.
     // Set once, when the colour is known, with the artwork's block: an animated colour recomposed the whole page at every
@@ -250,7 +265,7 @@ fun TitleScreen(
     val silent = onTop && trailer.playing && !heroSound
     LaunchedEffect(silent) { deps.player?.setMutedSafely(silent) }
     DisposableEffect(Unit) { onDispose { deps.player?.setMutedSafely(false) } }
-    LaunchedEffect(item.id, info, trailerAllowed, rowsFocused, modalOpen, trailersOpen, onTop) {
+    LaunchedEffect(identity, info, trailerAllowed, rowsFocused, modalOpen, trailersOpen, onTop) {
         if (onTop && trailerAllowed && !rowsFocused && !modalOpen && !trailersOpen) trailer.prepare(info?.trailerKeys().orEmpty(), item.title, trailerOwner) else trailer.release(trailerOwner)
     }
     LaunchedEffect(rowsFocused) {
@@ -294,6 +309,7 @@ fun TitleScreen(
         }
     }
 
+    TitleScale {
     CompositionLocalProvider(LocalHoverFocus provides { full && !scroll.isScrollInProgress && !modalOpen }) {
         Box(
             Modifier
@@ -379,7 +395,12 @@ fun TitleScreen(
             )
 
             Column(
-                Modifier.fillMaxSize().graphicsLayer { alpha = textAlpha.value }.verticalScroll(scroll, enabled = full),
+                // The fade multiplies each draw's alpha instead of rendering the whole page into a layer first: an
+                // offscreen pass of the full screen at every frame of the opening (Google TV Streamer, 2026-11-24).
+                Modifier.fillMaxSize().graphicsLayer {
+                    alpha = textAlpha.value
+                    compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.ModulateAlpha
+                }.verticalScroll(scroll, enabled = full),
             ) {
                 HeroText(
                     deps, item, info, lerp(160.dp, Metrics.PageMargin, expand), primary, docButton,
@@ -402,7 +423,7 @@ fun TitleScreen(
                 )
                 if (full) {
                     Sections(
-                        deps, item, info, saga, extras, onOpenSaga,
+                        deps, item, info, saga, onOpenSaga,
                         onRowsFocused = { rowsFocused = it },
                         onPlay = onPlay,
                         onPlayTrailer = { onPlayTrailer(item.title, it) },
@@ -455,7 +476,30 @@ fun TitleScreen(
             }
         }
     }
+    }
 }
+
+/**
+ * A tablet held upright draws the title page at its own scale (UPRIGHT_WIDTH dp across), as Home, Search and Settings
+ * are: drawn on the 1920 frame, the page was a small landscape card with the lower half of the screen left black
+ * (Dune on the Tab S7 FE, 2026-11-22). Anywhere else it is drawn as before.
+ */
+@Composable
+private fun TitleScale(content: @Composable () -> Unit) {
+    if (!com.sokoul.pc.ui.Form.tabletPortrait) {
+        content()
+        return
+    }
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+        CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides com.sokoul.pc.ui.uprightDensity(constraints.maxWidth)) { content() }
+    }
+}
+
+/** The width the page is drawn on: 1920 on a TV and a tablet held sideways, the upright width on a tablet held upright. */
+private val pageWidth: Dp get() = if (com.sokoul.pc.ui.Form.tabletPortrait) com.sokoul.pc.ui.UPRIGHT_WIDTH.dp else 1920.dp
+
+/** Margin of the reduced card: 120 on the 1920 frame, a little less upright where the width is short. */
+private val cardMargin: Dp get() = if (com.sokoul.pc.ui.Form.tabletPortrait) 40.dp else CardX
 
 @Composable
 internal fun HeroLayer(
@@ -482,28 +526,35 @@ internal fun HeroLayer(
     val density = androidx.compose.ui.platform.LocalDensity.current
     val rtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
     fun Float.toDpValue(): Dp = with(density) { this@toDpValue.toDp() }
-    val screenW = 1920.dp
-    val screenH = 1080.dp
-    val cardX = lerp(CardX, 0.dp, expand)
+    val screenW = pageWidth
+    // Upright, the picture keeps a landscape-like height at the top and the page goes on under it (Figma "Fiche ·
+    // tablette portrait"): it is not stretched to the whole screen.
+    val screenH = if (com.sokoul.pc.ui.Form.tabletPortrait) HeroAreaHeight else 1080.dp
+    val cardX = lerp(cardMargin, 0.dp, expand)
     val cardY = lerp(CardY, 0.dp, expand)
-    val cardW = lerp(CardWidth, screenW, expand)
+    val cardW = lerp(screenW - cardMargin * 2, screenW, expand)
     val cardH = lerp(screenH - CardY, screenH, expand)
-    val startX = origin?.rect?.left?.toDpValue() ?: cardX
-    val startY = origin?.rect?.top?.toDpValue() ?: cardY
-    val startW = origin?.rect?.width?.toDpValue() ?: cardW
-    val startH = origin?.rect?.height?.toDpValue() ?: cardH
+    // The card no longer grows out of the poster that opened it: it appears in place, in a cross-fade, as on the Apple
+    // TV app. Resizing the full-size artwork at every frame of the opening was more than the Google TV Streamer's
+    // graphics could draw in a frame (30 to 65 ms each, 2026-11-24).
+    @Suppress("UNUSED_VARIABLE") val opener = origin
+    val startX = cardX
+    val startY = cardY
+    val startW = cardW
+    val startH = cardH
     val x = lerp(startX, cardX, enter)
     val y = lerp(startY, cardY, enter)
     val w = lerp(startW, cardW, enter)
     val h = lerp(startH, cardH, enter)
     val corner = lerp(36.dp, 0.dp, expand)
-    val imageAlpha = ((enter - 0.45f) / 0.55f).coerceIn(0f, 1f)
+    val imageAlpha = enter
     val shape = RoundedCornerShape(corner)
     val neighborAlpha = (1f - expand) * imageAlpha
 
     Box(Modifier.fillMaxSize().graphicsLayer {
         val px = scrollPx()
         alpha = (1f - px / 700f).coerceIn(0f, 1f)
+        compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.ModulateAlpha
         translationX = slide()
         translationY = -px.toFloat()
     }) {
@@ -536,7 +587,15 @@ internal fun HeroLayer(
                 .graphicsLayer {
                     this.shape = shape
                     clip = true
-                    compositingStrategy = if (videoOn) androidx.compose.ui.graphics.CompositingStrategy.Auto else androidx.compose.ui.graphics.CompositingStrategy.Offscreen
+                    // Into one layer only once still: while the page opens its image fades and grows at every frame, and
+                    // the layer was drawn again each time on top of the screen.
+                    // The colour block fades in with the image; one layer only once still.
+                    alpha = (enter * 1.6f).coerceAtMost(1f)
+                    compositingStrategy = when {
+                        enter < 1f -> androidx.compose.ui.graphics.CompositingStrategy.ModulateAlpha
+                        videoOn -> androidx.compose.ui.graphics.CompositingStrategy.Auto
+                        else -> androidx.compose.ui.graphics.CompositingStrategy.Offscreen
+                    }
                 }
                 .background(blockColor)
                 .pointerInput(Unit) { detectTapGestures { onTap() } },
@@ -586,16 +645,19 @@ private fun HeroText(
 ) {
     val kind = item.kind()
     // Read off the main thread: behind a long query of a worker, this read froze the page for seconds (TV, 2026-11-08).
-    val last by produceState<com.sokoul.desktop.data.Resume?>(null, item.id) { value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { deps.catalog.lastWatched(kind, item.id) } }
+    val last by androidx.compose.runtime.key(kind, item.id) {
+        produceState<com.sokoul.desktop.data.Resume?>(null) {
+            value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { deps.catalog.lastWatched(kind, item.id) }
+        }
+    }
     val resume = last?.takeIf { !it.finished }
-    val next by produceState<NextEp?>(null, item.id, info?.seasons, last) {
+    val next by produceState<NextEp?>(null, kind, item.id, info?.seasons, last) {
+        value = null
         val l = last ?: return@produceState
         if (kind != "tv" || !l.finished) return@produceState
         val s = l.season ?: 1
         val e = l.episode ?: 1
-        val here = runCatching { deps.catalog.season(item.id, s) }.getOrDefault(emptyList())
-        val found = here.firstOrNull { it.episode == e + 1 }
-            ?: if (s < (info?.seasons ?: s)) runCatching { deps.catalog.season(item.id, s + 1) }.getOrDefault(emptyList()).firstOrNull() else null
+        val found = com.sokoul.pc.playback.ui.EpisodeOrder.next(s, e, info?.seasons ?: s) { deps.catalog.season(item.id, it) }
         value = found?.let { NextEp(it.season, it.episode, it.runtimeMin, it.airDate) }
     }
     val playKind = HeroLogic.playKind(kind == "tv", last != null, last?.finished == true, next, java.time.LocalDate.now())
@@ -619,7 +681,7 @@ private fun HeroText(
         kind == "tv" -> "S1 E1"
         else -> info?.runtimeMin?.takeIf { it > 0 }?.let { durationLabel(it) }
     }
-    val request = remember(item.id, resume, playKind, next) {
+    val request = remember(kind, item.id, resume, playKind, next) {
         when (playKind) {
             PlayKind.Resume -> PlayRequest(kind, item.id, resume?.season ?: if (kind == "tv") 1 else null, resume?.episode ?: if (kind == "tv") 1 else null, item.title, item.title, item.backdrop)
             PlayKind.Next, PlayKind.New -> PlayRequest(kind, item.id, next?.season ?: 1, next?.episode ?: 1, item.title, item.title, item.backdrop)
@@ -633,16 +695,17 @@ private fun HeroText(
         deps.playback.prefetch(request)
     }
     Box(Modifier.fillMaxWidth().height(HeroAreaHeight)) {
-        Column(Modifier.align(Alignment.BottomStart).padding(start = startPadding, bottom = 110.dp).width(940.dp)) {
+        Column(Modifier.align(Alignment.BottomStart).padding(start = startPadding, bottom = 110.dp).width(minOf(940.dp, pageWidth - startPadding - 40.dp))) {
             HeroInfo(deps, kind, item.id, item.title, item.overview, info, extras, remaining, onFocused)
             Spacer(Modifier.height(28.dp))
             // The buttons are chained by hand: arrows go along the row, never down to what is under the page.
             val listButton = remember { FocusRequester() }
+            val restartButton = remember { FocusRequester() }
             val alertButton = remember { FocusRequester() }
             val soundButton = remember { FocusRequester() }
             val hasTrailers = info?.trailerVideos().orEmpty().isNotEmpty()
             val soundShown = deps.trailer.playing
-            val chain = listOfNotNull(primary, listButton, alertButton, docButton, trailersButton.takeIf { hasTrailers }, soundButton.takeIf { soundShown })
+            val chain = listOfNotNull(primary, restartButton.takeIf { resume != null && cinema == null }, listButton, alertButton, docButton, trailersButton.takeIf { hasTrailers }, soundButton.takeIf { soundShown })
             // Keys, not focusProperties: custom focus destinations left Compose's focus tree broken ("ActiveParent must have a focusedChild").
             fun link(me: FocusRequester) = Modifier.onPreviewKeyEvent { e ->
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
@@ -661,6 +724,15 @@ private fun HeroText(
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                 PlayCard(label, sub, progress, { onPlay(request) }, link(primary).testTag("title-play"), primary, onFocused)
+                // Start Over (Disney+): the same episode or film from its first second; the resume point stays until then.
+                if (resume != null && cinema == null) LabeledRoundButton(
+                    Icons.Filled.Replay, L("Start Over", "Recommencer").text(), { onPlay(request.copy(fromStart = true)) },
+                    link(restartButton).testTag("title-restart"), restartButton,
+                    onFocused = {
+                        onFocused(it)
+                        if (it) onOtherButton()
+                    },
+                )
                 val inList = deps.myList.contains(item)
                 LabeledRoundButton(
                     if (inList) Icons.Filled.Check else Icons.Filled.Add,
@@ -731,7 +803,6 @@ private fun Sections(
     item: TmdbItem,
     info: TmdbInfo?,
     saga: SagaTile?,
-    extras: com.sokoul.pc.data.TitleExtras = com.sokoul.pc.data.TitleExtras(),
     onOpenSaga: (SagaTile, CardOrigin?) -> Unit,
     onRowsFocused: (Boolean) -> Unit,
     onPlay: (PlayRequest) -> Unit,
@@ -743,7 +814,8 @@ private fun Sections(
     onPlayThemes: (List<com.sokoul.pc.data.anime.AnimeTheme>, Int, CardOrigin?) -> Unit = { _, _, _ -> },
     background: Color = Palette.Background,
 ) {
-    val link by produceState<com.sokoul.pc.data.anime.AnimeLink?>(null, item.id, info?.originalLanguage) {
+    val link by produceState<com.sokoul.pc.data.anime.AnimeLink?>(null, item.kind(), item.id, info?.originalLanguage) {
+        value = null
         // Asked again a few times: when AniList is busy for a moment, the anime page used to stay without its book,
         // calendar and music until it was opened again.
         repeat(LINK_TRIES) { attempt ->
@@ -753,9 +825,10 @@ private fun Sections(
             if (attempt < LINK_TRIES - 1) kotlinx.coroutines.delay(LINK_RETRY_MS)
         }
     }
-    val similar by produceState(emptyList<TmdbItem>(), item.id) { value = deps.catalog.similar(item.kind(), item.id) }
+    val similar by produceState(emptyList<TmdbItem>(), item.kind(), item.id) { value = deps.catalog.similar(item.kind(), item.id) }
     // Links through the people who made it (Movix's CinéGraph, as rows): asked once the details name them.
-    val links by produceState<com.sokoul.pc.data.CineLinks?>(null, item.id, info?.directorId, info?.cast?.size) {
+    val links by produceState<com.sokoul.pc.data.CineLinks?>(null, item.kind(), item.id, info?.directorId, info?.cast?.size) {
+        value = null
         val i = info ?: return@produceState
         value = kotlinx.coroutines.coroutineScope {
             val directorWorks = this.async { i.directorId?.let { runCatching { deps.catalog.person(it) }.getOrNull() }?.let { it.directed } .orEmpty() }
@@ -776,11 +849,11 @@ private fun Sections(
         } else if (item.kind() == "tv") {
             Episodes(deps, item, info, onPlay)
         }
-        ExperienceBlock(deps, item, info, extras)
         val cast = info?.cast.orEmpty()
         if (cast.isNotEmpty()) {
             CardRow(tr(Text.RowCast), cast, key = { "${it.id}-${it.name}" }, testTag = "row-cast") { _, p -> PersonCard(p, onOpenPerson) }
         }
+        BonusRow(info, onPlayTrailer)
         saga?.let { s ->
             CardRow(tr(Text.PartOfCollection), listOf(s), key = { it.key }, testTag = "row-part-of") { _, tile ->
                 SagaLandscapeTile(tile, "part-of-${tile.key}", remember { FocusRequester() }) { t, origin -> onOpenSaga(t, origin) }
@@ -812,7 +885,7 @@ private fun Sections(
                 }
             }
         }
-        AboutCard(item, info, onAbout)
+        DetailsBlock(item, info, onAbout)
     }
 }
 
@@ -833,19 +906,10 @@ internal fun PersonCard(person: TmdbPerson, onOpen: (TmdbPerson, CardOrigin) -> 
 private fun Episodes(deps: AppDeps, item: TmdbItem, info: TmdbInfo?, onPlay: (PlayRequest) -> Unit, fans: com.sokoul.pc.data.anime.AnimeLink? = null) {
     val seasons = (1..(info?.seasons ?: 1).coerceAtLeast(1)).toList()
     var season by remember(item.id) { mutableIntStateOf(1) }
-    val episodes by produceState(emptyList<TmdbEpisode>(), item.id, season) { value = deps.catalog.season(item.id, season) }
     val kinds by produceState(emptyMap<Int, com.sokoul.pc.data.anime.EpisodeKind>(), fans) {
         value = if (fans != null) kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { deps.anime?.episodeKinds(fans).orEmpty() } else emptyMap()
     }
     var hideFiller by remember(item.id) { mutableStateOf(false) }
-    // Unknown when a season before is of unknown size: then no note says what an episode adapts.
-    val before by produceState<Int?>(null, item.id, season) {
-        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { deps.anime?.seasonOffset(item.id, season) }
-    }
-    val seen by produceState(emptyMap<Int?, com.sokoul.desktop.data.Resume>(), item.id, season) {
-        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { deps.catalog.watchedEpisodes(item.id).filter { it.season == season }.associateBy { it.episode } }
-    }
-    val shownEpisodes = if (hideFiller) episodes.filter { e -> before?.let { kinds[it + e.episode] } != com.sokoul.pc.data.anime.EpisodeKind.Filler } else episodes
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         // Scrolls with the focus: One Piece has 22 seasons, and past the tenth they were off screen, out of reach.
         Row(
@@ -857,14 +921,37 @@ private fun Episodes(deps: AppDeps, item: TmdbItem, info: TmdbInfo?, onPlay: (Pl
                 com.sokoul.pc.anime.FillerPill(hideFiller) { hideFiller = !hideFiller }
             }
         }
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = Metrics.PageMargin, vertical = CardMetrics.RowVerticalPadding),
-            horizontalArrangement = Arrangement.spacedBy(CardMetrics.Gap),
-            modifier = Modifier.testTag("row-episodes"),
-        ) {
-            items(shownEpisodes, key = { "${it.season}-${it.episode}" }) { e ->
-                EpisodeCard(e, seen[e.episode], note = { val b = before; if (fans != null && b != null) com.sokoul.pc.anime.EpisodeNote(deps, fans, b + e.episode, kinds[b + e.episode]) }) {
-                    onPlay(PlayRequest("tv", item.id, e.season, e.episode, item.title, e.name, e.still ?: item.backdrop))
+        androidx.compose.runtime.key(item.id, season) {
+            val episodes by produceState<List<TmdbEpisode>?>(null) { value = deps.catalog.season(item.id, season) }
+            // Unknown when a season before is of unknown size: then no note says what an episode adapts.
+            val before by produceState<Int?>(null, fans) {
+                if (fans != null) value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                    deps.anime?.seasonOffset(item.id, season)
+                }
+            }
+            val seen by produceState(emptyMap<Int?, com.sokoul.desktop.data.Resume>()) {
+                value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    deps.catalog.watchedEpisodes(item.id).filter { it.season == season }.associateBy { it.episode }
+                }
+            }
+            val loaded = episodes
+            when {
+                loaded == null -> Label(L("Loading…", "Chargement…").text(), Type.Meta, Palette.Secondary, Modifier.padding(horizontal = Metrics.PageMargin))
+                loaded.isEmpty() -> Label(L("No episodes were returned by this provider.", "Le fournisseur n’a renvoyé aucun épisode.").text(),
+                    Type.Meta, Palette.Secondary, Modifier.padding(horizontal = Metrics.PageMargin))
+                else -> {
+                    val shownEpisodes = if (hideFiller) loaded.filter { e -> before?.let { kinds[it + e.episode] } != com.sokoul.pc.data.anime.EpisodeKind.Filler } else loaded
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = Metrics.PageMargin, vertical = CardMetrics.RowVerticalPadding),
+                        horizontalArrangement = Arrangement.spacedBy(CardMetrics.Gap),
+                        modifier = Modifier.testTag("row-episodes"),
+                    ) {
+                        items(shownEpisodes, key = { "${it.season}-${it.episode}" }) { e ->
+                            EpisodeCard(e, seen[e.episode], note = { val b = before; if (fans != null && b != null) com.sokoul.pc.anime.EpisodeNote(deps, fans, b + e.episode, kinds[b + e.episode]) }) {
+                                onPlay(PlayRequest("tv", item.id, e.season, e.episode, item.title, e.name, e.still ?: item.backdrop))
+                            }
+                        }
+                    }
                 }
             }
         }

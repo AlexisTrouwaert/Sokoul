@@ -9,14 +9,24 @@ object StartClock {
     private val steps = ConcurrentLinkedQueue<String>()
     @Volatile private var startedAt = System.currentTimeMillis()
 
-    fun start(what: String) {
+    /** [title]: what the viewer chose, for the start log kept in Settings (StartLog); null for a tool's own measure. */
+    fun start(what: String, title: String? = null) {
         steps.clear()
         startedAt = System.currentTimeMillis()
-        note(what)
+        recording = title != null
+        if (title != null) StartLog.begin(title, "+0 ms $what")
+        note(what, log = false)
     }
 
-    fun note(step: String) {
-        steps += "+" + (System.currentTimeMillis() - startedAt) + " ms " + step
+    @Volatile private var recording = false
+
+    fun note(step: String) = note(step, log = true)
+
+    private fun note(step: String, log: Boolean) {
+        val line = "+" + (System.currentTimeMillis() - startedAt) + " ms " + step
+        steps += line
+        if (log && recording) StartLog.add(line)
+        com.sokoul.pc.Platform.startDiagnostic(line)
         while (steps.size > MAX) steps.poll()
     }
 

@@ -40,11 +40,62 @@ class SourceRulesTest {
         size: Long? = 4 * gb,
         host: String? = "a",
         origin: VersionOrigin = VersionOrigin.Debrid,
-    ) = PlayVersion(key, origin, key, lang, q, hdr, sizeBytes = size, readiness = Readiness.Ready, providerHost = host, open = { _, _ -> error("not opened") })
+        announcedAudio: List<String> = emptyList(),
+        readiness: Readiness = Readiness.Ready,
+    ) = PlayVersion(key, origin, key, lang, q, hdr, sizeBytes = size, readiness = readiness, providerHost = host, announcedAudio = announcedAudio, open = { _, _ -> error("not opened") })
 
     private val tv = DeviceCaps(hdr10 = true, dolbyVision = true, maxHeight = 2160)
     private val tvHd = DeviceCaps(hdr10 = true, dolbyVision = false, maxHeight = 2160)
     private val keys = { l: List<PlayVersion> -> l.map { it.key } }
+
+    @Test
+    fun a_held_debrid_version_is_preferred_to_a_web_fallback_at_equal_audio_and_quality() {
+        val debrid = v("debrid", origin = VersionOrigin.Debrid)
+        val web = v("web", origin = VersionOrigin.Web)
+        assertEquals(listOf("debrid", "web"), keys(VersionRanking.rank(listOf(web, debrid), frenchFirst, true)))
+        val original = v("original", lang = AudioLanguage.VO)
+        assertEquals("web", VersionRanking.rank(listOf(original, web), frenchFirst, true).first().key)
+    }
+
+    @Test
+    fun a_web_link_comes_after_a_debrid_version_not_yet_checked() {
+        // Torrentio's quick results carry no cached mark: Unknown. A streaming site's link said "Likely" went before them.
+        val unchecked = v("debrid", readiness = Readiness.Unknown)
+        val web = v("web", origin = VersionOrigin.Web, readiness = Readiness.Likely)
+        assertEquals(listOf("debrid", "web"), keys(VersionRanking.rank(listOf(web, unchecked), frenchFirst, true)))
+        // A web link still comes before a debrid file to download first.
+        val toDownload = v("download", readiness = Readiness.NotCached)
+        assertEquals(listOf("web", "download"), keys(VersionRanking.rank(listOf(toDownload, web), frenchFirst, true)))
+    }
+
+    @Test
+    fun a_4k_the_device_decodes_goes_first_even_on_a_smaller_screen() {
+        // Google TV Streamer on a 720p set: a 4K it decodes before a 1080p; at 4K, SDR before HDR10 on an SDR screen.
+        val hdSet = DeviceCaps(hdr10 = false, dolbyVision = false, maxHeight = 720, decodes4k = true)
+        val best = frenchFirst.copy(bestQualityFirst = true)
+        val fhd = v("fhd")
+        val uhdHdr = v("uhd-hdr", q = VideoQuality.UHD_4K, hdr = HdrFormat.HDR10)
+        val uhdSdr = v("uhd-sdr", q = VideoQuality.UHD_4K)
+        assertEquals(listOf("uhd-sdr", "uhd-hdr", "fhd"), keys(VersionRanking.rank(listOf(fhd, uhdHdr, uhdSdr), best, true, readyFirst = false, caps = hdSet)))
+        // At 4K, what is ready goes before a cleaner picture not yet checked.
+        val uhdSdrUnknown = v("uhd-sdr-unknown", q = VideoQuality.UHD_4K, readiness = Readiness.Unknown)
+        assertEquals("uhd-hdr", VersionRanking.rank(listOf(uhdSdrUnknown, uhdHdr, fhd), best, true, readyFirst = false, caps = hdSet).first().key)
+        // A device that cannot decode 4K keeps it last.
+        val noUhd = hdSet.copy(decodes4k = false)
+        assertEquals("fhd", VersionRanking.rank(listOf(uhdSdr, fhd), best, true, readyFirst = false, caps = noUhd).first().key)
+    }
+
+    @Test
+    fun best_quality_first_does_not_put_dolby_vision_first_where_it_cannot_play() {
+        val dv = v("dv", q = VideoQuality.UHD_4K, hdr = HdrFormat.DOLBY_VISION)
+        val hdr10 = v("hdr10", q = VideoQuality.UHD_4K, hdr = HdrFormat.HDR10)
+        val best = frenchFirst.copy(bestQualityFirst = true)
+        assertEquals("hdr10", VersionRanking.rank(listOf(dv, hdr10), best, true, readyFirst = false, caps = tvHd).first().key)
+        assertEquals("dv", VersionRanking.rank(listOf(hdr10, dv), best, true, readyFirst = false, caps = tv).first().key)
+        // Still 4K before 1080p on a screen without Dolby Vision.
+        val fhd = v("fhd")
+        assertEquals("hdr10", VersionRanking.rank(listOf(fhd, dv, hdr10), best, true, readyFirst = false, caps = tvHd).first().key)
+    }
 
     @Test
     fun a_tv_that_shows_hdr_prefers_the_sharpest_then_the_richest() {
@@ -138,13 +189,71 @@ class SourceRulesTest {
         mem.noteGood("movie|wrong", AudioLanguage.VO, 1080)
         mem.noteFailure("movie|wrong", PlayFailure.WrongLanguage)
         mem.noteFailure("other|dead", PlayFailure.DeadLink)
+        mem.noteFailure("movie|blocked", PlayFailure.Blocked)
+
+        mem.noteFailure("movie|cut", PlayFailure.Cut)
 
         mem.clearTransientFailures("movie|")
 
-        assertNull(mem.failure("movie|dead"))
+        assertNull(mem.failure("movie|cut"))
+        // A dead link stays hidden for its day, even through a fresh search.
+        assertEquals(PlayFailure.DeadLink, mem.failure("movie|dead"))
         assertEquals(PlayFailure.WrongLanguage, mem.failure("movie|wrong"))
         assertEquals(AudioLanguage.VO, mem.fact("movie|wrong")?.language)
         assertEquals(PlayFailure.DeadLink, mem.failure("other|dead"))
+        // Blocked by its rights holder: no new search changes that.
+        assertEquals(PlayFailure.Blocked, mem.failure("movie|blocked"))
+    }
+
+    @Test
+    fun a_real_debrid_refusal_counts_for_hours_and_old_ones_are_forgotten() {
+        var clock = 0L
+        // Kept before 2026-11-24 under "blocked": mostly Real-Debrid pausing the account, not the files.
+        var stored: String? = "movie|old	blocked	${Long.MAX_VALUE}			"
+        val mem = SourceMemory({ stored }, { stored = it }, { clock })
+        assertNull(mem.failure("movie|old"))
+        mem.noteFailure("movie|new", PlayFailure.Blocked)
+        assertEquals(PlayFailure.Blocked, mem.failure("movie|new"))
+        clock += 7 * 3_600_000L
+        assertNull(mem.failure("movie|new"))
+    }
+
+    @Test
+    fun retrying_dead_links_clears_only_them_for_the_title() {
+        var now = 0L
+        var stored: String? = null
+        val mem = SourceMemory({ stored }, { stored = it }, { now })
+        mem.noteFailure("movie|dead", PlayFailure.DeadLink)
+        mem.noteFailure("movie|copy", PlayFailure.Blocked)
+        mem.noteFailure("movie|fake", PlayFailure.FakeFile)
+        mem.noteFailure("other|dead", PlayFailure.DeadLink)
+
+        // Read back from disk: Real-Debrid's refusal keeps its own cause.
+        assertEquals(PlayFailure.Blocked, SourceMemory({ stored }, { }, { now }).failure("movie|copy"))
+        // A fresh search keeps the dead links hidden (Alexis, PR #10).
+        mem.clearTransientFailures("movie|")
+        assertEquals(PlayFailure.DeadLink, mem.failure("movie|dead"))
+        assertEquals(PlayFailure.Blocked, mem.failure("movie|copy"))
+
+        mem.clearDeadLinks("movie|")
+
+        assertNull(mem.failure("movie|dead"))
+        assertNull(mem.failure("movie|copy"))
+        assertEquals(PlayFailure.FakeFile, mem.failure("movie|fake"))
+        assertEquals(PlayFailure.DeadLink, mem.fact("other|dead")?.failure)
+    }
+
+    @Test
+    fun dead_links_only_show_among_the_dead() {
+        val ok = v("ok")
+        val doubtful = PlayVersion("doubt", VersionOrigin.Debrid, "Another work", rejected = com.sokoul.pc.playback.session.Doubt.OtherWork, open = { _, _ -> error("not opened") })
+        val eligibility = com.sokoul.pc.playback.ui.SourceEligibility.entries
+        assertEquals(listOf(com.sokoul.pc.playback.ui.SourceEligibility.Compatible), eligibility.filter { it.keeps(ok) })
+        assertEquals(listOf(com.sokoul.pc.playback.ui.SourceEligibility.Excluded), eligibility.filter { it.keeps(doubtful) })
+        assertEquals(listOf(com.sokoul.pc.playback.ui.SourceEligibility.Dead), eligibility.filter { it.keeps(ok, dead = true) })
+        assertEquals(listOf(com.sokoul.pc.playback.ui.SourceEligibility.Dead), eligibility.filter { it.keeps(doubtful, dead = true) })
+        assertTrue(SourceRules.dead(PlayFailure.Blocked))
+        assertFalse(SourceRules.dead(PlayFailure.Cut))
     }
 
     @Test
@@ -204,12 +313,12 @@ class SourceRulesTest {
     }
 
     @Test
-    fun generic_multi_does_not_outrank_explicit_french_without_french_evidence() {
-        val multi = v("multi", q = VideoQuality.UHD_4K, lang = AudioLanguage.MULTI)
-        val vf = v("vf", q = VideoQuality.SD)
+    fun stronger_french_evidence_breaks_a_tie_at_the_same_quality() {
+        val multi = v("multi", lang = AudioLanguage.MULTI)
+        val vf = v("vf", announcedAudio = listOf("FR"))
         assertEquals(listOf("vf", "multi"), keys(VersionRanking.rank(listOf(multi, vf), frenchFirst, true)))
         assertEquals(listOf("multi", "vf"), keys(VersionRanking.rank(listOf(multi, vf), frenchFirst, true,
-            fact = { if (it.key == "multi") SourceFact(language = AudioLanguage.MULTI) else null })))
+            fact = { if (it.key == "multi") SourceFact(language = AudioLanguage.MULTI, codes = listOf("fr", "en")) else null })))
     }
 
     @Test

@@ -26,6 +26,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -100,6 +101,35 @@ private fun onOff(on: Boolean) = tr(if (on) Text.PrefOn else Text.PrefOff)
 
 private val GREEN = Color(0xFF30D158)
 
+/** How Settings is laid out: the TV and PC, a tablet held sideways (two panels), a tablet held upright (one column). */
+internal enum class SettingsLook { Tv, TabletWide, TabletUpright }
+
+internal val LocalSettingsLook = androidx.compose.runtime.staticCompositionLocalOf { SettingsLook.Tv }
+
+/**
+ * Rows at rest carry no fill (Figma "V2 · Réglages", TV and tablet): the glass panel or the group's plaque is the surface,
+ * and the white focus is the only shape that stands out.
+ */
+@Composable
+internal fun settingsRowRest(): Color = Color.Transparent
+
+/** The plaque behind a group of rows on a tablet held upright (DESIGN.md surface/plaque). */
+private val Plaque = Color(0xFF1C1C1E)
+
+/**
+ * A group of rows under an optional small title. Upright on a tablet the rows share one rounded plaque, as in the Figma
+ * "Tablette portrait" boards; elsewhere they sit straight on the panel.
+ */
+@Composable
+internal fun RowGroup(title: String? = null, content: @Composable () -> Unit) {
+    title?.let { GroupTitle(it) }
+    if (LocalSettingsLook.current == SettingsLook.TabletUpright) {
+        androidx.compose.foundation.layout.Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(Plaque)) { content() }
+    } else {
+        content()
+    }
+}
+
 /** A small title inside a pane, between groups of rows. */
 @Composable
 internal fun GroupTitle(text: String) {
@@ -110,7 +140,7 @@ internal fun GroupTitle(text: String) {
 @Composable
 private fun InfoRow(label: String, value: String, dot: Color? = null, tag: String? = null) {
     Row(
-        Modifier.fillMaxWidth().height(Metrics_ROW).clip(RoundedCornerShape(com.sokoul.pc.theme.Corners.Row)).background(com.sokoul.pc.theme.Glass.RowRest)
+        Modifier.fillMaxWidth().height(Metrics_ROW).clip(RoundedCornerShape(com.sokoul.pc.theme.Corners.Row)).background(settingsRowRest())
             .let { if (tag != null) it.testTag(tag) else it }.padding(horizontal = com.sokoul.pc.ui.PanelMetrics.RowPad),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -154,26 +184,57 @@ private fun ConfirmRow(label: String, tag: String, doneText: String, onConfirm: 
     )
 }
 
-/** Profile, then every service with its state, and the way to change them. */
+/** Who is watching and whether Sokoul asks at start (settings-redesign: "For this profile › Profile"). */
 @Composable
-internal fun AccountsPane(prefs: DesktopPrefs?, profile: com.sokoul.pc.data.Profile?, onProfiles: (() -> Unit)?, onCredentials: () -> Unit, hooks: SettingsHooks) {
-    if (profile?.kids != true) hooks.onDebridTools?.let { open ->
-        SettingsRow(L("Host link tools", "Outils de liens hébergés").text(), L("Unlock a download link", "Débrider un lien de téléchargement").text(), true, remember { FocusRequester() }, open, "settings-debrid-tools")
-    }
+internal fun ProfilePane(prefs: DesktopPrefs?, profile: com.sokoul.pc.data.Profile?, onProfiles: (() -> Unit)?) = RowGroup {
     if (onProfiles != null) {
-        GroupTitle(L("Profile", "Profil").text())
         SettingsRow(L("Who is watching", "Qui regarde").text(), profile?.name, true, remember { FocusRequester() }, onProfiles, "settings-profiles")
-        if (prefs != null) {
-            ChoiceRow(L("Ask at start", "Demander au lancement").text(), "pref-profile-prompt", ON_OFF, prefs.profilePrompt, ::onOff) { prefs.profilePrompt = it }
+    }
+    if (prefs != null) {
+        ChoiceRow(L("Ask at start", "Demander au lancement").text(), "pref-profile-prompt", ON_OFF, prefs.profilePrompt, ::onOff) { prefs.profilePrompt = it }
+    }
+}
+
+/** Every service with its state, and the way to change them ("For this device › Content sources"). */
+@Composable
+internal fun SourcesPane(onCredentials: () -> Unit, hooks: SettingsHooks) {
+    val services = remember { hooks.services() }
+    RowGroup {
+        services.forEach { s ->
+            InfoRow(s.label, if (s.configured) (s.source ?: L("Set up", "Configuré").text()) else L("Not set", "Non renseigné").text(), if (s.configured) GREEN else Color(0xFF636366), "service-${s.label}")
         }
     }
-    GroupTitle(L("Services", "Services").text())
-    val services = remember { hooks.services() }
-    services.forEach { s ->
-        InfoRow(s.label, if (s.configured) (s.source ?: L("Set up", "Configuré").text()) else L("Not set", "Non renseigné").text(), if (s.configured) GREEN else Color(0xFF636366), "service-${s.label}")
-    }
     Spacer(Modifier.height(10.dp))
-    SettingsRow(tr(Text.SettingsCredentials), null, true, remember { FocusRequester() }, onCredentials, "settings-credentials")
+    RowGroup { SettingsRow(tr(Text.SettingsCredentials), null, true, remember { FocusRequester() }, onCredentials, "settings-credentials") }
+}
+
+/** The link tools, then housekeeping and credits ("For this device › Tools and maintenance"). */
+@Composable
+internal fun ToolsPane(profile: com.sokoul.pc.data.Profile?, hooks: SettingsHooks) {
+    if (profile?.kids != true) hooks.onDebridTools?.let { open ->
+        RowGroup { SettingsRow(L("Unlock a download link", "Débrider un lien de téléchargement").text(), null, true, remember { FocusRequester() }, open, "settings-debrid-tools") }
+    }
+    StartLogSection()
+    AboutPane(hooks)
+}
+
+/**
+ * The last starts, newest first: the title, how it ended (image time and version, or the failure), and on a press every
+ * step, to see why a film fell to the web or IPTV (StartLog). Nothing in it is a key or a link.
+ */
+@Composable
+private fun StartLogSection() {
+    val entries = remember { com.sokoul.pc.playback.session.StartLog.recent().take(8) }
+    var open by remember { mutableStateOf<Int?>(null) }
+    RowGroup(L("Last starts", "Derniers lancements").text()) {
+        if (entries.isEmpty()) InfoRow(L("Nothing started yet", "Rien n'a encore été lancé").text(), "", tag = "settings-start-log-empty")
+        entries.forEachIndexed { i, e ->
+            SettingsRow("${e.at} · ${e.title}", e.outcome(), true, remember { FocusRequester() }, { open = if (open == i) null else i }, "settings-start-log-$i")
+            if (open == i) androidx.compose.foundation.layout.Column(Modifier.padding(start = 30.dp, end = 30.dp, bottom = 12.dp).testTag("settings-start-log-steps")) {
+                e.steps.forEach { line -> Label(line, Type.Body.copy(fontSize = 20.sp), Palette.Secondary, maxLines = 2) }
+            }
+        }
+    }
 }
 
 /** Accent colour of the progress bars as swatches to pick from; white keeps Sokoul's own look. */
@@ -220,21 +281,22 @@ private fun Swatch(c: AccentColor, selected: Boolean, onClick: () -> Unit) {
 /** The home page's rows, and the choices that belong to it (Movix: Accueil). */
 @Composable
 internal fun HomePane(prefs: DesktopPrefs, hooks: SettingsHooks) {
-    SettingsRow(L("Home rows", "Rangées de l'accueil").text(), L("Order and hiding", "Ordre et masquage").text(), true, remember { FocusRequester() }, hooks.onHomeRows, "pref-home-rows")
-    GroupTitle(L("Behaviour", "Comportement").text())
-    ChoiceRow(L("Automatic trailers", "Bandes-annonces automatiques").text(), "pref-auto-trailers", ON_OFF, prefs.autoTrailers, ::onOff) { prefs.autoTrailers = it }
-    ChoiceRow(
-        L("Screensaver", "Économiseur d'écran").text(), "pref-screensaver", listOf(0, 3, 5, 10, 15, 30), prefs.screensaverMinutes,
-        { if (it == 0) tr(Text.PrefOff) else L("After $it min", "Après $it min").text() },
-    ) { prefs.screensaverMinutes = it }
+    RowGroup { SettingsRow(L("Home rows", "Rangées de l'accueil").text(), L("Order and hiding", "Ordre et masquage").text(), true, remember { FocusRequester() }, hooks.onHomeRows, "pref-home-rows") }
+    RowGroup(L("Behaviour", "Comportement").text()) {
+        ChoiceRow(L("Automatic trailers", "Bandes-annonces automatiques").text(), "pref-auto-trailers", ON_OFF, prefs.autoTrailers, ::onOff) { prefs.autoTrailers = it }
+        ChoiceRow(
+            L("Screensaver", "Économiseur d'écran").text(), "pref-screensaver", listOf(0, 3, 5, 10, 15, 30), prefs.screensaverMinutes,
+            { if (it == 0) tr(Text.PrefOff) else L("After $it min", "Après $it min").text() },
+        ) { prefs.screensaverMinutes = it }
+    }
 }
 
 /** Which entries of the top menu are shown (Movix: Menu de gauche). At least one stays. */
 @Composable
-internal fun MenuPane(prefs: DesktopPrefs, hooks: SettingsHooks) {
+internal fun MenuPane(prefs: DesktopPrefs, hooks: SettingsHooks, title: String? = null) {
     var rev by remember { mutableIntStateOf(0) }
     val all = hooks.menu.map { it.first }
-    key(rev) {
+    RowGroup(title) { key(rev) {
         hooks.menu.forEach { (id, name) ->
             ChoiceRow(name, "pref-menu-$id", ON_OFF, id !in prefs.railHidden, { if (it) L("Shown", "Affichée").text() else L("Hidden", "Masquée").text() }) { show ->
                 val before = prefs.railHidden
@@ -245,7 +307,7 @@ internal fun MenuPane(prefs: DesktopPrefs, hooks: SettingsHooks) {
                 if (!show && id !in after) rev++
             }
         }
-    }
+    } }
     Label(
         L("Settings always stays: it is how you get back here.", "Les Réglages restent toujours : c'est par là que vous revenez ici.").text(),
         Type.Body, Palette.Secondary, Modifier.padding(start = 30.dp, top = 12.dp, end = 30.dp),
@@ -272,65 +334,78 @@ internal fun SubtitlesPane(prefs: DesktopPrefs) {
         }
     }
     key(rev) {
-        GroupTitle(L("Look", "Aspect").text())
-        ChoiceRow(L("Size", "Taille").text(), "pref-sub-size", SubtitleSize.entries, prefs.subtitleSize, { sizeText(it) }) { prefs.subtitleSize = it; look++ }
-        ChoiceRow(L("Colour", "Couleur").text(), "pref-sub-color", SubtitleColor.entries, prefs.subtitleColor, { colorText(it) }) { prefs.subtitleColor = it; look++ }
-        ChoiceRow(L("Background", "Fond").text(), "pref-sub-background", SubtitleBackground.entries, prefs.subtitleBackground, { backgroundText(it) }) { prefs.subtitleBackground = it; look++ }
-        ChoiceRow(L("Position", "Position").text(), "pref-sub-position", SubtitlePosition.entries, prefs.subtitlePosition, { positionText(it) }) { prefs.subtitlePosition = it; look++ }
-        ChoiceRow(L("Font", "Police").text(), "pref-sub-font", SubtitleFont.entries, prefs.subtitleFont, { it.label() }) { prefs.subtitleFont = it; look++ }
-        GroupTitle(L("Automatic", "Automatiques").text())
+        RowGroup(L("Look", "Aspect").text()) {
+            ChoiceRow(L("Size", "Taille").text(), "pref-sub-size", SubtitleSize.entries, prefs.subtitleSize, { sizeText(it) }) { prefs.subtitleSize = it; look++ }
+            ChoiceRow(L("Colour", "Couleur").text(), "pref-sub-color", SubtitleColor.entries, prefs.subtitleColor, { colorText(it) }) { prefs.subtitleColor = it; look++ }
+            ChoiceRow(L("Background", "Fond").text(), "pref-sub-background", SubtitleBackground.entries, prefs.subtitleBackground, { backgroundText(it) }) { prefs.subtitleBackground = it; look++ }
+            ChoiceRow(L("Position", "Position").text(), "pref-sub-position", SubtitlePosition.entries, prefs.subtitlePosition, { positionText(it) }) { prefs.subtitlePosition = it; look++ }
+            ChoiceRow(L("Font", "Police").text(), "pref-sub-font", SubtitleFont.entries, prefs.subtitleFont, { it.label() }) { prefs.subtitleFont = it; look++ }
+        }
         // Off, automatic (the interface language when the audio heard is another one), or always one language.
-        ChoiceRow(
+        RowGroup(L("Automatic", "Automatiques").text()) { ChoiceRow(
             tr(Text.PrefSubtitles), "pref-subtitles", listOf(AudioIntent.SUBTITLES_OFF, AudioIntent.SUBTITLES_AUTO) + AUDIO_LANGUAGE_CHOICES, prefs.audioIntent.subtitles,
             { mode -> when (mode) {
                 AudioIntent.SUBTITLES_OFF -> tr(Text.SubtitlesOff)
                 AudioIntent.SUBTITLES_AUTO -> L("Automatic", "Automatiques").text()
                 else -> com.sokoul.pc.playback.ui.languageName(mode)
             } },
-        ) { prefs.audioIntent = prefs.audioIntent.copy(subtitles = it) }
+        ) { prefs.audioIntent = prefs.audioIntent.copy(subtitles = it) } }
     }
     Spacer(Modifier.height(10.dp))
-    SettingsRow(
-        L("Reset the default style", "Rétablir le style par défaut").text(), null, false, remember { FocusRequester() },
-        {
-            prefs.resetSubtitleStyle()
-            rev++
-        },
-        "pref-sub-reset",
-    )
+    RowGroup {
+        SettingsRow(
+            L("Reset the default style", "Rétablir le style par défaut").text(), null, false, remember { FocusRequester() },
+            {
+                prefs.resetSubtitleStyle()
+                rev++
+            },
+            "pref-sub-reset",
+        )
+    }
 }
 
 /** Starting a title, which version to prefer, quality, the next episode and the picture. */
 @Composable
 internal fun PlaybackPane(prefs: DesktopPrefs, hooks: SettingsHooks = SettingsHooks()) {
-    GroupTitle(L("Starting", "Démarrage").text())
-    ChoiceRow(tr(Text.PrefStart), "pref-start", StartMode.entries, prefs.startMode, ::startLabel) { prefs.startMode = it }
-    ChoiceRow(L("Next episode automatically", "Épisode suivant automatique").text(), "pref-auto-next", ON_OFF, prefs.autoNext, ::onOff) { prefs.autoNext = it }
-    GroupTitle(L("Which version", "Quelle version").text())
-    // Any language, in order: the first one a version offers is played (book section 3).
-    SettingsRow(L("Audio languages", "Langues audio").text(), audioIntentSummary(prefs.audioIntent), true, remember { FocusRequester() }, hooks.onAudioLanguages, "pref-audio")
-    ChoiceRow(tr(Text.PrefOrigin), "pref-origin", PreferredOrigin.entries, prefs.preferredOrigin, ::originLabel) { prefs.preferredOrigin = it }
-    ChoiceRow(L("Remember hoster chosen for each source", "Mémoriser le lecteur choisi pour chaque source").text(), "pref-remember-hoster", ON_OFF, prefs.rememberSourceHosters, ::onOff) { prefs.rememberSourceHosters = it }
-    ChoiceRow(L("Best quality first", "Meilleure qualité d'abord").text(), "pref-best-quality", ON_OFF, prefs.bestQualityFirst, ::onOff) { prefs.bestQualityFirst = it }
-    GroupTitle(L("Search services", "Services de recherche").text())
+    RowGroup(L("Starting", "Démarrage").text()) {
+        ChoiceRow(tr(Text.PrefStart), "pref-start", StartMode.entries, prefs.startMode, ::startLabel) { prefs.startMode = it }
+        ChoiceRow(L("Next episode automatically", "Épisode suivant automatique").text(), "pref-auto-next", ON_OFF, prefs.autoNext, ::onOff) { prefs.autoNext = it }
+    }
+    RowGroup(L("Which version", "Quelle version").text()) {
+        // Any language, in order: the first one a version offers is played (book section 3).
+        SettingsRow(L("Audio languages", "Langues audio").text(), audioIntentSummary(prefs.audioIntent), true, remember { FocusRequester() }, hooks.onAudioLanguages, "pref-audio")
+        ChoiceRow(tr(Text.PrefOrigin), "pref-origin", PreferredOrigin.entries, prefs.preferredOrigin, ::originLabel) { prefs.preferredOrigin = it }
+        ChoiceRow(L("Best quality first", "Meilleure qualité d'abord").text(), "pref-best-quality", ON_OFF, prefs.bestQualityFirst, ::onOff) { prefs.bestQualityFirst = it }
+        ChoiceRow(L("Remember hoster chosen for each source", "Mémoriser le lecteur choisi pour chaque source").text(), "pref-remember-hoster", ON_OFF, prefs.rememberSourceHosters, ::onOff) { prefs.rememberSourceHosters = it }
+    }
     var services by remember { mutableStateOf(prefs.searchServices) }
-    com.sokoul.iptv.data.debrid.SourceAddon.entries.forEach { service ->
+    RowGroup(L("Search services", "Services de recherche").text()) { com.sokoul.iptv.data.debrid.SourceAddon.entries.forEach { service ->
         // Keep the final active service on, including the choice row's own remembered value.
         val choices = if (services.size == 1 && service in services) listOf(true) else ON_OFF
         ChoiceRow(service.label, "pref-service-${service.name.lowercase()}", choices, service in services, ::onOff) { enabled ->
             services = if (enabled) services + service else services - service
             prefs.searchServices = services
         }
-    }
+    } }
     SourcePriorityRows(prefs, false)
     SourcePriorityRows(prefs, true)
-    ChoiceRow(tr(Text.PrefMaxQuality), "pref-quality", MaxQuality.entries, prefs.maxQuality, { it.label }) { prefs.maxQuality = it }
-    ChoiceRow(tr(Text.PrefMaxSize), "pref-size", MaxSize.entries, prefs.maxSize, { it.gigabytes?.let { g -> "$g GB" } ?: tr(Text.PrefNoLimit) }) { prefs.maxSize = it }
-    GroupTitle(L("Picture and sound", "Image et son").text())
-    ChoiceRow(L("Picture format", "Format de l'image").text(), "pref-video-format", VideoFormat.entries, prefs.videoFormat, { it.label() }) { prefs.videoFormat = it }
-    ChoiceRow(tr(Text.PrefBuffer), "pref-buffer", BufferProfile.entries, prefs.buffer, ::bufferLabel) { prefs.buffer = it }
-    GroupTitle(L("Live TV", "Télévision en direct").text())
-    ChoiceRow(tr(Text.PrefLivePreview), "pref-live-preview", ON_OFF, prefs.livePreview, ::onOff) { prefs.livePreview = it }
+    RowGroup(L("Quality and size", "Qualité et taille").text()) {
+        ChoiceRow(tr(Text.PrefMaxQuality), "pref-quality", MaxQuality.entries, prefs.maxQuality, { it.label }) { prefs.maxQuality = it }
+        ChoiceRow(tr(Text.PrefMaxSize), "pref-size", MaxSize.entries, prefs.maxSize, { it.gigabytes?.let { g -> "$g GB" } ?: tr(Text.PrefNoLimit) }) { prefs.maxSize = it }
+    }
+    RowGroup(L("Picture and sound", "Image et son").text()) {
+        ChoiceRow(L("Picture format", "Format de l'image").text(), "pref-video-format", VideoFormat.entries, prefs.videoFormat, { it.label() }) { prefs.videoFormat = it }
+        ChoiceRow(tr(Text.PrefBuffer), "pref-buffer", BufferProfile.entries, prefs.buffer, ::bufferLabel) { prefs.buffer = it }
+    }
+    // The help line of the Figma board, under the row it explains.
+    Label(
+        L("Playback stability: a larger reserve avoids cuts on an unsteady connection; playback starts a little later.",
+            "Stabilité de la lecture : une réserve plus grande évite les coupures sur une connexion instable ; la lecture démarre un peu plus tard.").text(),
+        Type.Body, Palette.Secondary, Modifier.padding(start = com.sokoul.pc.ui.PanelMetrics.RowPad, top = 4.dp, end = 30.dp),
+    )
+    RowGroup(L("Live TV", "Télévision en direct").text()) {
+        ChoiceRow(tr(Text.PrefLivePreview), "pref-live-preview", ON_OFF, prefs.livePreview, ::onOff) { prefs.livePreview = it }
+    }
 }
 
 /** Picking a priority position moves that source/hoster there without hiding any candidates. */
@@ -338,8 +413,7 @@ internal fun PlaybackPane(prefs: DesktopPrefs, hooks: SettingsHooks = SettingsHo
 private fun SourcePriorityRows(prefs: DesktopPrefs, anime: Boolean) {
     var revision by remember { mutableIntStateOf(0) }
     val label = if (anime) L("Anime source priorities", "Priorités des sources anime") else L("Movie and series source priorities", "Priorités des sources films et séries")
-    GroupTitle(label.text())
-    key(revision) {
+    RowGroup(label.text()) { key(revision) {
         val order = prefs.sourceOrder(anime)
         fun move(values: List<String>, index: Int, selected: String): List<String> = values.filterNot { it == selected }.toMutableList().apply { add(index, selected) }
         order.sources.forEachIndexed { index, value ->
@@ -352,14 +426,14 @@ private fun SourcePriorityRows(prefs: DesktopPrefs, anime: Boolean) {
                 prefs.setSourceOrder(anime, order.sources, move(order.hosters, index, selected)); revision++
             }
         }
-    }
+    } }
 }
 
 /** Language, as a choice: the system's, French or English (Movix: language). */
 @Composable
 internal fun LanguagePane(prefs: DesktopPrefs, hooks: SettingsHooks) {
     // A list to choose from, each language named in itself (Español, Deutsch, العربية): see InterfaceLanguageScreen.
-    SettingsRow(tr(Text.SettingsLanguage), interfaceLanguageName(prefs.language), true, remember { FocusRequester() }, hooks.onLanguages, "pref-language")
+    RowGroup { SettingsRow(tr(Text.SettingsLanguage), interfaceLanguageName(prefs.language), true, remember { FocusRequester() }, hooks.onLanguages, "pref-language") }
     Label(
         L("The whole interface changes at once. Titles and descriptions follow the language too.", "Toute l'interface change aussitôt. Les titres et les descriptions suivent aussi la langue.").text(),
         Type.Body, Palette.Secondary, Modifier.padding(start = 30.dp, top = 12.dp, end = 30.dp),
@@ -369,13 +443,14 @@ internal fun LanguagePane(prefs: DesktopPrefs, hooks: SettingsHooks) {
 /** What this is, where its data lives, the credits, and the actions that clean up. */
 @Composable
 internal fun AboutPane(hooks: SettingsHooks) {
-    InfoRow(L("Application", "Application").text(), if (com.sokoul.pc.Platform.IS_TV) "Sokoul TV" else "Sokoul PC")
-    GroupTitle(L("Maintenance", "Maintenance").text())
+    RowGroup { InfoRow(L("Application", "Application").text(), if (com.sokoul.pc.Platform.IS_TV) "Sokoul TV" else "Sokoul PC") }
     val done = L("Done", "Fait").text()
-    ConfirmRow(L("Clear the catalogue cache", "Vider le cache du catalogue").text(), "about-clear-cache", done, hooks.onClearCache)
-    ConfirmRow(L("Forget source failures", "Oublier les échecs des sources").text(), "about-forget-failures", done, hooks.onForgetSourceFailures)
-    ConfirmRow(L("Erase this profile's watch history", "Effacer l'historique de ce profil").text(), "about-clear-history", done, hooks.onClearHistory)
-    ConfirmRow(L("Reset the display settings", "Réinitialiser l'affichage").text(), "about-reset-display", done, hooks.onResetDisplay)
+    RowGroup(L("Maintenance", "Maintenance").text()) {
+        ConfirmRow(L("Clear the catalogue cache", "Vider le cache du catalogue").text(), "about-clear-cache", done, hooks.onClearCache)
+        ConfirmRow(L("Forget source failures", "Oublier les échecs des sources").text(), "about-forget-failures", done, hooks.onForgetSourceFailures)
+        ConfirmRow(L("Erase this profile's watch history", "Effacer l'historique de ce profil").text(), "about-clear-history", done, hooks.onClearHistory)
+        ConfirmRow(L("Reset the display settings", "Réinitialiser l'affichage").text(), "about-reset-display", done, hooks.onResetDisplay)
+    }
     Label(
         L(
             "The display settings are the accent, the menu, the home rows, the subtitle style and the screensaver. Keys, accounts and playback choices are kept.",

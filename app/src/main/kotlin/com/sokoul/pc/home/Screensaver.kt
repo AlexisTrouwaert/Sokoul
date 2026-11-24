@@ -78,8 +78,12 @@ fun ScreensaverHost(deps: AppDeps, content: @Composable () -> Unit) {
                 delay(TICK_MS)
                 val minutes = deps.prefs.screensaverMinutes
                 val idle = System.currentTimeMillis() - lastInput.get()
-                if (!shown && minutes > 0 && idle >= minutes * 60_000L && !busy(deps)) {
+                val inFront = com.sokoul.pc.ui.AppFocus.active.value
+                // Only in front: behind a browser the slideshow drew at 60 frames a second for nobody.
+                if (!shown && inFront && minutes > 0 && idle >= minutes * 60_000L && !busy(deps)) {
                     androidx.compose.runtime.snapshots.Snapshot.withMutableSnapshot { shown = true }
+                } else if (shown && !inFront) {
+                    androidx.compose.runtime.snapshots.Snapshot.withMutableSnapshot { shown = false }
                 } else if (shown && busy(deps)) {
                     // Playback started without a key (remote control, phone, watch party): the picture must not stay covered.
                     androidx.compose.runtime.snapshots.Snapshot.withMutableSnapshot { shown = false }

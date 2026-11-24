@@ -27,6 +27,7 @@
         <activity
             android:name=".MainActivity"
             android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenLayout|screenSize|smallestScreenSize|uiMode|fontScale|density"
+            android:windowSoftInputMode="adjustResize"
             android:exported="true"
             android:launchMode="singleTask"
             android:screenOrientation="fullSensor">
@@ -43,5 +44,7 @@
                 <data android:scheme="sokoul" android:host="watch" />
             </intent-filter>
         </activity>
+        <!-- Lets `am profile` and Android Studio sample the release app over ADB, without making it debuggable. -->
+        <profileable android:shell="true" />
     </application>
 </manifest>

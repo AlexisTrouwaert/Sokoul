@@ -117,7 +117,12 @@ private const val SHELF_ROW_SIZE = 20
 private const val PAGE_AHEAD = 12
 
 /** What opening a saga or genre needs. The items load when the page opens. */
-data class CollectionRequest(val name: String, val logo: String?, val backdrop: String?, val load: suspend (page: Int) -> List<TmdbItem>)
+data class CollectionRequest(
+    val name: String, val logo: String?, val backdrop: String?,
+    /** A studio's page opens as its hub (hero and sections) instead of a plain grid. */
+    val studio: com.sokoul.pc.data.Studio? = null,
+    val load: suspend (page: Int) -> List<TmdbItem>,
+)
 
 /** Loaded pages and navigation survive while details are opened above the collection. */
 class CollectionState {

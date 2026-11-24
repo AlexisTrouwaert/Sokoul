@@ -16,6 +16,8 @@ data class PlayRequest(
     val image: String?,
     /** Opens on the list of versions and starts nothing, whatever the start preference. */
     val chooseFirst: Boolean = false,
+    /** Starts at the beginning even when a resume point is kept ("Start Over", as on Disney+). */
+    val fromStart: Boolean = false,
 ) {
     val resumeKey get() = Resume.key(kind, tmdbId, season, episode)
 }
@@ -104,6 +106,12 @@ fun sizeLabel(bytes: Long?): String? = bytes?.takeIf { it > 0 }?.let {
 sealed interface PlayFailure {
     /** The link no longer exists. */
     data object DeadLink : PlayFailure
+    /**
+     * Real-Debrid refuses this very file (HTTP 451, "infringing_file"). Not proof of a rights holder for good: a paused
+     * account answers the same, which DebridTransfers tells apart by asking for a free film. Hidden as a dead link
+     * (SourceRules.dead) for a few hours, behind the "dead links" counter of the versions.
+     */
+    data object Blocked : PlayFailure
     data class Refused(val code: Int) : PlayFailure
     /** Every IPTV connection is in use, on this account. */
     data class ConnectionsFull(val active: Int, val max: Int) : PlayFailure
@@ -181,9 +189,10 @@ sealed interface Phase {
 data class UpgradeOffer(val version: PlayVersion, val transfer: Transfer?, val stream: StreamRequest?)
 
 /** Results so far: more arrive as each search service answers. */
-enum class SourceNotice { AnimeSamaVipRequired, AnimeSamaUnavailable }
+enum class SourceNotice { AnimeSamaVipRequired, AnimeSamaUnavailable, DebridNoVersions, DebridUnavailable }
 
-data class SearchUpdate(val versions: List<PlayVersion>, val done: Boolean, val problem: PlayFailure? = null, val notices: List<SourceNotice> = emptyList())
+data class SearchUpdate(val versions: List<PlayVersion>, val done: Boolean, val problem: PlayFailure? = null, val notices: List<SourceNotice> = emptyList(),
+    val debridPending: Boolean = false)
 
 /** Lists the versions of a title as they are found. [refresh] ignores what earlier searches remembered. */
 fun interface SourceFinder {

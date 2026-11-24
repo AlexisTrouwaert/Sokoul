@@ -20,6 +20,20 @@ class TvApp : Application() {
         System.setProperty("org.sqlite.lib.name", "libsqlitejdbc.so")
         Class.forName("org.sqlite.JDBC")
         keepAlive()
+        // Memory goes back when the system asks: the images of the pages left are decoded again from the disk cache.
+        registerComponentCallbacks(object : android.content.ComponentCallbacks2 {
+            override fun onTrimMemory(level: Int) {
+                when {
+                    // The app is no longer on screen: its images are of no use, the other apps need the room.
+                    level >= android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN -> com.sokoul.desktop.ui.ImageLoader.trim(0f)
+                    // On screen, but the device is short: half of the cache goes.
+                    level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW -> com.sokoul.desktop.ui.ImageLoader.trim(0.5f)
+                }
+            }
+            override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {}
+            @Deprecated("Deprecated in Java")
+            override fun onLowMemory() { com.sokoul.desktop.ui.ImageLoader.trim(0f) }
+        })
     }
 
     /**

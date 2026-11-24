@@ -47,14 +47,18 @@ Add channel to favorites	Ajouter la chaîne aux favoris
 Add channels	Ajouter des chaînes
 Add channels from any group. Your provider's groups stay as they are.	Ajoutez des chaînes de n'importe quel groupe. Les groupes du fournisseur restent inchangés.
 Add channels from any provider group. Your provider categories remain unchanged.	Ajoutez des chaînes de plusieurs groupes. Les catégories du fournisseur restent indépendantes.
+Add selection	Ajouter la sélection
+Add to a collection	Ajouter à une collection
 Add to collection	Ajouter à une collection
 Add your IPTV account in Settings to see your channels.	Ajoutez votre compte IPTV dans Réglages pour voir vos chaînes.
 Added to downloads. Open Recordings to follow progress.	Ajouté aux téléchargements. Ouvrez Enregistrements pour suivre la progression.
+Added {1} channels	{1} chaîne(s) ajoutée(s)
 Adrenaline	Adrénaline
 After {1} min	Après {1} min
 Airing today	Diffusés aujourd'hui
 Alert on	Alerte activée
 All	Tout
+All sources	Toutes les sources
 ALL\nCOLLECTIONS	TOUTES LES\nCOLLECTIONS
 All channels	Toutes les chaînes
 All formats	Tous formats
@@ -152,6 +156,7 @@ CATALOG	CATALOGUE
 Categories	Catégories
 Categories could not be refreshed. Stored titles remain available.	Les catégories n’ont pas pu être actualisées. Les titres enregistrés restent disponibles.
 Channel	Chaîne
+Channel groups	Groupes de chaînes
 Channel preview	Aperçu des chaînes
 Channel up / down	Chaîne suivante / précédente
 Channels	Chaînes
@@ -182,6 +187,8 @@ Choose Channels and enter a name or number, or explore Programmes.	Choisissez Ch
 Choose folder…	Choisir un dossier…
 Clear	Effacer
 CLEAR	EFFACER
+Clear search	Effacer la recherche
+Clear selection	Tout désélectionner
 Clear the catalogue cache	Vider le cache du catalogue
 Close	Fermer
 Code	Code
@@ -239,6 +246,7 @@ Download started.	Téléchargement démarré.
 downloading %d %%	téléchargement %d %%
 Drama	Drame
 Drama & Romance	Drame et romance
+Edit collection	Gérer la collection
 Edit profiles	Modifier les profils
 Edit search	Modifier la recherche
 ends	fin
@@ -296,6 +304,7 @@ Films and series: you take it all.	Films et séries : vous prenez tout.
 Films are your religion.	Les films, c'est votre religion.
 Films That Twist Your Mind	Films qui retournent le cerveau
 Films, OVAs and more	Films, OAV et plus
+Find a channel	Rechercher une chaîne
 Find something to watch	Trouvez votre programme
 Finding a source…	Recherche d'une source…
 Finished	Terminés
@@ -483,9 +492,12 @@ Next episode: S%dE%d on %s	Prochain épisode : S%dE%d le %s
 Next page	Page suivante
 Next season	La saison prochaine
 Next Version	Version suivante
+No 4K version from these sources	Aucune version 4K pour ces sources
 No accessible result. Try a shorter name or switch to Programmes.	Aucun résultat accessible. Essayez un nom plus court ou passez aux Programmes.
 No accessible titles match. Try another category or page.	Aucun titre accessible trouvé. Essayez une autre catégorie ou une autre page.
+No channels could be added.	Aucune chaîne n’a pu être ajoutée.
 No channels here.	Aucune chaîne ici.
+No channels in this group	Aucune chaîne dans ce groupe
 No channels in this group.	Aucune chaîne dans ce groupe.
 No channels in this zapping list. Choose a list in My TV.	Aucune chaîne dans cette liste de zapping. Choisissez une liste dans Ma TV.
 No chapter can be read here: its publisher holds it.	Aucun chapitre lisible ici : son éditeur en garde les droits.
@@ -499,6 +511,7 @@ No limit	Sans limite
 No matching group. Back clears the search.	Aucun groupe trouvé. Retour efface la recherche.
 No matching groups. Back clears the search.	Aucun groupe trouvé. Retour efface la recherche.
 No messages yet.	Pas encore de message.
+No new channels to add.	Aucune nouvelle chaîne à ajouter.
 No new programmes were received. The stored guide was preserved.	Aucun nouveau programme reçu. Le guide enregistré a été conservé.
 No programme description is available.	Aucun résumé n’est disponible pour ce programme.
 No provider replay available for this channel	Aucun replay fourni pour cette chaîne
@@ -512,6 +525,7 @@ No source configured	Aucune source configurée
 No source is available for this title.	Aucune source n'est disponible pour ce titre.
 No subtitles found online.	Aucun sous-titre trouvé en ligne.
 No upcoming programmes. Choose a future programme in the guide and select Remind me.	Aucun programme à venir. Choisissez un programme futur dans le guide et activez le rappel.
+No version from this source	Aucune version pour cette source
 No version matches these filters. Reset them or refresh the sources.	Aucune version ne correspond. Réinitialisez les filtres ou actualisez les sources.
 No {1} audio · Playing in {2}	Pas de piste en {1} · Lecture en {2}
 Normal	Normale
@@ -542,6 +556,7 @@ OK shows or hides a row; the arrows beside it change its place.	OK affiche ou ca
 OK to change · Back to guide	OK pour modifier · Retour au guide
 OK to choose · Back to guide	OK pour choisir · Retour au guide
 On	Activé
+On air now	À l’antenne
 On now	En cours
 On the air right now.	En ce moment à l'antenne.
 One page	Une page
@@ -626,8 +641,11 @@ Programme actions	Actions du programme
 Programme guide unavailable for this channel.	Guide indisponible pour cette chaîne.
 Programme information unavailable	Programme non communiqué
 Programmes	Programmes
+Programmes airing on your channels	Programmes diffusés sur vos chaînes
+Programmes you marked to watch later	Émissions que vous avez marquées pour plus tard
 Protect with PIN	Protéger par code
 Provider	Fournisseur
+Provider groups	Groupes du fournisseur
 Provider information is unavailable. You can retry below.	Les informations du fournisseur sont indisponibles. Vous pouvez réessayer ci-dessous.
 Provider link	Lien fournisseur
 Provider movies	Films du fournisseur
@@ -643,11 +661,14 @@ Ready	Disponible
 ready	prête
 Real-Debrid	Real-Debrid
 Real-Debrid refused your key. Check it in Settings.	Real-Debrid refuse ta clé. Vérifie-la dans Réglages.
+Real-Debrid search found no version for this title	La recherche Real-Debrid n’a trouvé aucune version pour ce titre
+Real-Debrid search is temporarily unavailable	La recherche Real-Debrid est temporairement indisponible
 Recent	Récentes
 Recent channels	Chaînes récentes
 Recent searches	Recherches récentes
 Record once	Enregistrer une fois
 Record programme	Enregistrer l’émission
+Record this programme	Enregistrer l’émission
 Record this programme to its end	Enregistrer cette émission jusqu’à sa fin
 Recording	En cours
 Recording could not be exported. Try another destination.	Impossible d’exporter l’enregistrement. Essayez une autre destination.
@@ -726,6 +747,7 @@ Science Fiction	Science-fiction
 Screensaver	Économiseur d'écran
 Search	Rechercher
 Search could not be loaded. Edit your query to retry.	La recherche a échoué. Modifiez la saisie pour réessayer.
+Search groups	Rechercher un groupe
 Search services	Services de recherche
 Search titles	Rechercher des titres
 Search {1} categories	Chercher parmi {1} catégories
@@ -741,6 +763,8 @@ See All	Tout voir
 See Versions	Voir les versions
 See you tomorrow at dawn.\nAnd this time, don't be late.	On se retrouve demain à l'aube.\nEt cette fois, ne sois pas en retard.
 Select	Choisir
+Select all	Tout sélectionner
+Select channels	Sélectionner des chaînes
 SELECTION	SÉLECTION
 Send	Envoyer
 Series	Séries
@@ -750,10 +774,12 @@ Series That Twist Your Mind	Séries qui retournent le cerveau
 Serif	Serif
 Server	Serveur
 Server, username and password are all required.	Le serveur, l'utilisateur et le mot de passe sont tous requis.
+Servers	Serveurs
 Service	Service
 Services	Services
 Set adult PIN	Définir un code adulte
 Set up	Configuré
+Set up the Sokoul server in Settings > Content sources.	Configurez le serveur Sokoul dans Réglages > Sources de contenu.
 Set up the Sokoul server in Settings > Credentials.	Configurez le serveur Sokoul dans Réglages > Identifiants.
 Settings	Réglages
 Settings always stays: it is how you get back here.	Les Réglages restent toujours : c'est par là que vous revenez ici.
@@ -795,6 +821,7 @@ Speed	Vitesse
 Spin again	Relancer
 Spinning…	Ça tourne…
 Sports	Sport
+Sports channels	Chaînes sportives
 Sports and games	Sports et jeux
 Stable	Stable
 Standard	Standard
@@ -846,7 +873,6 @@ The colour of what shows your progress.	La couleur de ce qui montre votre progre
 The complete programme is scheduled, with a 2 minute lead-in and a 5 minute safety margin.	L’émission complète est planifiée, avec 2 minutes d’avance et 5 minutes de marge.
 The connection was interrupted.	La connexion a été interrompue.
 The Early Bird	Le Lève-tôt
-The experience	L'expérience
 The Explorer	L'Explorateur
 The Faces	Les visages
 The Films	Les films
@@ -944,6 +970,7 @@ Trending now	Tendances
 Tsundere alert	Tsundere en vue
 TV	TV
 TV & Shows	TV et séries
+TV actions	Actions TV
 TV guide	Guide TV
 TV settings	Réglages TV
 TV Show	Série TV
@@ -1046,6 +1073,7 @@ Zoom out	Réduire
 {1} screens at a time	{1} écrans à la fois
 {1} screens watching right now	{1} écrans en cours de lecture
 {1} seasons	{1} saisons
+{1} selected	{1} sélectionnée(s)
 {1} to read here	{1} à lire ici
 {1} volumes	{1} tomes
 {1} · play/pause, next	{1} · lecture/pause, suivant

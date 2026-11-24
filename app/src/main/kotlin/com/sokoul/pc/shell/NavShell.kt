@@ -30,7 +30,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.FocusState
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -43,6 +45,20 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Settings
+import com.sokoul.pc.data.L
+import com.sokoul.pc.ui.glassSurface
+import com.sokoul.pc.ui.panelEnter
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import com.sokoul.pc.theme.NavMetrics
@@ -64,9 +80,11 @@ const val SECTION_HOME = "home"
 /** Whether the top bar is on screen; immersive TV pages reclaim its height while it is hidden. */
 val LocalNavBarVisible = androidx.compose.runtime.compositionLocalOf { true }
 
+internal val LocalReportHomeHeroAtTop = androidx.compose.runtime.compositionLocalOf<(Boolean) -> Unit> { {} }
+
 /**
  * Top navigation: avatar on the left, sections in a floating translucent capsule in the middle, search on the right.
- * It stays above the page, and knows nothing about the screens.
+ * It stays above the page. Home reports whether its full-screen hero is at rest.
  */
 @Composable
 fun NavShell(
@@ -75,40 +93,107 @@ fun NavShell(
     onSelect: (String) -> Unit,
     defaultFocus: FocusRequester? = null,
     onBack: (() -> Unit)? = null,
+    /** Opens "Who is watching?", the first line of the menu. */
+    onProfiles: () -> Unit = {},
     content: @Composable () -> Unit,
 ) {
-    // A phone has no remote to bring a hidden bar back: there it always stays.
-    val immersive = com.sokoul.pc.Platform.IS_TV && !Form.isPhone
+    // A tablet is held and touched: its bar stays on screen, as in the Apple TV and Disney+ apps on an iPad. Hidden as on
+    // the TV, it had to be called back with the remote's Up key, which a tablet has not (2026-11-23).
+    val immersive = com.sokoul.pc.Platform.IS_TV && !Form.isPhone && !Form.tablet
+    // A phone held upright keeps its tabs at the bottom; everything else has the Apple TV bar: the menu and search.
     val portrait = Form.isPortrait
-    var barFocused by remember { mutableStateOf(false) }
-    var barVisible by remember(active) { mutableStateOf(true) }
+    var menuOpen by remember { mutableStateOf(false) }
+    // How far the page has scrolled, read from the scrolls that pass through the shell: the bar's black backdrop
+    // fades in once the page has left its top, and out when it is back.
+    var scrolled by remember(active) { mutableStateOf(0f) }
+    // The way the finger or the wheel last went: up brings the bar back at once, as in Safari or YouTube.
+    var scrollingUp by remember(active) { mutableStateOf(false) }
+    val scrollWatch = remember(active) {
+        object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
+            override fun onPostScroll(consumed: androidx.compose.ui.geometry.Offset, available: androidx.compose.ui.geometry.Offset, source: androidx.compose.ui.input.nestedscroll.NestedScrollSource): androidx.compose.ui.geometry.Offset {
+                if (consumed.y != 0f) scrollingUp = consumed.y > 0f
+                scrolled = (scrolled - consumed.y).coerceAtLeast(0f)
+                // Pulled past the top: the page is at its top, whatever the sum of the moves said (it drifted, and the
+                // veil stayed behind the icons at the top of the page).
+                if (available.y > 0f && consumed.y == 0f) scrolled = 0f
+                return androidx.compose.ui.geometry.Offset.Zero
+            }
+        }
+    }
+    val homeControlsBar = active == SECTION_HOME && defaultFocus != null && !Form.tablet
+    var homeHeroAtTop by remember(active) { mutableStateOf(true) }
+    // At the top of the page: Home says it (its hero at rest), the other pages by their scroll.
+    val atTop = if (homeControlsBar) homeHeroAtTop else scrolled <= SCROLL_SHOW_PX
+    LaunchedEffect(atTop) { if (atTop) { scrolled = 0f; scrollingUp = false } }
+    val backdrop by animateFloatAsState(if (!atTop || menuOpen) 1f else 0f, tween(260), label = "bar-backdrop")
+    var homeNavRequested by remember(active) { mutableStateOf(false) }
+    var barFocused by remember(active) { mutableStateOf(false) }
+    var bottomBarFocused by remember(active) { mutableStateOf(false) }
+    var timedBarVisible by remember(active) { mutableStateOf(true) }
     LaunchedEffect(active, barFocused) {
-        if (barFocused || !immersive) barVisible = true
+        if (barFocused || !immersive) timedBarVisible = true
         else {
             delay(if (active == "tv") 700 else 1200)
-            barVisible = false
+            timedBarVisible = false
         }
+    }
+    /*
+     * The bar (owner, 2026-11-24): at the top of a page, the two icons over the picture; going down, it leaves so the page
+     * has the whole screen; on a touch screen or with a mouse, going up a little brings it back on its veil. On the TV
+     * Home it is there at the top (it was hidden there and only came once the rows were reached); Up from the hero, or
+     * Back, reaches it. The other TV pages keep the quick hiding they had.
+     */
+    val barVisible = when {
+        menuOpen || barFocused || homeNavRequested -> true
+        homeControlsBar -> homeHeroAtTop || (!immersive && scrollingUp)
+        immersive -> timedBarVisible
+        else -> atTop || scrollingUp
+    }
+    val reportHomeHeroAtTop: (Boolean) -> Unit = remember(active) { { homeHeroAtTop = it } }
+    LaunchedEffect(barFocused, bottomBarFocused) {
+        if (homeNavRequested && !barFocused && !bottomBarFocused) homeNavRequested = false
     }
     val visibility by animateFloatAsState(if (barVisible) 1f else 0f, tween(220))
     val requesters = remember { HashMap<String, FocusRequester>() }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     fun requester(id: String) = requesters.getOrPut(id) { FocusRequester() }
+    // Up from a page reaches the menu button: there are no tabs on the bar any more.
+    val homeNavTarget = if (portrait) (entries.firstOrNull { it.id == SECTION_HOME }?.id ?: entries.firstOrNull()?.id ?: SECTION_SETTINGS) else MENU
+
+    LaunchedEffect(homeNavRequested) {
+        if (homeNavRequested && runCatching { requester(homeNavTarget).requestFocus() }.isFailure) {
+            homeNavRequested = false
+        }
+    }
 
     // The page's first element when it exists, otherwise the section's own tab: focus is never lost.
     LaunchedEffect(active, defaultFocus) {
-        if (runCatching { defaultFocus?.requestFocus() ?: error("none") }.isFailure) runCatching { requester(active).requestFocus() }
+        if (runCatching { defaultFocus?.requestFocus() ?: error("none") }.isFailure && !homeControlsBar) {
+            runCatching { requester(if (portrait) active else MENU).requestFocus() }
+        }
     }
 
     Box(
         Modifier
             .fillMaxSize()
+            .onPreviewKeyEvent { e ->
+                // Back anywhere on Home, or Up while the bar is away: straight to the menu icon.
+                if (homeControlsBar && e.type == KeyEventType.KeyDown && !barFocused && !menuOpen &&
+                    // Up from the hero has nothing above it but the bar: always the menu icon, never the search one.
+                    (e.key == Key.Escape || (e.key == Key.DirectionUp && homeHeroAtTop))
+                ) {
+                    FocusSource.lastWasMouse = false
+                    homeNavRequested = true
+                    true
+                } else false
+            }
             .onKeyEvent { e ->
                 if (e.type == KeyEventType.KeyDown && e.key == Key.Escape && (onBack != null || (immersive && !barVisible))) {
                     // A page that can go back does so on the first press, even with the bar hidden: revealing the
                     // bar first made Back from the TV guide take two presses to reach Home.
                     if (immersive && !barVisible && onBack == null) {
-                        barVisible = true
-                        runCatching { requester(active).requestFocus() }
+                        timedBarVisible = true
+                        runCatching { requester(if (portrait) active else MENU).requestFocus() }
                         return@onKeyEvent true
                     }
                     onBack?.invoke()
@@ -118,70 +203,159 @@ fun NavShell(
                 }
             },
     ) {
-        // Upright, the sections move to a bar at the bottom, within reach of the thumb; the page ends above it.
-        Box(Modifier.fillMaxSize().padding(bottom = if (portrait) NavMetrics.BottomBar else 0.dp)) {
-            CompositionLocalProvider(LocalActiveTab provides requester(active), LocalNavBarVisible provides barVisible) { content() }
+        // Home overlays the bottom bar too, so revealing it never resizes the hero's viewport.
+        Box(Modifier.fillMaxSize().nestedScroll(scrollWatch).padding(bottom = if (portrait && !homeControlsBar) bottomBarHeight() else 0.dp)) {
+            CompositionLocalProvider(
+                LocalActiveTab provides requester(if (homeControlsBar || !portrait) homeNavTarget else active),
+                LocalNavBarVisible provides barVisible,
+                LocalReportHomeHeroAtTop provides reportHomeHeroAtTop,
+            ) { content() }
         }
-        if (portrait) {
-            BottomTabs(entries, active, onSelect, ::requester, Modifier.align(Alignment.BottomCenter))
-        }
-        Box(Modifier.fillMaxWidth().height(NavMetrics.ScrimHeight).graphicsLayer { alpha = visibility }.background(Brush.verticalGradient(0f to Palette.BarScrim, 0.72f to Palette.BarScrim.copy(alpha = 0.72f), 1f to Color.Transparent)))
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .padding(top = NavMetrics.Top)
-                .graphicsLayer { alpha = visibility; translationY = -24.dp.toPx() * (1f - visibility) }
-                .onFocusChanged {
-                    barFocused = it.hasFocus
-                    if (it.hasFocus) barVisible = true
-                }
-                .onPreviewKeyEvent { e ->
-                    // Down always returns to the page, whichever tab has focus.
-                    if (e.type == KeyEventType.KeyDown && e.key == Key.DirectionDown && defaultFocus != null) {
-                        FocusSource.lastWasMouse = false
-                        scope.launch {
-                            androidx.compose.runtime.withFrameNanos { }
-                            runCatching { defaultFocus.requestFocus() }
-                        }
-                        true
-                    } else {
-                        false
-                    }
-                }
-                .focusGroup(),
-        ) {
-            Avatar(
-                onClick = { onSelect(SECTION_SETTINGS) },
-                isActive = active == SECTION_SETTINGS,
-                requester = requester(SECTION_SETTINGS),
-                modifier = Modifier.align(Alignment.CenterStart).padding(start = NavMetrics.Side),
-            )
-            if (!portrait) Row(
-                Modifier
-                    .align(Alignment.Center)
-                    .height(NavMetrics.Height)
-                    .clip(RoundedCornerShape(50))
-                    .background(Palette.BarFill)
-                    .border(1.dp, Palette.Hairline, RoundedCornerShape(50))
-                    .padding(horizontal = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                entries.forEach { entry ->
-                    Tab(entry, entry.id == active, { onSelect(entry.id) }, requester(entry.id))
-                }
+        if (visibility > 0.01f || barVisible) {
+            val onBarFocus: (FocusState) -> Unit = {
+                barFocused = it.hasFocus
+                if (it.hasFocus) timedBarVisible = true
             }
-            RoundBarButton(
-                icon = NavIcons.Search,
-                onClick = { onSelect(SECTION_SEARCH) },
-                isActive = active == SECTION_SEARCH,
-                requester = requester(SECTION_SEARCH),
-                tag = "menu-$SECTION_SEARCH",
-                modifier = Modifier.align(Alignment.CenterEnd).padding(end = NavMetrics.Side),
+            if (portrait) {
+                val bottom = Modifier.align(Alignment.BottomCenter)
+                BottomTabs(entries, active, onSelect, ::requester,
+                    if (homeControlsBar) bottom.onFocusChanged { bottomBarFocused = it.hasFocus }.focusGroup() else bottom)
+            }
+            // At the top of a page only the two icons show, over the picture; scrolled, a black veil comes behind them.
+            Box(
+                Modifier.fillMaxWidth().height(NavMetrics.ScrimHeight)
+                    .graphicsLayer { alpha = visibility * backdrop }
+                    .background(Brush.verticalGradient(0f to Color(0xF2000000), 0.7f to Color(0xCC000000), 1f to Color.Transparent)),
             )
+            if (!portrait) Box(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = NavMetrics.Top)
+                    .graphicsLayer { alpha = visibility; translationY = -(NavMetrics.Top + NavMetrics.Height).toPx() * (1f - visibility) }
+                    // Leaving, it is not reachable: the remote's Up stays in the page.
+                    .focusProperties { canFocus = barVisible }
+                    .onFocusChanged(onBarFocus)
+                    .onPreviewKeyEvent { e ->
+                        // Down always returns to the page.
+                        if (e.type == KeyEventType.KeyDown && e.key == Key.DirectionDown && defaultFocus != null && !menuOpen) {
+                            FocusSource.lastWasMouse = false
+                            scope.launch {
+                                androidx.compose.runtime.withFrameNanos { }
+                                runCatching { defaultFocus.requestFocus() }
+                            }
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                    .focusGroup(),
+            ) {
+                BarIcon(
+                    onClick = { menuOpen = !menuOpen },
+                    requester = requester(MENU),
+                    tag = "menu-open",
+                    modifier = Modifier.align(Alignment.CenterStart).padding(start = NavMetrics.Side),
+                ) { tint -> Icon(Icons.Filled.Menu, L("Menu", "Menu").text(), tint = tint, modifier = Modifier.size(NavMetrics.Icon + 4.dp)) }
+                BarIcon(
+                    onClick = { onSelect(SECTION_SEARCH) },
+                    requester = requester(SECTION_SEARCH),
+                    tag = "menu-$SECTION_SEARCH",
+                    modifier = Modifier.align(Alignment.CenterEnd).padding(end = NavMetrics.Side),
+                ) { tint -> Icon(NavIcons.Search, L("Search", "Rechercher").text(), tint = tint, modifier = Modifier.size(NavMetrics.Icon + 2.dp)) }
+            }
+        }
+        if (menuOpen) SectionMenu(
+            entries, active,
+            onPick = { id -> menuOpen = false; onSelect(id) },
+            onProfiles = { menuOpen = false; onProfiles() },
+            onClose = {
+                menuOpen = false
+                scope.launch { androidx.compose.runtime.withFrameNanos { }; runCatching { requester(MENU).requestFocus() } }
+            },
+        )
+    }
+}
+
+/** A round icon of the bar: a dark translucent disc over the picture, white when focused, as on the Apple TV app. */
+@Composable
+private fun BarIcon(onClick: () -> Unit, requester: FocusRequester, tag: String, modifier: Modifier, icon: @Composable (Color) -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    val fill by animateColorAsState(if (focused) Palette.FocusFill else Color(0x59000000), tween(140))
+    val scale by animateFloatAsState(if (focused) 1.1f else 1f)
+    Box(
+        modifier
+            .size(NavMetrics.Height)
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clip(CircleShape)
+            .background(fill)
+            .testTag(tag)
+            .tvFocusable(onFocusChanged = { focused = it }, onClick = onClick, requester = requester),
+        contentAlignment = Alignment.Center,
+    ) { icon(if (focused) Palette.OnFocus else Palette.OnBackground) }
+}
+
+/**
+ * The menu behind the bar's left icon: the profile first, then every page, then the settings, in a list that scrolls.
+ * Focus starts on the page shown; Back closes.
+ */
+@Composable
+private fun SectionMenu(entries: List<NavEntry>, active: String, onPick: (String) -> Unit, onProfiles: () -> Unit, onClose: () -> Unit) {
+    val here = remember { FocusRequester() }
+    LaunchedEffect(Unit) { androidx.compose.runtime.withFrameNanos { }; runCatching { here.requestFocus() } }
+    val profile = com.sokoul.pc.data.LocalProfile.current
+    val name = profile?.name ?: remember { com.sokoul.pc.data.Profiles.defaultName() }
+    val own = profile?.let { Color(com.sokoul.pc.data.Profiles.COLORS[it.color % com.sokoul.pc.data.Profiles.COLORS.size]) } ?: Palette.AvatarFill
+    Box(
+        Modifier.fillMaxSize().background(Color(0x99000000))
+            .pointerInput(Unit) { detectTapGestures(onTap = { onClose() }) }
+            .onPreviewKeyEvent { e -> if (e.type == KeyEventType.KeyDown && e.key == Key.Escape) { onClose(); true } else false }
+            .testTag("menu-list"),
+    ) {
+        Column(
+            Modifier.padding(start = NavMetrics.Side, top = NavMetrics.Top + NavMetrics.Height + 14.dp).width(MENU_WIDTH)
+                .heightIn(max = 900.dp)
+                .panelEnter(com.sokoul.pc.ui.PanelEntry.FromStart)
+                .glassSurface(RoundedCornerShape(com.sokoul.pc.theme.Corners.Modal), com.sokoul.pc.theme.Corners.Modal)
+                .pointerInput(Unit) { detectTapGestures { } }
+                .verticalScroll(rememberScrollState())
+                .padding(14.dp)
+                .focusGroup(),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            com.sokoul.pc.ui.PanelOption(
+                name, Modifier.testTag("menu-profile"), subtitle = L("Change profile", "Changer de profil").text(),
+                leadingWidth = 52.dp, leadingHeight = 52.dp,
+                leading = { _ ->
+                    Box(Modifier.size(52.dp).clip(CircleShape).background(own), contentAlignment = Alignment.Center) {
+                        Label(name.take(1).uppercase(), Type.Pill, Palette.OnBackground)
+                    }
+                },
+                onClick = onProfiles,
+            )
+            Box(Modifier.fillMaxWidth().padding(vertical = 8.dp).height(1.dp).background(Palette.Hairline))
+            entries.forEach { e ->
+                com.sokoul.pc.ui.PanelOption(
+                    e.label, Modifier.testTag("menu-${e.id}"), selected = e.id == active,
+                    requester = if (e.id == active || (active !in entries.map { it.id } && e === entries.first())) here else remember { FocusRequester() },
+                    leading = { ink -> Icon(e.icon, null, tint = ink, modifier = Modifier.size(30.dp)) },
+                ) { onPick(e.id) }
+            }
+            Box(Modifier.fillMaxWidth().padding(vertical = 8.dp).height(1.dp).background(Palette.Hairline))
+            com.sokoul.pc.ui.PanelOption(
+                L("Settings", "Réglages").text(), Modifier.testTag("menu-$SECTION_SETTINGS"), selected = active == SECTION_SETTINGS,
+                leading = { ink -> Icon(Icons.Filled.Settings, null, tint = ink, modifier = Modifier.size(30.dp)) },
+            ) { onPick(SECTION_SETTINGS) }
         }
     }
 }
+
+private const val MENU = "menu"
+private val MENU_WIDTH = 560.dp
+/** Pixels scrolled before the bar's backdrop shows. */
+private const val SCROLL_SHOW_PX = 40f
+
+/** The bottom bar's height: a tablet's is taller, its tabs read from arm's length. */
+private fun bottomBarHeight() = if (Form.tabletPortrait) 112.dp else NavMetrics.BottomBar
 
 /** The sections of a phone held upright: icon over name, the current one white, the others grey. */
 @Composable
@@ -189,7 +363,7 @@ private fun BottomTabs(entries: List<NavEntry>, active: String, onSelect: (Strin
     Row(
         modifier
             .fillMaxWidth()
-            .height(NavMetrics.BottomBar)
+            .height(bottomBarHeight())
             .background(Palette.BarFill)
             .border(1.dp, Palette.Hairline)
             .padding(horizontal = 4.dp),
@@ -207,14 +381,15 @@ private fun BottomTabs(entries: List<NavEntry>, active: String, onSelect: (Strin
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
+                val big = Form.tabletPortrait
                 Box(
-                    Modifier.size(52.dp, 32.dp).clip(RoundedCornerShape(50)).background(if (isActive) Palette.ActiveFill else Color.Transparent),
+                    Modifier.size(if (big) 76.dp else 52.dp, if (big) 44.dp else 32.dp).clip(RoundedCornerShape(50)).background(if (isActive) Palette.ActiveFill else Color.Transparent),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(entry.icon, null, tint = tint, modifier = Modifier.size(NavMetrics.Icon))
+                    Icon(entry.icon, null, tint = tint, modifier = Modifier.size(if (big) 34.dp else NavMetrics.Icon))
                 }
-                Spacer(Modifier.height(4.dp))
-                Label(entry.label, Type.TabLabel, tint, maxLines = 1)
+                Spacer(Modifier.height(if (big) 6.dp else 4.dp))
+                Label(entry.label, if (big) Type.TabLabel.copy(fontSize = 21.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold) else Type.TabLabel, tint, maxLines = 1)
             }
         }
     }

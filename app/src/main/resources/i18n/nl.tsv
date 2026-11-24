@@ -45,14 +45,18 @@ Add channel to favorites	Zender aan favorieten toevoegen
 Add channels	Zenders toevoegen
 Add channels from any group. Your provider's groups stay as they are.	Voeg zenders uit elke groep toe. De groepen van je aanbieder blijven ongewijzigd.
 Add channels from any provider group. Your provider categories remain unchanged.	Voeg zenders uit elke groep van de aanbieder toe. Diens categorieën blijven ongewijzigd.
+Add selection	Selectie toevoegen
+Add to a collection	Toevoegen aan een collectie
 Add to collection	Aan collectie toevoegen
 Add your IPTV account in Settings to see your channels.	Voeg je IPTV-account toe in Instellingen om je zenders te zien.
 Added to downloads. Open Recordings to follow progress.	Toegevoegd aan downloads. Open Opnamen om de voortgang te volgen.
+Added {1} channels	{1} zenders toegevoegd
 Adrenaline	Adrenaline
 After {1} min	Na {1} min
 Airing today	Vandaag op tv
 Alert on	Melding aan
 All	Alles
+All sources	Alle bronnen
 ALL\nCOLLECTIONS	ALLE\nCOLLECTIES
 All channels	Alle zenders
 All formats	Alle formaten
@@ -140,6 +144,7 @@ CATALOG	CATALOGUS
 Categories	Categorieën
 Categories could not be refreshed. Stored titles remain available.	De categorieën konden niet worden vernieuwd. Opgeslagen titels blijven beschikbaar.
 Channel	Zender
+Channel groups	Zendergroepen
 Channel preview	Zendervoorbeeld
 Channel up / down	Volgende / vorige zender
 Channels	Zenders
@@ -169,8 +174,30 @@ Choose Channels and enter a name or number, or explore Programmes.	Kies Zenders 
 Choose folder…	Map kiezen…
 Clear	Wissen
 CLEAR	WISSEN
+Clear search	Zoekopdracht wissen
+Clear selection	Selectie wissen
 Clear the catalogue cache	Cataloguscache leegmaken
+Edit collection	Collectie beheren
+Find a channel	Een zender zoeken
 Forget source failures	Bronfouten vergeten
+No 4K version from these sources	Geen 4K-versie uit deze bronnen
+No channels could be added.	Er konden geen zenders worden toegevoegd.
+No channels in this group	Geen zenders in deze groep
+No new channels to add.	Geen nieuwe zenders om toe te voegen.
+No version from this source	Geen versie uit deze bron
+On air now	Nu op tv
+Programmes airing on your channels	Programma’s die nu op je zenders te zien zijn
+Programmes you marked to watch later	Programma’s die je later wilt bekijken
+Provider groups	Groepen van de aanbieder
+Real-Debrid search found no version for this title	Real-Debrid vond geen versie van deze titel
+Real-Debrid search is temporarily unavailable	Zoeken via Real-Debrid is tijdelijk niet beschikbaar
+Record this programme	Dit programma opnemen
+Search groups	Groepen zoeken
+Select all	Alles selecteren
+Select channels	Zenders selecteren
+Servers	Servers
+Set up the Sokoul server in Settings > Content sources.	Stel de Sokoul-server in via Instellingen > Inhoudsbronnen.
+TV actions	Tv-functies
 Your languages	Jouw talen
 Search services	Zoekdiensten
 If no language matches	Als geen taal overeenkomt
@@ -750,6 +777,7 @@ Speed	Snelheid
 Spin again	Nog eens draaien
 Spinning…	Draait…
 Sports	Sport
+Sports channels	Sportzenders
 Sports and games	Sport en spel
 Stable	Stabiel
 Start	Starten
@@ -797,7 +825,6 @@ The collection changed. Cancel and try again.	De collectie is gewijzigd. Annulee
 The complete programme is scheduled, with a 2 minute lead-in and a 5 minute safety margin.	Het hele programma is gepland, met 2 minuten vooraf en 5 minuten marge.
 The connection was interrupted.	De verbinding is onderbroken.
 The Early Bird	De Vroege Vogel
-The experience	De ervaring
 The Explorer	De Ontdekker
 The Faces	De gezichten
 The Films	De films
@@ -988,6 +1015,7 @@ Zoom out	Uitzoomen
 {1} screens at a time	{1} schermen tegelijk
 {1} screens watching right now	{1} schermen kijken nu
 {1} seasons	{1} seizoenen
+{1} selected	{1} geselecteerd
 {1} to read here	{1} hier te lezen
 {1} volumes	{1} delen
 {1} · play/pause, next	{1} · afspelen/pauzeren, volgende

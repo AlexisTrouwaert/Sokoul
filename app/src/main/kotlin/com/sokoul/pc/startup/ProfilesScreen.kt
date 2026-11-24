@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChildCare
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -86,13 +87,32 @@ fun ProfilesScreen(profiles: Profiles, onChosen: () -> Unit) {
     var editing by remember { mutableStateOf(false) }
     var form by remember { mutableStateOf<Profile?>(null) }
     var adding by remember { mutableStateOf(false) }
+    /** A locked profile waiting for its code, and whether it is to be opened (true) or edited. */
+    var asking by remember { mutableStateOf<Pair<Profile, Boolean>?>(null) }
     Box(Modifier.fillMaxSize().background(Palette.Background).testTag("profiles"), contentAlignment = Alignment.Center) {
         val shown = form
+        val ask = asking
         when {
+            ask != null -> PinPad(
+                L("${ask.first.name}'s code", "Code de ${ask.first.name}").text(),
+                if (ask.second) L("This profile is protected.", "Ce profil est protégé.").text() else L("Enter the code to edit this profile.", "Entrez le code pour modifier ce profil.").text(),
+                check = { profiles.pinMatches(ask.first, it) },
+                onDone = {
+                    asking = null
+                    if (ask.second) {
+                        profiles.switchTo(ask.first)
+                        onChosen()
+                    } else {
+                        form = ask.first
+                    }
+                },
+                onCancel = { asking = null },
+            )
             adding || shown != null -> ProfileForm(
                 profile = shown,
-                onSave = { name, kids, color ->
-                    if (shown == null) profiles.add(name, kids).let { profiles.update(it.copy(color = color)) } else profiles.update(shown.copy(name = name, kids = kids, color = color))
+                onSave = { name, kids, color, pin ->
+                    val saved = if (shown == null) profiles.add(name, kids).also { profiles.update(it.copy(color = color)) } else shown.copy(name = name, kids = kids, color = color).also { profiles.update(it) }
+                    if (pin != null) profiles.setPin(saved, pin.ifEmpty { null })
                     form = null
                     adding = false
                 },
@@ -112,9 +132,14 @@ fun ProfilesScreen(profiles: Profiles, onChosen: () -> Unit) {
                 Row(horizontalArrangement = Arrangement.spacedBy(48.dp)) {
                     profiles.all.forEachIndexed { i, p ->
                         ProfileTile(p, editing, if (p.id == profiles.current.id || (i == 0 && profiles.all.none { it.id == profiles.current.id })) first else remember { FocusRequester() }) {
-                            if (editing) form = p else {
-                                profiles.switchTo(p)
-                                onChosen()
+                            when {
+                                // A protected profile asks for its code before it opens and before it can be changed.
+                                p.locked -> asking = p to !editing
+                                editing -> form = p
+                                else -> {
+                                    profiles.switchTo(p)
+                                    onChosen()
+                                }
                             }
                         }
                     }
@@ -148,7 +173,10 @@ private fun ProfileTile(p: Profile, editing: Boolean, requester: FocusRequester,
             }
         }
         Spacer(Modifier.height(20.dp))
-        Label(p.name, Type.Meta.copy(fontWeight = if (focused) FontWeight.SemiBold else FontWeight.Medium, textAlign = TextAlign.Center), if (focused) Palette.OnBackground else Palette.Secondary, maxLines = 1)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (p.locked) Icon(Icons.Filled.Lock, L("Protected", "Protégé").text(), tint = if (focused) Palette.OnBackground else Palette.Secondary, modifier = Modifier.size(26.dp).testTag("profile-lock"))
+            Label(p.name, Type.Meta.copy(fontWeight = if (focused) FontWeight.SemiBold else FontWeight.Medium, textAlign = TextAlign.Center), if (focused) Palette.OnBackground else Palette.Secondary, maxLines = 1)
+        }
     }
 }
 
@@ -171,7 +199,24 @@ private fun AddTile(onClick: () -> Unit) {
 
 /** Name, kids profile and colour of a new or existing profile. */
 @Composable
-private fun ProfileForm(profile: Profile?, onSave: (String, Boolean, Int) -> Unit, onDelete: (() -> Unit)?, onCancel: () -> Unit) {
+private fun ProfileForm(profile: Profile?, onSave: (String, Boolean, Int, String?) -> Unit, onDelete: (() -> Unit)?, onCancel: () -> Unit) {
+    // The code: null keeps it as it is, "" removes it, four digits set it. Chosen twice, so that a slip does not lock.
+    var pin by remember { mutableStateOf<String?>(null) }
+    var choosing by remember { mutableStateOf(0) }
+    var firstEntry by remember { mutableStateOf("") }
+    val hasPin = pin?.isNotEmpty() ?: (profile?.locked == true)
+    if (choosing > 0) {
+        PinPad(
+            if (choosing == 1) L("Choose a 4-digit code", "Choisissez un code à 4 chiffres").text() else L("Type it again", "Tapez-le une seconde fois").text(),
+            L("Asked before this profile opens or is edited.", "Demandé avant d'ouvrir ou de modifier ce profil.").text(),
+            check = { choosing == 1 || it == firstEntry },
+            onDone = { typed ->
+                if (choosing == 1) { firstEntry = typed; choosing = 2 } else { pin = typed; choosing = 0 }
+            },
+            onCancel = { choosing = 0 },
+        )
+        return
+    }
     var name by remember { mutableStateOf(profile?.name.orEmpty()) }
     var kids by remember { mutableStateOf(profile?.kids ?: false) }
     var color by remember { mutableStateOf(profile?.color ?: 0) }
@@ -204,9 +249,13 @@ private fun ProfileForm(profile: Profile?, onSave: (String, Boolean, Int) -> Uni
                 { kids = !kids }, Modifier.testTag("profile-kids"),
             )
             PillButton(L("Colour", "Couleur").text(), { color = (color + 1) % Profiles.COLORS.size }, Modifier.testTag("profile-color"))
+            PillButton(
+                (if (hasPin) L("Code: on", "Code PIN : oui") else L("Code: off", "Code PIN : non")).text(),
+                { if (hasPin) pin = "" else choosing = 1 }, Modifier.testTag("profile-pin"),
+            )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-            PillButton(L("Save", "Enregistrer").text(), { if (name.isNotBlank()) onSave(name, kids, color) }, Modifier.testTag("profile-save"))
+            PillButton(L("Save", "Enregistrer").text(), { if (name.isNotBlank()) onSave(name, kids, color, pin) }, Modifier.testTag("profile-save"))
             PillButton(L("Cancel", "Annuler").text(), onCancel, Modifier.testTag("profile-cancel"))
             if (onDelete != null) PillButton(L("Delete", "Supprimer").text(), onDelete, Modifier.testTag("profile-delete"))
         }

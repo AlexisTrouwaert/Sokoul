@@ -176,6 +176,17 @@ fun realDeps(db: DesktopDb, player: CompletableFuture<DesktopPlayer?>, loaded: (
     )
     deps.tv.recorder.start(deps.tv::playlist)
     deps.clearSearchCache = debrid::clearCache
+    // A Real-Debrid sign-in made with a device code is renewed before its token ends.
+    appScope.launch(Dispatchers.IO) {
+        runCatching { com.sokoul.desktop.data.RealDebridAuth(db, com.sokoul.iptv.data.debrid.RealDebridOAuth(http)).refreshIfNeeded() }
+    }
+    // Once a day, what can never play leaves the Real-Debrid account (RdCleanup); a minute after start, out of the way.
+    appScope.launch(Dispatchers.IO) {
+        kotlinx.coroutines.delay(60_000)
+        if (ProviderConfig.key(db, "realdebrid") != null) runCatching {
+            com.sokoul.pc.playback.sources.RdCleanup(RealDebridApi(catalog.http, { ProviderConfig.key(db, "realdebrid") }), db).runIfDue()
+        }
+    }
     return deps
 }
 

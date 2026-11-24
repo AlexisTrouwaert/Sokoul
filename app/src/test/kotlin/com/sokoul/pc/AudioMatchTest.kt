@@ -124,12 +124,13 @@ class AudioMatchTest {
     }
 
     @Test fun aDualAudioAnimeReleaseIsNoFrenchVersion() {
-        // Frieren, French then original wanted: the Anime-Sama VF and a French MULTi come before an English and Japanese "dual audio".
+        // Frieren, French then original wanted: a French MULTi from Real-Debrid, then the Anime-Sama VF (a web link comes
+        // after Real-Debrid at the same language, 2026-11-23), both before an English and Japanese "dual audio".
         val dual = version("dual", "[Sokudo] Sousou no Frieren S01E04 [1080p EAC3 AV1][dual audio].mkv", AudioLanguage.MULTI, dub = true)
         val vf = version("vf", "Anime-Sama · VF · ansembed.net", AudioLanguage.VF, audio = listOf("FR"), origin = VersionOrigin.Web)
         val multi = version("multi", "Frieren S01E04 CUSTOM MULTi 1080p 10bits BluRay x265 AAC -Punisher694.mkv", AudioLanguage.MULTI)
         val ranked = VersionRanking.rank(listOf(dual, multi, vf), prefs("fr", original), true, caps = DeviceCaps.Pc, workLanguage = "ja")
-        assertEquals(listOf(vf, multi, dual), ranked)
+        assertEquals(listOf(multi, vf, dual), ranked)
         assertFalse("fr" in AudioMatch.verdict(dual, prefs("fr", original).intent, null, "ja").codes)
     }
 

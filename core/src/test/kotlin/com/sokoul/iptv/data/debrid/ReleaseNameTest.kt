@@ -87,6 +87,38 @@ class ReleaseNameTest {
         assertEquals(VideoQuality.HD_720, ReleaseName.parse("Film.2020.4K.Upscale.720p.WEB.mkv").quality)
     }
 
+    @Test fun `release resolution recognizes wide cropped editions without inflating lower quality`() {
+        val dimensions = listOf(
+            "Dune.Part.Two.2024.3840x1600.WEB-DL.mkv" to VideoQuality.UHD_4K,
+            "Interstellar.2014.3840 × 2160.BluRay.mkv" to VideoQuality.UHD_4K,
+            "Inception.2010.UHD.BluRay.1920x800.mkv" to VideoQuality.FHD_1080,
+            "The.Matrix.1999.1280x536.WEB.mkv" to VideoQuality.HD_720,
+            "The.Matrix.1999.720x480.DVDRip.mkv" to VideoQuality.SD,
+            "The.Matrix.1999.HDR10.720.00 MB.mkv" to null,
+        )
+        dimensions.forEach { (name, expected) -> assertEquals(name, expected, ReleaseName.parse(name).quality) }
+    }
+
+    @Test fun `a known file resolution takes priority over broad stream metadata`() {
+        val answers = """{"streams":[
+            {"name":"1080p bundle","title":"Dune Part Two","infoHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","behaviorHints":{"filename":"Dune.Part.Two.2024.3840x1600.mkv"}},
+            {"name":"2160p bundle","title":"Inception","infoHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","behaviorHints":{"filename":"Inception.2010.1920x800.mkv"}}
+        ]}"""
+        assertEquals(listOf(VideoQuality.UHD_4K, VideoQuality.FHD_1080), DebridStreams.parse(answers).map { it.release.quality })
+    }
+
+    @Test fun `merging the same file retains the explicit resolution regardless of arrival order`() {
+        val hash = "a".repeat(40)
+        val broad = DebridStreams.parse("""{"streams":[{"name":"1080p bundle","infoHash":"$hash"}]}""")
+        val precise = DebridStreams.parse("""{"streams":[{"name":"2160p release","infoHash":"$hash","behaviorHints":{"filename":"Dune.Part.Two.2024.3840x1600.mkv"}}]}""")
+        assertEquals(VideoQuality.FHD_1080, broad.single().release.quality)
+        for (answers in listOf(listOf(broad, precise), listOf(precise, broad))) {
+            val result = DebridStreams.combine(answers).single()
+            assertEquals(precise.single().filename, result.filename)
+            assertEquals(VideoQuality.UHD_4K, result.release.quality)
+        }
+    }
+
     @Test fun `FRE et FRA comptent comme du francais`() {
         assertEquals(
             AudioLanguage.MULTI,

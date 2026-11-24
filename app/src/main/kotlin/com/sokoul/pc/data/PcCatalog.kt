@@ -56,6 +56,12 @@ interface CatalogApi {
     suspend fun sagaTile(ref: SagaRef): SagaTile?
     suspend fun person(id: Int): com.sokoul.iptv.data.net.TmdbPersonInfo?
     suspend fun platformLogos(kind: String?): Map<Int, String>
+    /** The studios' logos, by TMDB company id. */
+    suspend fun studioLogos(): Map<Int, String> = emptyMap()
+    /** What a studio made, films and series, the most watched first. */
+    suspend fun studio(studio: Studio, page: Int): List<TmdbItem> = emptyList()
+    /** One section of a studio's page. */
+    suspend fun studioSection(studio: Studio, section: StudioSection, page: Int): List<TmdbItem> = emptyList()
     /** The logos of the services, by name. */
     suspend fun providerLogos(kind: String): Map<String, String> = emptyMap()
     suspend fun collections(): CollectionsPage
@@ -74,7 +80,10 @@ interface CatalogApi {
     suspend fun similar(kind: String, id: Int): List<TmdbItem>
     suspend fun search(query: String): List<TmdbItem>
     /** What the search screen shows: more than one page of results. Other callers keep [search], one page. */
-    suspend fun searchMore(query: String): List<TmdbItem> = search(query)
+    suspend fun searchMore(query: String, onFirstPage: suspend (List<TmdbItem>) -> Unit = {}): List<TmdbItem> =
+        search(query).also { onFirstPage(it) }
+    suspend fun searchSeries(query: String, onFirstPage: suspend (List<TmdbItem>) -> Unit = {}): List<TmdbItem> =
+        searchMore(query) { onFirstPage(it.filter { item -> item.kind() == "tv" }) }.filter { it.kind() == "tv" }
     suspend fun genreName(kind: String, id: Int): String?
     suspend fun genreTiles(kind: String = "movie"): List<GenreTile>
     suspend fun byGenre(kind: String, id: Int, page: Int = 1): List<TmdbItem>
@@ -255,6 +264,40 @@ class TmdbCatalog(private val db: DesktopDb, private val catalog: Catalog, priva
     override suspend fun providerLogos(kind: String): Map<String, String> {
         val type = if (kind == "tv") "tv" else "movie"
         return tmdb.watchProviderNames(key(), type, "US") + tmdb.watchProviderNames(key(), type, Strings.region())
+    }
+
+    override suspend fun studioLogos(): Map<Int, String> = coroutineScope {
+        val k = key()
+        Studio.entries.map { s -> async { s.companyId to tmdb.companyLogo(k, s.companyId) } }.mapNotNull { d -> d.await().let { (id, logo) -> logo?.let { id to it } } }.toMap()
+    }
+
+    override suspend fun studio(studio: Studio, page: Int): List<TmdbItem> = coroutineScope {
+        val k = key()
+        val params = mapOf("with_companies" to studio.companyId.toString(), "sort_by" to "popularity.desc")
+        val films = async { tmdb.discover(k, "movie", params, page) }
+        val series = async { tmdb.discover(k, "tv", params, page) }
+        (films.await() + series.await()).filter { it.poster != null }.distinctBy { it.kind() to it.id }
+    }
+
+    override suspend fun studioSection(studio: Studio, section: StudioSection, page: Int): List<TmdbItem> = coroutineScope {
+        val k = key()
+        val company = "with_companies" to studio.companyId.toString()
+        val today = java.time.LocalDate.now().toString()
+        suspend fun films(vararg p: Pair<String, String>) = tmdb.discover(k, "movie", mapOf(company, *p), page)
+        suspend fun series(vararg p: Pair<String, String>) = tmdb.discover(k, "tv", mapOf(company, *p), page)
+        val list = when (section) {
+            StudioSection.Popular -> studio(studio, page)
+            // Out already, newest first: a date to come would show posters nobody can watch.
+            StudioSection.Latest -> {
+                val m = async { films("sort_by" to "primary_release_date.desc", "primary_release_date.lte" to today, "vote_count.gte" to "30") }
+                val t = async { series("sort_by" to "first_air_date.desc", "first_air_date.lte" to today, "vote_count.gte" to "10") }
+                (m.await() + t.await()).sortedByDescending { it.year ?: 0 }
+            }
+            StudioSection.Acclaimed -> films("sort_by" to "vote_average.desc", "vote_count.gte" to "800")
+            StudioSection.Series -> series("sort_by" to "popularity.desc")
+            StudioSection.Classics -> films("sort_by" to "vote_count.desc", "primary_release_date.lte" to "1999-12-31")
+        }
+        list.filter { it.poster != null }.distinctBy { it.kind() to it.id }
     }
 
     override suspend fun platformLogos(kind: String?): Map<Int, String> {
@@ -448,10 +491,20 @@ class TmdbCatalog(private val db: DesktopDb, private val catalog: Catalog, priva
 
     override suspend fun search(query: String) = tmdb.searchMulti(key(), query).filter { it.poster != null }.distinctBy { it.kind() to it.id }
 
-    /** Three pages of TMDB results asked at once (one page gave 7 titles for "Oppenheimer"), in TMDB's order. */
-    override suspend fun searchMore(query: String): List<TmdbItem> = coroutineScope {
-        (1..SEARCH_PAGES).map { page -> async { tmdb.searchMulti(key(), query, page) } }.awaitAll().flatten()
-            .filter { it.poster != null }.distinctBy { it.kind() to it.id }
+    override suspend fun searchMore(query: String, onFirstPage: suspend (List<TmdbItem>) -> Unit): List<TmdbItem> =
+        titleSearch(query, seriesOnly = false, onFirstPage = onFirstPage)
+
+    override suspend fun searchSeries(query: String, onFirstPage: suspend (List<TmdbItem>) -> Unit): List<TmdbItem> =
+        titleSearch(query, seriesOnly = true, onFirstPage = onFirstPage)
+
+    private suspend fun titleSearch(query: String, seriesOnly: Boolean, onFirstPage: suspend (List<TmdbItem>) -> Unit): List<TmdbItem> = coroutineScope {
+        val apiKey = key()
+        val first = tmdb.searchPage(apiKey, query, 1, seriesOnly)
+        onFirstPage(first.items.distinctBy { it.kind() to it.id })
+        val more = (2..minOf(first.totalPages, SEARCH_PAGES)).map { page ->
+            async { tmdb.searchPage(apiKey, query, page, seriesOnly).items }
+        }.awaitAll().flatten()
+        (first.items + more).distinctBy { it.kind() to it.id }
     }
 
     override suspend fun genreName(kind: String, id: Int) = tmdb.genres(key(), kind)[id]

@@ -16,6 +16,15 @@ const val REFERENCE_WIDTH = 1920f
  */
 const val PHONE_SHORT_SIDE = 640f
 
+/**
+ * A tablet held upright counts this many dp across on its browse pages: a body text of 29 then reads about 41 px on a
+ * 1600 px wide screen and a poster row shows a little over four posters, as the Apple TV app does there.
+ */
+const val UPRIGHT_WIDTH = 1120f
+
+/** The density of a browse page on a tablet held upright (see [UPRIGHT_WIDTH]). */
+fun uprightDensity(widthPx: Int): Density = Density(density = widthPx / UPRIGHT_WIDTH, fontScale = 1f)
+
 /** Makes one dp equal one pixel of a 1920-wide capture, whatever the window size. */
 fun scaledDensity(widthPx: Int): Density = Density(density = widthPx / REFERENCE_WIDTH, fontScale = 1f)
 
@@ -25,7 +34,13 @@ fun phoneDensity(widthPx: Int, heightPx: Int): Density = Density(density = minOf
 @Composable
 fun ScaledRoot(content: @Composable () -> Unit) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        val density = if (Form.isPhone) phoneDensity(constraints.maxWidth, constraints.maxHeight) else scaledDensity(constraints.maxWidth)
+        // A tablet held upright takes its own scale everywhere, not page by page: drawn as a 1920 frame squeezed into
+        // 1600 px, the bar, TV, Sport and every page not adapted read 17 % smaller than on the TV (2026-11-23).
+        val density = when {
+            Form.isPhone -> phoneDensity(constraints.maxWidth, constraints.maxHeight)
+            Form.tabletPortrait -> uprightDensity(constraints.maxWidth)
+            else -> scaledDensity(constraints.maxWidth)
+        }
         // Arabic reads right to left: rows, menus and text alignment follow the language.
         val direction = if (com.sokoul.pc.i18n.InterfaceLanguages.current().rtl) androidx.compose.ui.unit.LayoutDirection.Rtl else androidx.compose.ui.unit.LayoutDirection.Ltr
         CompositionLocalProvider(LocalDensity provides density, androidx.compose.ui.platform.LocalLayoutDirection provides direction) {

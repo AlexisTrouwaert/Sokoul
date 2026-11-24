@@ -40,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -183,13 +184,30 @@ private fun ListRow(title: String, detail: String?, current: Boolean, modifier: 
 internal fun ChannelsPanel(session: PlaybackSession, modifier: Modifier = Modifier, onClose: () -> Unit = {}, onPicked: () -> Unit) {
     val list = session.liveList
     val current = list.indexOfFirst { it.key == session.liveBaseKey }.coerceAtLeast(0)
-    val state = rememberLazyListState(current)
+    val state = rememberLazyListState((current - 2).coerceAtLeast(0))
     val first = remember { FocusRequester() }
-    LaunchedEffect(Unit) { repeat(4) { androidx.compose.runtime.withFrameNanos { }; if (runCatching { first.requestFocus() }.isSuccess) return@LaunchedEffect } }
+    var hasFocus by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        repeat(4) {
+            androidx.compose.runtime.withFrameNanos { }
+            if (hasFocus) return@LaunchedEffect
+            runCatching { first.requestFocus() }
+        }
+    }
     // Holding Up or Down speeds up after half a second (HoldScroll decides, the list only moves).
     val hold = remember { HoldScroll() }
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     EdgeDrawer(start = true, width = LIVE_DRAWERS.channels.dp, modifier = modifier.testTag("player-channels"), onSideKey = onClose) {
+        Row(Modifier.fillMaxWidth().padding(start = 36.dp, end = 24.dp, bottom = 14.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.weight(1f)) {
+                Label(com.sokoul.pc.data.L("Channels", "Chaînes").text(), Type.RowTitle)
+                Label(com.sokoul.pc.data.L("${list.size} channels", "${list.size} chaînes").text(), Type.Meta, Palette.Secondary)
+            }
+            val closeFocus = if (list.isEmpty()) first else remember { FocusRequester() }
+            com.sokoul.pc.ui.PanelChip(com.sokoul.pc.data.L("Close", "Fermer").text(),
+                Modifier.testTag("player-channels-close"), requester = closeFocus, onClick = onClose)
+        }
         LazyColumn(
             Modifier.weight(1f).padding(horizontal = 16.dp).onPreviewKeyEvent { e ->
                 val direction = when (e.key) {
@@ -220,14 +238,18 @@ internal fun ChannelsPanel(session: PlaybackSession, modifier: Modifier = Modifi
             itemsIndexed(list, key = { _, c -> c.key }) { i, c ->
                 val program by produceState<String?>(null, c.key) { value = withContext(Dispatchers.IO) { c.program().now?.title } }
                 ListRow(
-                    com.sokoul.pc.live.TvCatalog.label(c.title), program, c.key == session.liveBaseKey, requester = if (i == current) first else remember { FocusRequester() },
+                    com.sokoul.pc.live.TvCatalog.shortLabel(c.title),
+                    listOfNotNull(c.number?.toString(), program).joinToString(" · ").ifEmpty { null },
+                    c.key == session.liveBaseKey,
+                    modifier = Modifier.onFocusChanged { if (i == current) hasFocus = it.isFocused }.testTag("player-channel-${c.key}"),
+                    requester = if (i == current) first else remember { FocusRequester() },
                     leading = {
                         Box(Modifier.size(84.dp, 50.dp).clip(RoundedCornerShape(10.dp)).background(Palette.RowFill)) {
                             com.sokoul.pc.live.ChannelLogo(c.title, c.logo, Modifier.fillMaxHeight().fillMaxWidth().padding(4.dp))
                         }
                     },
                 ) {
-                    session.playLive(c, list)
+                    if (c.key != session.liveBaseKey || session.liveReplayProgram != null) session.playLive(c, list)
                     onPicked()
                 }
             }

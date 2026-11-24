@@ -45,14 +45,18 @@ Add channel to favorites	Añadir el canal a favoritos
 Add channels	Añadir canales
 Add channels from any group. Your provider's groups stay as they are.	Añade canales de cualquier grupo. Los grupos de tu proveedor no cambian.
 Add channels from any provider group. Your provider categories remain unchanged.	Añade canales de cualquier grupo del proveedor. Sus categorías no cambian.
+Add selection	Añadir selección
+Add to a collection	Añadir a una colección
 Add to collection	Añadir a una colección
 Add your IPTV account in Settings to see your channels.	Añade tu cuenta IPTV en Ajustes para ver tus canales.
 Added to downloads. Open Recordings to follow progress.	Añadido a las descargas. Abre Grabaciones para seguir el progreso.
+Added {1} channels	Canales añadidos: {1}
 Adrenaline	Adrenalina
 After {1} min	Tras {1} min
 Airing today	Se emiten hoy
 Alert on	Alerta activada
 All	Todo
+All sources	Todas las fuentes
 ALL\nCOLLECTIONS	TODAS LAS\nCOLECCIONES
 All channels	Todos los canales
 All formats	Todos los formatos
@@ -140,6 +144,7 @@ CATALOG	CATÁLOGO
 Categories	Categorías
 Categories could not be refreshed. Stored titles remain available.	No se pudieron actualizar las categorías. Los títulos guardados siguen disponibles.
 Channel	Canal
+Channel groups	Grupos de canales
 Channel preview	Vista previa de canales
 Channel up / down	Canal siguiente / anterior
 Channels	Canales
@@ -169,8 +174,30 @@ Choose Channels and enter a name or number, or explore Programmes.	Elige Canales
 Choose folder…	Elegir carpeta…
 Clear	Borrar
 CLEAR	BORRAR
+Clear search	Borrar búsqueda
+Clear selection	Borrar selección
 Clear the catalogue cache	Vaciar la caché del catálogo
+Edit collection	Gestionar colección
+Find a channel	Buscar un canal
 Forget source failures	Olvidar los fallos de las fuentes
+No 4K version from these sources	Ninguna versión 4K en estas fuentes
+No channels could be added.	No se pudo añadir ningún canal.
+No channels in this group	No hay canales en este grupo
+No new channels to add.	No hay canales nuevos para añadir.
+No version from this source	Ninguna versión en esta fuente
+On air now	En emisión
+Programmes airing on your channels	Programas en emisión en tus canales
+Programmes you marked to watch later	Programas que marcaste para ver más tarde
+Provider groups	Grupos del proveedor
+Real-Debrid search found no version for this title	Real-Debrid no encontró versiones de este título
+Real-Debrid search is temporarily unavailable	La búsqueda de Real-Debrid no está disponible temporalmente
+Record this programme	Grabar este programa
+Search groups	Buscar grupos
+Select all	Seleccionar todo
+Select channels	Seleccionar canales
+Servers	Servidores
+Set up the Sokoul server in Settings > Content sources.	Configura el servidor Sokoul en Ajustes > Fuentes de contenido.
+TV actions	Acciones de TV
 Your languages	Tus idiomas
 Search services	Servicios de búsqueda
 If no language matches	Si no coincide ningún idioma
@@ -750,6 +777,7 @@ Speed	Velocidad
 Spin again	Volver a girar
 Spinning…	Girando…
 Sports	Deportes
+Sports channels	Canales deportivos
 Sports and games	Deportes y juegos
 Stable	Estable
 Start	Empezar
@@ -797,7 +825,6 @@ The collection changed. Cancel and try again.	La colección ha cambiado. Cancela
 The complete programme is scheduled, with a 2 minute lead-in and a 5 minute safety margin.	El programa completo está programado, con 2 minutos de antelación y 5 minutos de margen.
 The connection was interrupted.	La conexión se interrumpió.
 The Early Bird	El Madrugador
-The experience	La experiencia
 The Explorer	El Explorador
 The Faces	Los rostros
 The Films	Las películas
@@ -988,6 +1015,7 @@ Zoom out	Reducir
 {1} screens at a time	{1} pantallas a la vez
 {1} screens watching right now	{1} pantallas reproduciendo ahora
 {1} seasons	{1} temporadas
+{1} selected	Selección: {1}
 {1} to read here	{1} para leer aquí
 {1} volumes	{1} tomos
 {1} · play/pause, next	{1} · reproducir/pausar, siguiente

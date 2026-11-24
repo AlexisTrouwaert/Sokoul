@@ -66,22 +66,26 @@ fun PillButton(
 
 /** Back arrow in the leading corner of every page that opens over another. */
 @Composable
-fun BackButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
-    // The remote has its own: on a TV this one would only sit over the page and catch focus. A phone needs it.
-    if (com.sokoul.pc.Platform.IS_TV && !Form.isPhone) return
+fun BackButton(onClick: () -> Unit, modifier: Modifier = Modifier, onTablet: Boolean = false) {
+    if (com.sokoul.pc.Platform.IS_TV && !Form.isPhone && !(onTablet && Form.tablet)) return
     var focused by remember { mutableStateOf(false) }
-    val fill by animateColorAsState(if (focused) Palette.FocusFill else Color(0x99000000))
+    // A light disc: a dark one vanished on the black of the player, and the tablet's arrow went unseen (2026-11-24).
+    val fill by animateColorAsState(if (focused) Palette.FocusFill else Color(0x40FFFFFF))
+    val touch = Form.tablet || Form.isPhone
     Box(
         modifier
-            .size(Metrics.PillIcon)
+            .size(if (touch) BACK_TOUCH else Metrics.PillIcon)
             .clip(CircleShape)
             .background(fill)
             .tvFocusable(onFocusChanged = { focused = it }, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Back", tint = if (focused) Palette.OnFocus else Palette.OnBackground, modifier = Modifier.size(34.dp))
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, com.sokoul.pc.data.L("Back", "Retour").text(), tint = if (focused) Palette.OnFocus else Palette.OnBackground, modifier = Modifier.size(if (touch) 52.dp else 34.dp))
     }
 }
+
+/** Under a thumb: the size of the bar's round icons. */
+private val BACK_TOUCH = 84.dp
 
 /** Section pill in the top-left corner: chevron, round icon, section name. */
 @Composable

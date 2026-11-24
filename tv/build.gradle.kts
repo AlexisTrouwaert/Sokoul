@@ -49,7 +49,9 @@ val prepareCurlImpersonate = tasks.register<Exec>("prepareCurlImpersonate") {
     val root = curlRoot.get().asFile
     outputs.dir(root)
     onlyIf { curlAbis.any { !File(root, "$it/libcurl-impersonate.so").isFile } }
-    commandLine("python", rootProject.file("tools/prepare-curl-impersonate.py").absolutePath, root.absolutePath)
+    // macOS and Linux only ship "python3"; Windows' installer names it "python".
+    val python = if (System.getProperty("os.name").startsWith("Windows")) "python" else "python3"
+    commandLine(python, rootProject.file("tools/prepare-curl-impersonate.py").absolutePath, root.absolutePath)
 }
 // Only the shared library goes into the APK, beside libsokoulcurl; the headers stay for CMake.
 val curlNatives = layout.buildDirectory.dir("curlNatives")
@@ -136,6 +138,9 @@ dependencies {
     testImplementation(libs.junit)
     implementation(project(":core")) { exclude(group = "xmlpull") }
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))
+    // Installs the baseline profiles that Compose ships, also when the APK is installed with adb: without it the app ran
+    // interpreted (dexopt "verify") and the Chromecast HD dropped 41 % of frames while browsing (2026-11-22).
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.animation:animation")
@@ -143,6 +148,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation(libs.androidx.activity.compose)
     implementation(libs.okhttp)
+    implementation("com.google.zxing:core:3.5.3")
     // Streaming sites read by the app itself (Coflix…), as core already does.
     implementation(libs.jsoup)
     implementation(libs.kotlinx.serialization.json)

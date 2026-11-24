@@ -502,17 +502,22 @@ class InterfaceTest {
     }
 
     @OptIn(ExperimentalTestApi::class)
-    @Test
+    @Test(timeout = 60_000)
     fun menu_reaches_search_library_and_settings() = runComposeUiTest {
         // Scaled as Main shows it: unscaled in the small test window, the centred tabs cover the avatar that opens Settings.
         setContent { com.sokoul.pc.ui.ScaledRoot { SokoulPcApp(testDeps(db, validator, FakeCatalog()), skipSplash = true) } }
-        waitUntil { onAll("menu-home") }
+        // Apple TV bar: the pages are in the menu behind the left icon, search on the right.
+        waitUntil { onAll("menu-open") }
+        onNodeWithTag("menu-open").performClick()
+        waitUntil { onAll("menu-library") }
         onNodeWithTag("menu-library").performClick()
         waitForIdle()
         onNodeWithTag("library-empty").assertExists()
+        onNodeWithTag("menu-open").performClick()
+        waitUntil { onAll("menu-settings") }
         onNodeWithTag("menu-settings").performClick()
         waitForIdle()
-        assertTrue(tagsOnScreen().toString(), onAll("settings-credentials"))
+        assertTrue(tagsOnScreen().toString(), onAll("settings"))
         onNodeWithTag("menu-search").performClick()
         waitForIdle()
         onNodeWithTag("search").assertExists()
@@ -520,22 +525,98 @@ class InterfaceTest {
 
     @OptIn(ExperimentalTestApi::class)
     @Test
+    fun tv_group_picker_saves_multiple_channels_in_an_existing_collection() = runComposeUiTest {
+        val playlist = db.upsertPlaylist(com.sokoul.desktop.data.Playlist(0, "Test", com.sokoul.desktop.data.PlaylistType.M3U,
+            "https://example.test/playlist", null, null, null, null))
+        val channels = listOf("sport", "culture", "news").mapIndexed { index, id ->
+            com.sokoul.desktop.data.Channel(playlist, id, index + 1, id, null, "provider-group", null,
+                id, "https://example.test/$id", null, null, index)
+        }
+        db.replaceLive(playlist, listOf(com.sokoul.desktop.data.Category(playlist, "provider-group", "Provider group", 0)), channels)
+        val deps = testDeps(db, validator, FakeCatalog())
+        val collection = deps.personalTv.create("Mine")
+        val groups = deps.personalTv.groups()
+        setContent {
+            com.sokoul.pc.ui.ScaledRoot {
+                com.sokoul.pc.live.GroupChannelPicker(deps, groups, com.sokoul.pc.live.GroupChannelRequest("provider-group"),
+                    onClose = {}, onSearch = null, onSaved = { _, _ -> })
+            }
+        }
+        waitUntil { onAll("tv-group-picker-all") }
+        onNodeWithTag("tv-group-picker-all").performClick()
+        onNodeWithTag("tv-group-picker-channel-news").performClick()
+        onNodeWithTag("tv-group-picker-continue").performClick()
+        waitUntil { onAll("tv-group-picker-dest-$collection") }
+        onNodeWithTag("tv-group-picker-dest-$collection").performClick()
+        waitUntil { deps.personalTv.state().collections.single().members.size == 2 }
+        assertEquals(setOf("sport", "culture"), deps.personalTv.state().collections.single().members.map { it.channelId }.toSet())
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    @org.junit.Ignore("The old Streamed sports page (SportsScreen) is no longer shown: Sport opens SportHome (ESPN) since 2026-11-23. Covered by SportScoresTest and SportGuideMatchTest.")
+    fun tv_opens_the_sports_page_with_filters_and_returns_to_the_guide() = runComposeUiTest {
+        MockWebServer().use { server ->
+            val serverKey = "a".repeat(24)
+            server.enqueue(MockResponse().setBody("""{"metas":[{"id":"streamed_match","name":"Test match","_sport":"Football","_isLive":true},{"id":"streamed_race","name":"Test race","_sport":"Racing"}]}"""))
+            server.enqueue(MockResponse().setBody("""{"streams":[{"_streamedKey":"$serverKey","title":"Test server"}]}"""))
+            server.enqueue(MockResponse().setResponseCode(503))
+            ProviderConfig.setKey(db, "mainapi_url", server.url("/").toString())
+            setContent { com.sokoul.pc.ui.ScaledRoot { SokoulPcApp(testDeps(db, validator, FakeCatalog()), skipSplash = true) } }
+            waitUntil { onAll("menu-open") }
+            onNodeWithTag("menu-open").performClick()
+            waitUntil { onAll("menu-sports") }
+            onNodeWithTag("menu-sports").performClick()
+            waitUntil { onAll("sports-category-Football") }
+            onNodeWithTag("sports-category-Football").performClick()
+            onNodeWithTag("sports-event-streamed_race").assertDoesNotExist()
+            onNodeWithTag("sports-event-streamed_match").performClick()
+            waitUntil { onAll("sports-server-$serverKey") }
+            onNodeWithTag("sports-back").performClick()
+            waitUntil { onAll("sports-event-streamed_match") }
+            onNodeWithTag("sports-refresh").performKeyInput { pressKey(Key.Escape) }
+            waitUntil { onAll("tv") }
+            assertEquals(2, server.requestCount)
+            // Only the Sport fallback needs IPTV data. The guide's live preview timer does not run in this UI test.
+            com.sokoul.desktop.data.DesktopPrefs(db).livePreview = false
+            val playlist = db.upsertPlaylist(com.sokoul.desktop.data.Playlist(0, "Test", com.sokoul.desktop.data.PlaylistType.M3U,
+                "https://example.test/playlist", null, null, null, null))
+            db.replaceLive(playlist, listOf(
+                com.sokoul.desktop.data.Category(playlist, "sports", "FR | Sports", 0),
+                com.sokoul.desktop.data.Category(playlist, "general", "FR | General", 1),
+            ), listOf(
+                com.sokoul.desktop.data.Channel(playlist, "test-sport", 1, "Test Sport", null, "sports", null,
+                    "test-sport", "https://example.test/sports", null, null, 0),
+                com.sokoul.desktop.data.Channel(playlist, "test-general", 2, "Test General", null, "general", null,
+                    "test-general", "https://example.test/general", null, null, 1),
+            ))
+            onNodeWithTag("tv-sports-open").performClick()
+            waitUntil { server.requestCount == 3 && onAll("sports-channel-test-sport") }
+            onNodeWithTag("sports-event-streamed_match").assertDoesNotExist()
+            onNodeWithTag("sports-channel-test-general").assertDoesNotExist()
+        }
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test(timeout = 120_000)
     fun grid_keys_and_direct_typing_both_search() = runComposeUiTest {
         val catalog = FakeCatalog()
         setContent { SokoulPcApp(testDeps(db, validator, catalog), skipSplash = true) }
-        waitUntil { onAll("menu-home") }
+        waitUntil { onAll("menu-search") }
         onNodeWithTag("menu-search").performClick()
         waitForIdle()
+        // The search starts from two letters: one letter only gave noise.
         onNodeWithTag("key-a").performClick()
+        onNodeWithTag("key-b").performClick()
         mainClock.advanceTimeBy(400)
         waitForIdle()
-        waitUntil { catalog.searched.isNotEmpty() }
-        assertEquals("a", catalog.searched.last())
-        waitUntil { onAll("search-results") }
-        onNodeWithTag("key-a").performKeyInput { pressKey(Key.B) }
+        waitUntil(timeoutMillis = 5_000) { catalog.searched.isNotEmpty() }
+        assertEquals("ab", catalog.searched.last())
+        waitUntil(timeoutMillis = 5_000) { onAll("search-results") }
+        onNodeWithTag("key-a").performKeyInput { pressKey(Key.C) }
         mainClock.advanceTimeBy(400)
         waitForIdle()
-        waitUntil { catalog.searched.last() == "ab" }
+        waitUntil(timeoutMillis = 5_000) { catalog.searched.last() == "abc" }
     }
 
     @Test
@@ -631,6 +712,8 @@ class InterfaceTest {
     @Test
     fun collections_tab_opens_a_saga_order_changes_and_escape_comes_back() = runComposeUiTest {
         setContent { SokoulPcApp(testDeps(db, validator, FakeCatalog()), skipSplash = true) }
+        waitUntil { onAll("menu-open") }
+        onNodeWithTag("menu-open").performClick()
         waitUntil { onAll("menu-collections") }
         onNodeWithTag("menu-collections").performClick()
         waitUntil { onAll("saga-saga-a") }

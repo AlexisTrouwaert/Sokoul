@@ -104,7 +104,8 @@ internal fun TvRecordingsPanel(
         runCatching { first.requestFocus() }
     }
     TvPanel(L("Recordings", "Enregistrements").text(), L("A single provider connection is shared between playback and DVR", "Le direct et le DVR partagent une seule connexion fournisseur").text(),
-        modifier = Modifier.testTag("tv-recordings"), width = TvPanelSize.Standard.width, height = TvPanelSize.Standard.height) {
+        modifier = Modifier.testTag("tv-recordings"), width = TvPanelSize.Standard.width, height = TvPanelSize.Standard.height,
+        action = { com.sokoul.pc.ui.PanelChip(L("Back", "Retour").text(), onClick = onClose) }) {
         val current = active?.takeIf { canPlayRecording(deps.db, it, profile.kids) }
         if (current != null) {
             val bytes = progress?.takeIf { it.id == current.id }?.bytes ?: current.bytes

@@ -43,7 +43,7 @@ private data class VodSyncResult(
  * Au lancement si les données ont plus de [STALE_MS], et à la demande depuis Réglages.
  */
 class DesktopSync(private val db: DesktopDb) {
-    private val mutex = Mutex()
+    private val mutex = synchronized(syncLocks) { syncLocks.getOrPut(db) { Mutex() } }
     private val _state = MutableStateFlow(SyncState())
     val state: StateFlow<SyncState> = _state
 
@@ -70,7 +70,9 @@ class DesktopSync(private val db: DesktopDb) {
         return now - synced > 6 * 3_600_000L || db.programCount(p.id) == 0
     }
 
-    suspend fun syncIfStale(p: Playlist) { if (isStale(p)) sync(p) }
+    suspend fun syncIfStale(p: Playlist) {
+        if (db.hasRoomForBackgroundSync() && isStale(p)) sync(p)
+    }
 
     /** Refreshes only the guide after its XMLTV source is edited; channel credentials and playlist rows stay untouched. */
     suspend fun syncGuide(p: Playlist): Int = mutex.withLock {
@@ -86,6 +88,7 @@ class DesktopSync(private val db: DesktopDb) {
                 _state.value = _state.value.copy(error = "Aucun programme reçu. Vérifiez la source XMLTV du fournisseur.")
             }
             _state.value = _state.value.copy(running = false, step = "Terminé", programs = count)
+            reclaimStorage()
             count
         }
     }
@@ -116,8 +119,17 @@ class DesktopSync(private val db: DesktopDb) {
                 db.markSynced(p.id, System.currentTimeMillis())
                 _state.value = _state.value.copy(running = false, step = "Terminé", channels = n, programs = programs)
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 _state.value = SyncState(false, "", com.sokoul.iptv.data.net.Redact.text(e.message ?: e.javaClass.simpleName))
+            } finally {
+                reclaimStorage()
             }
+        }
+    }
+
+    private fun reclaimStorage() {
+        runCatching { db.checkpointStorage() }.onFailure {
+            com.sokoul.pc.Platform.guideDiagnostic("database checkpoint failed=${it.javaClass.simpleName}")
         }
     }
 
@@ -126,8 +138,10 @@ class DesktopSync(private val db: DesktopDb) {
         val cats = xtream.categories(a, "get_live_categories").mapIndexed { i, c -> Category(p.id, c.id, c.name, i) }
         val known = cats.map { it.id }.toSet()
         val channels = ArrayList<Channel>(4096)
+        val firstImport = db.channelCount(p.id) == 0
+        var hasUncategorized = false
         fun persistLive() {
-            val all = if (channels.any { it.categoryId == UNCATEGORIZED }) {
+            val all = if (hasUncategorized) {
                 cats + Category(p.id, UNCATEGORIZED, "Non classées", cats.size)
             } else {
                 cats
@@ -138,13 +152,17 @@ class DesktopSync(private val db: DesktopDb) {
         xtream.streamArray(a, "get_live_streams") { o ->
             val s = XtreamParse.live(o) ?: return@streamArray
             val cat = s.categoryId?.takeIf { it in known } ?: UNCATEGORIZED
+            if (cat == UNCATEGORIZED) hasUncategorized = true
             channels += Channel(
                 p.id, s.streamId.toString(), s.num ?: (channels.size + 1), s.name, s.icon, cat,
                 epgId(s.epgChannelId), TitleTagger.channelKey(s.name), null, null, null, channels.size,
                 catchupType = "xc".takeIf { s.hasArchive && s.archiveDays > 0 },
                 catchupDays = s.archiveDays.coerceAtLeast(0).takeIf { s.hasArchive } ?: 0,
             )
-            if (channels.size % LIVE_BATCH_SIZE == 0) persistLive()
+            if (channels.size % LIVE_BATCH_SIZE == 0) {
+                if (firstImport && channels.size == LIVE_BATCH_SIZE) persistLive()
+                else _state.value = _state.value.copy(channels = channels.size)
+            }
         }
         persistLive()
         return channels.size
@@ -334,6 +352,7 @@ class DesktopSync(private val db: DesktopDb) {
     }
 
     companion object {
+        private val syncLocks = java.util.WeakHashMap<DesktopDb, Mutex>()
         const val STALE_MS = 12 * 3600_000L
         private const val LIVE_BATCH_SIZE = 1000
         private const val DAY = 24 * 3600_000L

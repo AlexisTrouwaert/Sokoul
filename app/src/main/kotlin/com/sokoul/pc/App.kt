@@ -73,6 +73,7 @@ import com.sokoul.pc.collections.SagaShelfScreen
 import com.sokoul.pc.data.SagaEntry
 import com.sokoul.pc.data.SagaShelf
 import com.sokoul.pc.data.PageKind
+import com.sokoul.pc.data.L
 import com.sokoul.pc.data.GenreTile
 import com.sokoul.pc.data.SagaTile
 import com.sokoul.pc.ui.NavIcons
@@ -154,7 +155,6 @@ class AppDeps(
     /** What the reader shows, for the tools. */
     @Volatile var readerReport: com.sokoul.pc.anime.ReaderReport? = null
     /** What the block of a title page found, for the tools. */
-    @Volatile var experienceReport: String? = null
     val reminders = com.sokoul.pc.live.Reminders(db)
     /** Followed titles (Movix alerts): told when a film comes out or a new episode airs. */
     val alerts = com.sokoul.pc.data.TitleAlerts(db) { profiles.key(com.sokoul.pc.data.TitleAlerts.SETTING) }
@@ -311,7 +311,9 @@ class AppDeps(
             }
         },
         // Three Real-Debrid versions at once on the TV, five on the PC; "off" tries them one after the other.
-        raceSize = { if (db.setting("pc.start.race") == "off") 1 else if (Platform.IS_TV) 3 else 5 },
+        // Two at a time: every version raced is a torrent added to Real-Debrid then removed, and after a few dozen of those
+        // it refused every add for minutes (24 titles mapped on the Google TV, 2026-11-24).
+        raceSize = { if (db.setting("pc.start.race") == "off") 1 else 2 },
     )
 }
 
@@ -352,7 +354,32 @@ fun SokoulPcApp(deps: AppDeps, skipSplash: Boolean = false) {
 
     when (route) {
         Route.Splash -> SplashScreen(onFinished = { route = afterSplash() })
-        Route.Setup -> SetupScreen(controller, onDone = { syncSavedPlaylist(); route = Route.Main }, onLater = { route = Route.Main })
+        Route.Setup -> if (com.sokoul.pc.ui.Form.tablet) {
+            // A touch tablet gets the guided first launch; the TV and the PC keep the remote-driven form for now.
+            val model = remember {
+                com.sokoul.pc.startup.onboarding.OnboardingModel(
+                    deps.db, deps.validator, com.sokoul.iptv.data.debrid.RealDebridOAuth(okhttp3.OkHttpClient()), setupScope,
+                )
+            }
+            com.sokoul.pc.startup.onboarding.OnboardingScreen(
+                model,
+                onFinished = {
+                    // The catalogue opens at once and fills in while the channels arrive.
+                    val playlists = deps.db.playlists()
+                    val active = deps.db.setting(com.sokoul.desktop.data.Settings.ACTIVE_PLAYLIST)?.toLongOrNull()
+                    (playlists.firstOrNull { it.id == active } ?: playlists.firstOrNull())?.let { playlist ->
+                        setupScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                            runCatching { com.sokoul.desktop.data.DesktopSync(deps.db).sync(playlist) }
+                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main.immediate) { deps.uiChanged() }
+                        }
+                    }
+                    route = Route.Main
+                },
+                onLater = { route = Route.Main },
+            )
+        } else {
+            SetupScreen(controller, onDone = { syncSavedPlaylist(); route = Route.Main }, onLater = { route = Route.Main })
+        }
         Route.Profiles -> com.sokoul.pc.startup.ProfilesScreen(deps.profiles, onChosen = { route = Route.Main })
         Route.Main -> androidx.compose.runtime.CompositionLocalProvider(com.sokoul.pc.live.LocalProgramArt provides deps.programArt, com.sokoul.pc.data.LocalProfile provides deps.profiles.current) {
             androidx.compose.runtime.key(deps.languageRevision) {
@@ -393,10 +420,12 @@ private fun MainInterface(deps: AppDeps, controller: SetupController, onProfiles
         NavEntry("anime", tr(Text.MenuAnime), NavIcons.Anime),
         NavEntry("collections", tr(Text.MenuCollections), NavIcons.Collections),
         NavEntry("tv", tr(Text.MenuTv), NavIcons.Tv),
+        NavEntry("sports", L("Sports", "Sport").text(), NavIcons.Sports),
     )
-    val entries = allEntries.filter { it.id !in hiddenEntries }
+    val entries = allEntries.filter { it.id !in hiddenEntries && (it.id != "sports" || !deps.profiles.current.kids) }
     var section by remember { mutableStateOf(if (deps.languageReturn) SECTION_SETTINGS else "home") }
     var searchOrigin by remember { mutableStateOf(SECTION_HOME) }
+    var sportsOrigin by remember { mutableStateOf(SECTION_HOME) }
     var editingCredentials by remember { mutableStateOf(false) }
     var editingRows by remember { mutableStateOf(false) }
     var editingAudio by remember { mutableStateOf(false) }
@@ -418,6 +447,7 @@ private fun MainInterface(deps: AppDeps, controller: SetupController, onProfiles
     val seriesFocus = remember { FocusRequester() }
     val collectionsFocus = remember { FocusRequester() }
     val tvFocus = remember { FocusRequester() }
+    val sportsFocus = remember { FocusRequester() }
     val animeFocus = remember { FocusRequester() }
     val searchFocus = remember { FocusRequester() }
     val settingsFocus = remember { FocusRequester() }
@@ -432,6 +462,7 @@ private fun MainInterface(deps: AppDeps, controller: SetupController, onProfiles
         "series" -> seriesFocus
         "collections" -> collectionsFocus
         "tv" -> tvFocus
+        "sports" -> sportsFocus
         "anime" -> animeFocus
         SECTION_SEARCH -> searchFocus
         SECTION_SETTINGS -> settingsFocus
@@ -487,6 +518,10 @@ private fun MainInterface(deps: AppDeps, controller: SetupController, onProfiles
 
     fun setSection(value: String) {
         if (value == SECTION_SEARCH && section != SECTION_SEARCH) searchOrigin = section
+        if (value == "sports" && section != "sports" && section != SECTION_SEARCH) sportsOrigin = if (section == "tv") "tv" else SECTION_HOME
+        // A trailer of the page left is not played over the next one: on the PC its video window stayed above the
+        // Sport page (2026-11-23).
+        if (value != section && value in setOf("tv", "sports", SECTION_SETTINGS, SECTION_SEARCH)) deps.trailer.stop()
         section = value
     }
 
@@ -736,12 +771,18 @@ private fun MainInterface(deps: AppDeps, controller: SetupController, onProfiles
             }
             return@Box
         }
-        val defaultFocus = if (enabled || section == SECTION_SETTINGS) sectionFocus() else null
+        // On a touch tablet, Settings opens with nothing lit (settings-redesign touch-input); a remote or keyboard starts on it.
+        val defaultFocus = if (section in setOf(SECTION_SETTINGS, SECTION_SEARCH, "sports") && com.sokoul.pc.ui.Form.tablet) null
+            else if (enabled || section == SECTION_SETTINGS) sectionFocus() else null
         Box(Modifier.fillMaxSize().drawWithContent { if (!coveredAbove(-1)) drawContent() }) {
         NavShell(
-            entries, section, onSelect = ::setSection, defaultFocus = defaultFocus,
+            entries, section, onSelect = ::setSection, defaultFocus = defaultFocus, onProfiles = onProfiles,
             onBack = if (section != SECTION_HOME) ({
-                setSection(if (section == SECTION_SEARCH) searchOrigin else SECTION_HOME)
+                setSection(when (section) {
+                    SECTION_SEARCH -> searchOrigin
+                    "sports" -> sportsOrigin
+                    else -> SECTION_HOME
+                })
             }) else null,
         ) {
             sectionStates.SaveableStateProvider(section) {
@@ -812,7 +853,9 @@ private fun MainInterface(deps: AppDeps, controller: SetupController, onProfiles
                     },
                     onRead = { overlays.add(Overlay.Reader(it)) },
                 )
-                section == "tv" -> com.sokoul.pc.live.TvScreen(deps, tvFocus, overlays.isEmpty(), ::playLive, ::playProvider, ::downloadProvider)
+                section == "tv" -> com.sokoul.pc.live.TvScreen(deps, tvFocus, overlays.isEmpty(), ::playLive, ::playProvider, ::downloadProvider,
+                    onSports = if (deps.profiles.current.kids) null else ({ setSection("sports") }))
+                section == "sports" -> com.sokoul.pc.live.sport.SportHome(deps, sportsFocus, overlays.isEmpty(), ::playProvider, ::playLive)
                 section == SECTION_SEARCH -> SearchScreen(
                     deps,
                     searchFocus,
@@ -860,7 +903,10 @@ private fun MainInterface(deps: AppDeps, controller: SetupController, onProfiles
                                 deps.playback.playClips(themes.map { t -> com.sokoul.pc.playback.session.Clip(t.song.ifEmpty { t.slug }, t.slug, t.video) }, index)
                             },
                         )
-                        is Overlay.Collection -> CollectionDetailScreen(
+                        is Overlay.Collection -> if (overlay.request.studio != null) com.sokoul.pc.collections.StudioScreen(
+                            deps, overlay.request.studio, overlay.request.logo, onClose = ::close, onOpenTitle = ::openTitle, onOpenRequest = ::openRequest,
+                            active = i == overlays.lastIndex,
+                        ) else CollectionDetailScreen(
                             deps, overlay.request, onClose = ::close, onOpenTitle = ::openTitle,
                             state = overlay.state, active = i == overlays.lastIndex,
                         )
@@ -887,6 +933,7 @@ private fun MainInterface(deps: AppDeps, controller: SetupController, onProfiles
                             onToggleFullscreen = { deps.toggleFullscreen() },
                             fullscreen = deps.isFullscreen?.invoke(),
                             nextEpisode = { r -> nextEpisodeOf(deps, r) },
+                            logoOf = { r -> runCatching { deps.catalog.details(r.kind, r.tmdbId)?.logo }.getOrNull() },
                             episodes = remember { episodeSourceOf(deps) },
                             extra = { com.sokoul.pc.anime.PauseChapterCard(deps) { overlays.add(Overlay.Reader(it)) } },
                             party = deps.party,
@@ -930,8 +977,7 @@ private suspend fun nextEpisodeOf(deps: AppDeps, r: PlayRequest): PlayRequest? {
     if (r.kind != "tv") return null
     val season = r.season ?: return null
     val episode = r.episode ?: return null
-    val next = com.sokoul.pc.playback.ui.EpisodeOrder.nextIn(runCatching { deps.catalog.season(r.tmdbId, season) }.getOrNull().orEmpty(), episode)
-        ?: runCatching { deps.catalog.season(r.tmdbId, season + 1) }.getOrNull().orEmpty().minByOrNull { it.episode }
+    val next = com.sokoul.pc.playback.ui.EpisodeOrder.next(season, episode) { deps.catalog.season(r.tmdbId, it) }
         ?: return null
     return r.copy(season = next.season, episode = next.episode, kicker = "S${next.season}E${next.episode} · ${next.name}", chooseFirst = false)
 }
