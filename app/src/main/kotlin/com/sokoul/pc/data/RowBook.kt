@@ -100,6 +100,32 @@ enum class Platform(val providerId: Int, val label: String, val color: Long, val
     Canal(381, "Canal+", 0xFF111111, 0xFF4A4A4A, "285"),
 }
 
+/**
+ * The studios, as Disney+ shows its brands (Disney, Pixar, Marvel, Star Wars…): a tile with the studio's logo opens
+ * what it made, films and series. TMDB company ids.
+ */
+enum class Studio(val companyId: Int, val label: String) {
+    Disney(2, "Disney"),
+    Pixar(3, "Pixar"),
+    Marvel(420, "Marvel Studios"),
+    Lucasfilm(1, "Lucasfilm"),
+    DreamWorks(521, "DreamWorks Animation"),
+    Ghibli(10342, "Studio Ghibli"),
+    Illumination(6704, "Illumination"),
+    Warner(174, "Warner Bros."),
+    Universal(33, "Universal"),
+    A24(41077, "A24"),
+}
+
+/** The sections of a studio's page, in order: what it is known for, what is new, the best, its series, its classics. */
+enum class StudioSection(val title: L, val tagline: L, val style: RowStyle) {
+    Popular(L("Most Watched", "Les plus regardés"), L("What everyone is watching now.", "Ce que tout le monde regarde en ce moment."), RowStyle.Landscape),
+    Latest(L("Latest Releases", "Dernières sorties"), L("Out most recently, newest first.", "Sortis le plus récemment, du plus récent au plus ancien."), RowStyle.Poster),
+    Acclaimed(L("Highest Rated", "Les mieux notés"), L("The best rated by viewers.", "Les mieux notés par les spectateurs."), RowStyle.Poster),
+    Series(L("Series", "Séries"), L("Its series and shows.", "Ses séries et programmes."), RowStyle.Landscape),
+    Classics(L("Classics", "Les classiques"), L("Before 2000, the most seen first.", "Avant 2000, les plus vus d'abord."), RowStyle.Poster),
+}
+
 object G {
     const val ACTION = 28
     const val ADVENTURE = 12
@@ -272,7 +298,7 @@ sealed interface RowSource {
     data object ForYou : RowSource
 }
 
-enum class RowStyle { Poster, Landscape, Top10 }
+enum class RowStyle { Poster, Landscape, Square, Top10 }
 
 enum class PageKind(val kind: String) { Home("movie"), Movies("movie"), Series("tv"), Anime("tv") }
 
@@ -293,6 +319,8 @@ sealed interface PageRow {
     data class Moods(val kind: String) : PageRow { override val id get() = "moods" }
     data class Categories(val kind: String) : PageRow { override val id get() = "categories" }
     data class Platforms(val kind: String?) : PageRow { override val id get() = "platforms" }
+    /** The studios' tiles (Disney+'s brands). */
+    data object Studios : PageRow { override val id get() = "studios" }
     data object Sagas : PageRow { override val id get() = "sagas" }
     /** Calendar, every category, a file of one's own. */
     data object AnimeTools : PageRow { override val id get() = "anime-tools" }
@@ -365,7 +393,7 @@ object PagePlans {
         val specs = RowBook.movies
         val head = specs.take(4)
         val tail = specs.drop(4)
-        listOf(PageRow.Platforms("movie"), top10("movie"), PageRow.Because("movie"), newest("movie"), PageRow.Moods("movie")) +
+        listOf(PageRow.Platforms("movie"), top10("movie"), PageRow.Because("movie"), newest("movie"), PageRow.Studios, PageRow.Moods("movie")) +
             spec(head[0]) + popular("movie") + spec(head[1]) + plat("movie", Platform.Netflix) + spec(head[2]) + SagaRowKind + spec(head[3]) + topRated("movie") +
             mix(tail, "movie", Platform.entries.filter { it.companies != null }.drop(1)) + PageRow.Categories("movie")
     }
@@ -381,13 +409,13 @@ object PagePlans {
 
     private val forYou = PageRow.Titles(
         "for-you", L("For You", "Pour vous"), L("Picked from what you watch.", "Choisis d'après ce que vous regardez."),
-        Kicker.Trending, RowStyle.Poster, RowSource.ForYou,
+        Kicker.Trending, RowStyle.Square, RowSource.ForYou,
     )
 
     val home: List<PageRow> by lazy {
         fun m(id: String) = spec(RowBook.byId(id))
         listOf(
-            top10("movie"), PageRow.Because(null), forYou, newest("movie"), top10("tv"), PageRow.Moods("movie"), popular("tv"), PageRow.Platforms(null), PageRow.Discover,
+            top10("movie"), PageRow.Because(null), forYou, newest("movie"), top10("tv"), PageRow.Moods("movie"), popular("tv"), PageRow.Platforms(null), PageRow.Studios, PageRow.Discover,
             plat("tv", Platform.Netflix), m("m-action"), SagaRowKind, m("s-crime"), plat("movie", Platform.Prime), topRated("movie"), m("m-gems"), m("s-mini"),
             plat("movie", Platform.Disney), m("m-animation"), m("s-lang-ko"), m("m-thriller"), plat("tv", Platform.Max), m("m-90s"), m("s-acclaimed"), m("m-comedy"),
             m("s-scifi"), m("m-true"), PageRow.Categories("movie"),

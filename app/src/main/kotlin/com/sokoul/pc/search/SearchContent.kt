@@ -2,6 +2,7 @@ package com.sokoul.pc.search
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -29,13 +30,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sokoul.iptv.data.net.TmdbItem
-import com.sokoul.pc.AppDeps
 import com.sokoul.pc.data.kind
 import com.sokoul.pc.data.anime.AniTitle
 import com.sokoul.pc.data.anime.MediaKind
@@ -54,7 +55,6 @@ import com.sokoul.pc.ui.SingleLine
 
 @Composable
 internal fun SearchContent(
-    deps: AppDeps,
     results: SearchResults<TmdbItem, TvCatalog.Hit, AniTitle, AniTitle>,
     tab: SearchTab,
     onOpenTitles: (List<TmdbItem>, Int, CardOrigin?) -> Unit,
@@ -65,20 +65,21 @@ internal fun SearchContent(
     when (tab) {
         SearchTab.All -> {
             Column(
-                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("search-results"),
-                verticalArrangement = Arrangement.spacedBy(22.dp),
+                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = POSTER_ROOM, top = POSTER_ROOM, bottom = 200.dp).testTag("search-results"),
+                verticalArrangement = Arrangement.spacedBy(40.dp),
             ) {
                 if (results.titles.items.isNotEmpty()) SearchSection(tr(Text.SearchTitles)) {
-                    TitlesRail(deps, results.titles.items, onOpenTitles)
+                    val shown = results.titles.items.take(ALL_TITLES)
+                    PosterRows(shown) { item -> SearchPoster(item) { origin -> onOpenTitles(shown, shown.indexOf(item), origin) } }
                 }
                 if (results.live.items.isNotEmpty()) SearchSection(tr(Text.SearchLive)) {
                     LiveRail(results.live.items, onOpenLive)
                 }
                 if (results.anime.items.isNotEmpty()) SearchSection(tr(Text.SearchAnime)) {
-                    WorkRail(results.anime.items, onOpenWork)
+                    PosterRows(results.anime.items.take(ALL_WORKS)) { work -> WorkPoster(work) { origin -> onOpenWork(work, origin) } }
                 }
                 if (results.manga.items.isNotEmpty()) SearchSection(tr(Text.SearchManga)) {
-                    WorkRail(results.manga.items, onOpenWork)
+                    PosterRows(results.manga.items.take(ALL_WORKS)) { work -> WorkPoster(work) { origin -> onOpenWork(work, origin) } }
                 }
                 SearchSourceStatus(results)
                 if (results.isEmpty && listOf(results.titles, results.live, results.anime, results.manga).none { it.failed }) {
@@ -89,18 +90,18 @@ internal fun SearchContent(
         SearchTab.Popular, SearchTab.Movies, SearchTab.Series -> {
             val shown = filterResults(results.titles.items, tab)
             when {
-                results.titles.failed -> SourceUnavailable(Text.SearchTitles)
+                results.titles.failed && shown.isEmpty() -> SourceUnavailable(Text.SearchTitles)
                 shown.isEmpty() -> Label(tr(Text.NoResults), Type.Meta, Palette.Secondary)
                 else -> LazyVerticalGrid(
-                    GridCells.Fixed(2),
+                    GridCells.Fixed(POSTER_COLUMNS),
                     state = gridState,
-                    contentPadding = PaddingValues(end = 80.dp, bottom = 300.dp),
-                    horizontalArrangement = Arrangement.spacedBy(40.dp),
+                    contentPadding = PaddingValues(start = POSTER_ROOM, top = POSTER_ROOM, end = 80.dp, bottom = 300.dp),
+                    horizontalArrangement = Arrangement.spacedBy(POSTER_GAP),
                     verticalArrangement = Arrangement.spacedBy(40.dp),
                     modifier = Modifier.testTag("search-results"),
                 ) {
                     items(shown.size, key = { shown[it].kind() + shown[it].id }) { i ->
-                        ResultCard(deps, shown[i]) { onOpenTitles(shown, i, it) }
+                        SearchPoster(shown[i]) { onOpenTitles(shown, i, it) }
                     }
                 }
             }
@@ -135,13 +136,65 @@ private fun SearchSection(title: String, content: @Composable () -> Unit) {
     }
 }
 
+/** Posters as on Disney+: 2:3, five to a row, the title and its type under each (DESIGN.md: title under, in grids). */
+private val POSTER_WIDTH = 216.dp
+private val POSTER_HEIGHT = 324.dp
+private val POSTER_GAP = 32.dp
+/** Five across on a TV or a tablet held sideways, four on a tablet held upright. */
+private val POSTER_COLUMNS: Int get() = if (com.sokoul.pc.ui.Form.tabletPortrait) 4 else 5
+/** Room for a focused poster to grow into (scale 1.10) without being cut by the list's edge. */
+private val POSTER_ROOM = 14.dp
+/** In "All", a few rows of each kind; the tabs show them all. */
+private const val ALL_TITLES = 15
+private const val ALL_WORKS = 10
+
 @Composable
-private fun TitlesRail(deps: AppDeps, items: List<TmdbItem>, onOpen: (List<TmdbItem>, Int, CardOrigin?) -> Unit) {
-    LazyRow(RailEdge, horizontalArrangement = Arrangement.spacedBy(22.dp), contentPadding = PaddingValues(start = RAIL_ROOM, end = 42.dp)) {
-        items(items, key = { it.kind() + it.id }) { item ->
-            ResultCard(deps, item) { origin -> onOpen(items, items.indexOf(item), origin) }
+private fun <T> PosterRows(items: List<T>, cell: @Composable (T) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(36.dp)) {
+        items.chunked(POSTER_COLUMNS).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(POSTER_GAP)) { row.forEach { cell(it) } }
         }
     }
+}
+
+/** A film or series: its poster, then its title (white when focused) and "Film · 2014". */
+@Composable
+internal fun SearchPoster(item: TmdbItem, onClick: (CardOrigin) -> Unit) {
+    var focused by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    Column(Modifier.width(POSTER_WIDTH)) {
+        FocusCard(POSTER_WIDTH, POSTER_HEIGHT, onClick, onFocus = { focused = it }, tag = "search-poster-${item.id}") {
+            val artwork = item.poster ?: item.backdrop
+            if (artwork != null) {
+                Art(artwork, Modifier.fillMaxSize())
+            } else {
+                Label(item.title, Type.Meta, modifier = Modifier.align(Alignment.Center).padding(horizontal = 14.dp), maxLines = 3)
+            }
+        }
+        PosterCaption(item.title, listOfNotNull(typeLabel(item.kind()), item.year?.toString()).joinToString(" · "), focused)
+    }
+}
+
+/** An anime or a manga from the anime catalogue, drawn like the films. */
+@Composable
+private fun WorkPoster(work: AniTitle, onClick: (CardOrigin) -> Unit) {
+    var focused by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    Column(Modifier.width(POSTER_WIDTH)) {
+        FocusCard(POSTER_WIDTH, POSTER_HEIGHT, onClick, corner = 16.dp, onFocus = { focused = it }) {
+            Art(work.cover, Modifier.fillMaxSize())
+        }
+        val details = listOfNotNull(
+            work.year?.toString(),
+            if (work.kind == MediaKind.ANIME) work.format?.replace('_', ' ')?.lowercase()?.replaceFirstChar { it.uppercase() } else work.chapters?.let { "$it ch." },
+        ).joinToString(" · ")
+        PosterCaption(work.title, details, focused)
+    }
+}
+
+@Composable
+private fun PosterCaption(title: String, detail: String, focused: Boolean) {
+    Spacer(Modifier.height(16.dp))
+    Label(title, Type.Meta.copy(fontSize = 25.sp, fontWeight = FontWeight.SemiBold), if (focused) Palette.OnBackground else Palette.Secondary, maxLines = 1)
+    if (detail.isNotEmpty()) Label(detail, Type.Body, Palette.Secondary.copy(alpha = 0.6f), maxLines = 1)
 }
 
 @Composable
@@ -164,7 +217,15 @@ private fun WorkResults(source: SearchSourceResults<AniTitle>, name: Text, onOpe
         !source.available -> Label(tr(Text.NoSourceConfigured), Type.Meta, Palette.Secondary)
         source.failed -> SourceUnavailable(name)
         source.items.isEmpty() -> Label(tr(Text.NoResults), Type.Meta, Palette.Secondary)
-        else -> WorkRail(source.items, onOpen)
+        else -> LazyVerticalGrid(
+            GridCells.Fixed(POSTER_COLUMNS),
+            contentPadding = PaddingValues(start = POSTER_ROOM, top = POSTER_ROOM, end = 80.dp, bottom = 300.dp),
+            horizontalArrangement = Arrangement.spacedBy(POSTER_GAP),
+            verticalArrangement = Arrangement.spacedBy(40.dp),
+            modifier = Modifier.testTag("search-results"),
+        ) {
+            items(source.items, key = { it.id }) { work -> WorkPoster(work) { origin -> onOpen(work, origin) } }
+        }
     }
 }
 

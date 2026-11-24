@@ -11,7 +11,13 @@ import kotlinx.serialization.json.Json
 
 /** One person using the app. [id] "" is the first profile, which owns everything written before profiles existed. */
 @Serializable
-data class Profile(val id: String, val name: String, val color: Int = 0, val kids: Boolean = false)
+data class Profile(
+    val id: String, val name: String, val color: Int = 0, val kids: Boolean = false,
+    /** The digest of the profile's 4-digit code, as Disney+'s profile PIN: asked before the profile opens or is edited. */
+    val pinHash: String? = null,
+) {
+    val locked: Boolean get() = pinHash != null
+}
 
 /**
  * Local profiles, after Movix's (no account, no server): each has its own resume points and history, its list and its
@@ -35,7 +41,7 @@ class Profiles(private val db: DesktopDb) {
     }
 
     /** More than one profile: the app asks who is watching at start. */
-    val asksAtStart: Boolean get() = all.size > 1
+    val asksAtStart: Boolean get() = all.size > 1 || current.locked
 
     /** A setting key of the current profile; the first profile keeps the key as it was. */
     fun key(base: String): String = if (current.id == MAIN) base else "$base@${current.id}"
@@ -63,6 +69,16 @@ class Profiles(private val db: DesktopDb) {
         save()
         if (accessChanged) onSwitch()
     }
+
+    /** Sets the profile's code, or removes it with null. Only the digest is kept. */
+    fun setPin(p: Profile, pin: String?) {
+        update((all.firstOrNull { it.id == p.id } ?: p).copy(pinHash = pin?.let { digest(p.id, it) }))
+    }
+
+    fun pinMatches(p: Profile, pin: String): Boolean = p.pinHash == null || p.pinHash == digest(p.id, pin)
+
+    private fun digest(id: String, pin: String): String =
+        java.security.MessageDigest.getInstance("SHA-256").digest("sokoul-profile:$id:$pin".toByteArray()).joinToString("") { "%02x".format(it) }
 
     /** Removes a profile and what was kept for it. The first profile cannot be removed. */
     fun remove(p: Profile) {

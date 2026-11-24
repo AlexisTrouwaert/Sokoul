@@ -239,7 +239,6 @@ class AppBridge(private val deps: AppDeps) {
             }
         }
         put("clip", deps.playback.clip?.title)
-        put("experience", deps.experienceReport)
         put("preferences", preferences())
         put("services", buildJsonObject { ProviderConfig.statuses(deps.db).forEach { put(it.id, it.configured) } })
         val runtime = Runtime.getRuntime()
@@ -444,7 +443,7 @@ class AppBridge(private val deps: AppDeps) {
     private fun titleParams() = listOf(ToolParam("kind", "Film or series", choices = listOf("movie", "tv")), ToolParam("id", "TMDB id", "integer"))
 
     private fun navigationTools() = listOf(
-        AppTool("go_to", "Open a section of the app.", ToolRisk.Navigate, listOf(ToolParam("section", "The section", choices = listOf("home", "library", "movies", "series", "anime", "collections", "tv", "search", "settings")))) { a ->
+        AppTool("go_to", "Open a section of the app.", ToolRisk.Navigate, listOf(ToolParam("section", "The section", choices = listOf("home", "library", "movies", "series", "anime", "collections", "tv", "sports", "search", "settings")))) { a ->
             nav().goTo(a.text("section"))
             ok
         },

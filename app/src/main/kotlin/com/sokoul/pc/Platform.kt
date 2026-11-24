@@ -52,6 +52,9 @@ object Platform {
     fun recordingSchedulingExact() = false
     fun requestRecordingExactAlarms() = Unit
 
+    /** One step of a playback start, with its time since the press (StartClock). */
+    fun startDiagnostic(message: String) {}
+
     fun guideDiagnostic(message: String) {
         System.err.println("SokoulEPG $message")
     }
@@ -63,7 +66,28 @@ object Platform {
 
     /** [maxWidth] serves the TV; the PC decodes at full size, as before. */
     @Suppress("UNUSED_PARAMETER")
-    fun decodeImage(bytes: ByteArray, maxWidth: Int = 0): ImageBitmap? = org.jetbrains.skia.Image.makeFromEncoded(bytes).toComposeImageBitmap()
+    /**
+     * Decoded here, on the loader's thread, at the width it is shown at. Skia's encoded image is only decoded at its first
+     * draw, on the interface thread: the title page's backdrop made the frame it appeared in stutter.
+     */
+    fun decodeImage(bytes: ByteArray, maxWidth: Int = 0): ImageBitmap? {
+        val encoded = org.jetbrains.skia.Image.makeFromEncoded(bytes)
+        val width = if (maxWidth in 1 until encoded.width) maxWidth else encoded.width
+        val height = maxOf(1, (encoded.height.toLong() * width / encoded.width).toInt())
+        val bitmap = org.jetbrains.skia.Bitmap()
+        if (!bitmap.allocN32Pixels(width, height)) return encoded.toComposeImageBitmap()
+        org.jetbrains.skia.Canvas(bitmap).use { canvas ->
+            canvas.drawImageRect(
+                encoded,
+                org.jetbrains.skia.Rect.makeWH(encoded.width.toFloat(), encoded.height.toFloat()),
+                org.jetbrains.skia.Rect.makeWH(width.toFloat(), height.toFloat()),
+                org.jetbrains.skia.SamplingMode.LINEAR, null, true,
+            )
+        }
+        encoded.close()
+        bitmap.setImmutable()
+        return org.jetbrains.skia.Image.makeFromBitmap(bitmap).toComposeImageBitmap()
+    }
 
     @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
     fun isBackButton(e: androidx.compose.ui.input.pointer.PointerEvent) = e.button == androidx.compose.ui.input.pointer.PointerButton.Back

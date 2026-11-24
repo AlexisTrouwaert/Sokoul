@@ -94,10 +94,16 @@ fun Modifier.tvFocusable(
     val hoverOnly = LocalHoverOnly.current
     val click = androidx.compose.runtime.rememberUpdatedState(onClick)
     val report = androidx.compose.runtime.rememberUpdatedState(onFocusChanged)
-    // Hover and focus seen by this element, for the highlight of a hover that takes no focus.
-    val seen = remember { BooleanArray(2) }
+    // Hover and focus seen by this element, for the highlight of a hover that takes no focus; [2] = the last press was a touch.
+    val seen = remember { BooleanArray(3) }
+    // A finger never hovers: on a touch screen a row lit by a touch never received "Exit" and stayed lit (settings-redesign D1).
+    fun touch(e: androidx.compose.ui.input.pointer.PointerEvent) = e.changes.any { it.type == androidx.compose.ui.input.pointer.PointerType.Touch }
+    fun clearHover() { if (seen[0]) { seen[0] = false; if (!seen[1]) report.value(false) } }
     return this
+        .onPointerEvent(PointerEventType.Press) { seen[2] = touch(it) }
+        .onPointerEvent(PointerEventType.Release) { if (touch(it)) clearHover() }
         .onPointerEvent(PointerEventType.Enter) {
+            if (touch(it)) return@onPointerEvent
             if (hoverOnly) {
                 if (FocusSource.pointerReallyMoved() && !seen[0]) {
                     FocusSource.lastWasMouse = true
@@ -111,6 +117,7 @@ fun Modifier.tvFocusable(
         }
         // A pointer already inside when it starts moving again (or entering right after a pause) still highlights.
         .onPointerEvent(PointerEventType.Move) {
+            if (touch(it)) { clearHover(); return@onPointerEvent }
             if (hoverOnly && !seen[0]) {
                 FocusSource.lastWasMouse = true
                 seen[0] = true
@@ -152,7 +159,11 @@ fun Modifier.tvFocusable(
         .pointerInput(hoverOnly) {
             detectTapGestures(onTap = {
                 // Hovering gave no focus: the click does, so the keyboard goes on from the row the mouse chose.
-                if (hoverOnly) {
+                // A finger is not a mouse: the remote and keyboard keep their own behaviour after a tap.
+                // A tap only activates: it takes no focus, and it drops a remote focus left elsewhere (the row a page
+                // focused when it opened), so nothing stays lit once the finger is up.
+                if (seen[2]) runCatching { focusManager.clearFocus() }
+                else if (hoverOnly) {
                     FocusSource.lastWasMouse = true
                     runCatching { requester.requestFocus() }
                 }

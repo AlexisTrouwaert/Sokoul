@@ -147,8 +147,10 @@ fun PosterCard(
     tag: String? = null,
     onFocus: (Boolean) -> Unit = {},
     requester: FocusRequester = remember { FocusRequester() },
+    width: Dp = CardMetrics.PosterWidth,
+    height: Dp = CardMetrics.PosterHeight,
 ) {
-    FocusCard(CardMetrics.PosterWidth, CardMetrics.PosterHeight, onClick, modifier, tag = tag, onFocus = onFocus, requester = requester) { focused ->
+    FocusCard(width, height, onClick, modifier, tag = tag, onFocus = onFocus, requester = requester) { focused ->
         val showCaption = caption != null && (captionAlways || focused)
         SmartPoster(catalog, item)
         if (showCaption) {
@@ -270,6 +272,9 @@ fun <T> CardRow(
     upTarget: FocusRequester? = null,
     onUp: () -> Unit = {},
     verticalPadding: Dp = CardMetrics.RowVerticalPadding,
+    /** The row's kind in small capitals above its title ("TRENDING"), and one line saying what it holds under it. */
+    kicker: String? = null,
+    tagline: String? = null,
     card: @Composable (index: Int, item: T) -> Unit,
 ) {
     var active by remember { mutableStateOf(false) }
@@ -298,7 +303,7 @@ fun <T> CardRow(
             }
             .let { if (testTag != null) it.testTag(testTag) else it },
     ) {
-        RowHeading(title, active)
+        RowHeading(title, active, kicker, tagline)
         LazyRow(
             state = rowState,
             // Left and right stay in the row: at its ends nothing moves, and at the left edge the menu can open.
@@ -337,9 +342,19 @@ fun <T> CardRow(
 }
 
 @Composable
-fun RowHeading(title: String, active: Boolean) {
+fun RowHeading(title: String, active: Boolean, kicker: String? = null, tagline: String? = null) {
     val color by animateColorAsState(if (active) Palette.OnBackground else Palette.Secondary)
-    Label(title, Type.RowTitle, color, Modifier.padding(start = Metrics.PageMargin), maxLines = 1)
+    if (kicker == null && tagline == null) {
+        Label(title, Type.RowTitle, color, Modifier.padding(start = Metrics.PageMargin), maxLines = 1)
+        return
+    }
+    // A section says what it is before what it holds, as the editorial rows of Disney+ and Apple TV: the kind in small
+    // capitals, the title, then one quiet line. Only the title lights with focus.
+    androidx.compose.foundation.layout.Column(Modifier.padding(start = Metrics.PageMargin), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp)) {
+        kicker?.let { Label(it, Type.Body.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, letterSpacing = 2.sp), Palette.Secondary, maxLines = 1) }
+        Label(title, Type.RowTitle, color, maxLines = 1)
+        tagline?.let { Label(it, Type.Body, Palette.Secondary, maxLines = 1) }
+    }
 }
 
 /** Round action button: dark circle at rest, white and slightly larger with focus. */

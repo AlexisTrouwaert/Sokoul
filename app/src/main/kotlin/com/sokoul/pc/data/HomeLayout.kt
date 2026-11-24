@@ -50,6 +50,7 @@ data class HomeLayout(val order: List<String> = emptyList(), val hidden: Set<Str
             is PageRow.Moods -> L("Moods", "Humeurs").text()
             is PageRow.Categories -> L("Categories", "Catégories").text()
             is PageRow.Platforms -> L("Platforms", "Plateformes").text()
+            is PageRow.Studios -> L("Studios", "Studios").text()
             is PageRow.Sagas -> L("Sagas", "Sagas").text()
             is PageRow.AnimeTools, is PageRow.AnimeGenres, is PageRow.Books, is PageRow.Reading -> row.id
             is PageRow.Discover -> L("Discover", "Découvrir").text()

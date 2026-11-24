@@ -65,6 +65,27 @@ fun MoodTile(mood: Mood, tag: String, requester: FocusRequester, onClick: (CardO
 
 /** A platform's bubble: its logo, as served by TMDB, fills it entirely. */
 @Composable
+fun StudioTile(studio: com.sokoul.pc.data.Studio, logo: String?, tag: String, requester: FocusRequester, onClick: (CardOrigin) -> Unit) {
+    val image by produceState(logo?.let(ImageLoader::cached), logo) { value = logo?.let { ImageLoader.load(it) } }
+    // As Disney+'s brand tiles: the studio's logo alone, in white, on a dark glass tile.
+    FocusCard(StudioWidth, StudioHeight, onClick, tag = tag, requester = requester, corner = 28.dp) {
+        Box(Modifier.fillMaxSize().background(Brush.linearGradient(listOf(Color(0xFF2C2C2E), Color(0xFF121214)))))
+        val bitmap = image
+        if (bitmap != null) {
+            Image(
+                bitmap, studio.label, Modifier.fillMaxSize().padding(horizontal = 48.dp, vertical = 40.dp), contentScale = ContentScale.Fit,
+                colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(Color.White),
+            )
+        } else {
+            Label(studio.label, Type.Button, modifier = Modifier.align(Alignment.Center), maxLines = 1)
+        }
+    }
+}
+
+private val StudioWidth = 368.dp
+private val StudioHeight = 207.dp
+
+@Composable
 fun PlatformTile(platform: Platform, logo: String?, tag: String, requester: FocusRequester, onClick: (CardOrigin) -> Unit) {
     val image by produceState(logo?.let(ImageLoader::cached), logo) { value = logo?.let { ImageLoader.load(it) } }
     FocusCard(PlatformSize, PlatformSize, onClick, tag = tag, requester = requester, corner = 44.dp) {

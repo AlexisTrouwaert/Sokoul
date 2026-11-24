@@ -6,6 +6,9 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -87,6 +90,9 @@ class MainActivity : ComponentActivity() {
             launch(Dispatchers.Main) { player = p }
             future.complete(p)
             launch(Dispatchers.Main) { TvDebug.start(made) }
+            runCatching { base.checkpointStorage() }.onFailure {
+                com.sokoul.pc.Platform.guideDiagnostic("startup database checkpoint failed=${it.javaClass.simpleName}")
+            }
             // As on Windows (Main.kt, left out of this build): channels and guide refresh when older than half a day.
             // Without it the TV kept the guide it was set up with, empty a day later ("the guide does not know this channel").
             if (com.sokoul.pc.startup.StartupRoute.state(base) == com.sokoul.pc.startup.SetupState.Done) {
@@ -96,7 +102,7 @@ class MainActivity : ComponentActivity() {
                     val sync = com.sokoul.desktop.data.DesktopSync(base)
                     runCatching {
                         sync.syncIfStale(playlist)
-                        if (sync.isGuideStale(playlist)) sync.syncGuide(playlist)
+                        if (base.hasRoomForBackgroundSync() && sync.isGuideStale(playlist)) sync.syncGuide(playlist)
                     }
                 }
             }
@@ -104,6 +110,12 @@ class MainActivity : ComponentActivity() {
         setContent {
             // A TV recentres whatever has focus by default, which pushes a page's hero off the screen. Here, as on Windows, a page moves only as far as it must.
             androidx.compose.runtime.CompositionLocalProvider(androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides object : androidx.compose.foundation.gestures.BringIntoViewSpec {}) {
+              // Android 15 draws the app under the gesture bar: the bottom tabs of a tablet held upright were cut there
+              // (2026-11-23). Zero on a TV, and while a video hides the system bars.
+              androidx.compose.foundation.layout.Box(
+                  androidx.compose.ui.Modifier.fillMaxSize()
+                      .windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.navigationBars),
+              ) {
                 ScaledRoot {
                     val started = deps
                     var logoDone by remember { mutableStateOf(false) }
@@ -113,6 +125,7 @@ class MainActivity : ComponentActivity() {
                         SokoulPcApp(started, skipSplash = true)
                     }
                 }
+              }
             }
             // The title of a Watch Next entry opens as soon as the interface can: not before the app has loaded.
             val asked = link
@@ -149,6 +162,10 @@ class MainActivity : ComponentActivity() {
         val modes = getSystemService(android.app.UiModeManager::class.java)
         val television = modes?.currentModeType == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
         val handheld = !television && config.smallestScreenWidthDp < PHONE_MAX_SMALLEST_DP
+        com.sokoul.pc.ui.Form.tablet = !television && !handheld &&
+            packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_TOUCHSCREEN)
+        com.sokoul.pc.ui.Form.tabletPortrait = com.sokoul.pc.ui.Form.tablet &&
+            config.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT
         com.sokoul.pc.ui.Form.current = when {
             !handheld -> com.sokoul.pc.ui.FormFactor.Tv
             config.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT -> com.sokoul.pc.ui.FormFactor.PhonePortrait
@@ -198,8 +215,14 @@ class MainActivity : ComponentActivity() {
         WatchNext.requestOf(intent.data)?.let { link = it }
     }
 
+    override fun onStart() {
+        super.onStart()
+        com.sokoul.pc.ui.AppFocus.active.value = true
+    }
+
     override fun onStop() {
         super.onStop()
+        com.sokoul.pc.ui.AppFocus.active.value = false
         player?.let { p -> if (p.status.value.playing) p.togglePause() }
         // Leaving the app is when the home screen's Continue Watching row must be up to date.
         val base = db

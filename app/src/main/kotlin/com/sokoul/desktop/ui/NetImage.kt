@@ -71,6 +71,16 @@ object ImageLoader {
         while (bytes > MAX_BYTES && it.hasNext()) { val e = it.next(); if (e.key == url) continue; bytes -= weight(e.value); it.remove() }
     }
 
+    /**
+     * Gives memory back when the system asks (onTrimMemory): [keep] of the budget stays, the least recently shown images
+     * go first. 0 empties the cache, as when the app goes to the background on a small TV stick.
+     */
+    fun trim(keep: Float) = synchronized(cache) {
+        val limit = (MAX_BYTES * keep.coerceIn(0f, 1f)).toLong()
+        val it = cache.entries.iterator()
+        while (bytes > limit && it.hasNext()) { val e = it.next(); bytes -= weight(e.value); it.remove() }
+    }
+
     private fun weight(i: ImageBitmap) = i.width.toLong() * i.height * (if (i.config == androidx.compose.ui.graphics.ImageBitmapConfig.Rgb565) 2 else 4)
 
     private fun fileFor(url: String): File? = dir?.let { d ->

@@ -11,6 +11,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -42,6 +43,7 @@ import androidx.compose.runtime.MutableIntState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -128,6 +130,10 @@ private const val HERO_MIN_SCALE = 0.7f
 private const val HERO_TEXT_WIDTH = 0.49f
 private const val HERO_TEXT_BOTTOM = 0.09f
 private const val HERO_RETURN_MS = 120L
+/** On a tablet held upright the hero is a little taller than wide: the image on top, its text over the bottom. */
+private const val HERO_UPRIGHT_RATIO = 1.08f
+/** The share of an upright hero's width its text may take: an overview of three short lines, not one long one. */
+private const val HERO_UPRIGHT_TEXT = 0.86f
 private const val LOGO_WAIT_MS = 2_000L
 private const val SLIDE_WITHOUT_TRAILER_MS = 12_000L
 private val RowTop = 120.dp
@@ -167,7 +173,12 @@ fun HomeScreen(
     val plan = remember(kind, layoutJson) { com.sokoul.pc.data.HomeLayout.decode(layoutJson).apply(deps.catalog.plan(kind)) }
     val loaded = remember(kind) { mutableStateMapOf<String, List<TmdbItem>>() }
     var animeRowLimit by remember(kind) { mutableIntStateOf(3) }
-    val resumes by produceState(emptyList<Resume>(), active, kind) { value = deps.catalog.continueWatching().filter { kind != PageKind.Anime && (kind == PageKind.Home || it.kind == kind.kind) } }
+    // Read off the interface thread: read on it, it waited for the database while the TV guide was being written, and the
+    // Chromecast reported the app as not responding (ANR, 2026-11-22).
+    val resumes by produceState(emptyList<Resume>(), active, kind) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { deps.catalog.continueWatching() }
+            .filter { kind != PageKind.Anime && (kind == PageKind.Home || it.kind == kind.kind) }
+    }
     val wantsSagas = plan.any { it is PageRow.Sagas }
     val sagas by produceState(emptyList<SagaTile>(), kind, wantsSagas) {
         if (wantsSagas) value = deps.catalog.collections().curated
@@ -175,6 +186,10 @@ fun HomeScreen(
     val wantsPlatforms = plan.any { it is PageRow.Platforms }
     val logos by produceState(emptyMap<Int, String>(), kind, wantsPlatforms) {
         if (wantsPlatforms) value = deps.catalog.platformLogos(if (kind == PageKind.Series) "tv" else "movie")
+    }
+    val wantsStudios = plan.any { it is PageRow.Studios }
+    val studioLogos by produceState(emptyMap<Int, String>(), wantsStudios) {
+        if (wantsStudios) value = runCatching { deps.catalog.studioLogos() }.getOrDefault(emptyMap())
     }
     val wantsCategories = plan.any { it is PageRow.Categories }
     val categories by produceState(emptyList<GenreTile>(), kind, wantsCategories) {
@@ -204,7 +219,7 @@ fun HomeScreen(
             is PageRow.Because -> (loaded[BECAUSE]?.size ?: 0) >= PageRow.MIN_ITEMS
             is PageRow.Sagas -> sagas.isNotEmpty()
             is PageRow.Categories -> categories.isNotEmpty()
-            is PageRow.Moods, is PageRow.Platforms, is PageRow.AnimeTools, is PageRow.AnimeGenres, is PageRow.Books -> true
+            is PageRow.Moods, is PageRow.Platforms, is PageRow.Studios, is PageRow.AnimeTools, is PageRow.AnimeGenres, is PageRow.Books -> true
             is PageRow.Reading -> !deps.anime?.readingList().isNullOrEmpty()
             is PageRow.Discover -> deps.catalog.discover != null
         }
@@ -221,6 +236,17 @@ fun HomeScreen(
     val hasContinue = resumes.isNotEmpty()
 
     val list = rememberLazyListState()
+    val reportHeroAtTop = com.sokoul.pc.shell.LocalReportHomeHeroAtTop.current
+    val waitsForHero = current == null
+    LaunchedEffect(kind, list, hasHero, waitsForHero, reportHeroAtTop) {
+        if (kind == PageKind.Home) {
+            androidx.compose.runtime.snapshotFlow {
+                // The page at its top, hero or not: a Home without a hero (no catalogue yet) said "not at the top", and the
+                // bar, which now stays at the top, never showed there (2026-11-24).
+                list.firstVisibleItemIndex == 0 && list.firstVisibleItemScrollOffset == 0
+            }.collect { reportHeroAtTop(it) }
+        }
+    }
     LaunchedEffect(kind, visible.size) {
         if (kind != PageKind.Anime) return@LaunchedEffect
         val totalRows = plan.count { it is PageRow.Titles }
@@ -234,8 +260,14 @@ fun HomeScreen(
     // top of the next row showed under the hero. Read through derivedStateOf: it changes with the window, not the scroll.
     val pageHeight by remember { androidx.compose.runtime.derivedStateOf { list.layoutInfo.viewportSize.height } }
     val heroFocusAsked = remember(kind) { booleanArrayOf(false) }
+    // A tablet held upright draws the page at its own scale: a square hero and larger cards, as the Apple TV app there.
+    val upright = com.sokoul.pc.ui.Form.tabletPortrait
+    // The first poster row is the page's showcase there: tall posters, the others stay medium.
+    val largeRow = if (upright) visible.firstOrNull { it is PageRow.Titles && it.style == RowStyle.Poster }?.id else null
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+    val pageDensity = if (upright) com.sokoul.pc.ui.uprightDensity(constraints.maxWidth) else LocalDensity.current
     // Keyboard moves put the active row in a steady place; mouse moves never make the page jump.
-    val rowTopPx = with(LocalDensity.current) { RowTop.roundToPx() }
+    val rowTopPx = with(pageDensity) { RowTop.roundToPx() }
     var alignJob by remember { mutableStateOf<Job?>(null) }
     fun align(index: Int) {
         if (FocusSource.lastWasMouse) return
@@ -248,7 +280,7 @@ fun HomeScreen(
             list.animateScrollBy((row.offset - rowTopPx).toFloat())
         }
     }
-    CompositionLocalProvider(LocalHoverFocus provides { !list.isScrollInProgress }) {
+    CompositionLocalProvider(LocalHoverFocus provides { !list.isScrollInProgress }, LocalDensity provides pageDensity) {
         LazyColumn(
             Modifier.fillMaxSize().background(Palette.Background).testTag("home"),
             state = list,
@@ -262,7 +294,7 @@ fun HomeScreen(
             }
             if (hasHero) {
                 item(key = "hero") {
-                    Hero(deps, kind, current, active, primary, firstRow, slide, heroAction, onOpen, focusAsked = heroFocusAsked, tonight = tonight, modifier = if (pageHeight > 0) Modifier.height(with(LocalDensity.current) { pageHeight.toDp() }) else Modifier.fillParentMaxHeight(), onFocused = {
+                    Hero(deps, kind, current, active, primary, firstRow, slide, heroAction, onOpen, focusAsked = heroFocusAsked, tonight = tonight, modifier = if (upright) Modifier.fillParentMaxWidth().aspectRatio(1f / HERO_UPRIGHT_RATIO) else if (pageHeight > 0) Modifier.height(with(LocalDensity.current) { pageHeight.toDp() }) else Modifier.fillParentMaxHeight(), onFocused = {
                         if (!FocusSource.lastWasMouse) scope.launch {
                             delay(HERO_RETURN_MS)
                             list.animateScrollToItem(0)
@@ -295,12 +327,13 @@ fun HomeScreen(
                 when (row) {
                     is PageRow.Titles -> TitleRow(
                         deps, row.id, row.title.text(), row.style, loaded[row.id].orEmpty(),
-                        up, { if (it) align(listIndex) }, ::focusFor, onOpen,
+                        up, { if (it) align(listIndex) }, ::focusFor, onOpen, large = row.id == largeRow,
+                        kicker = row.kicker?.label?.text(), tagline = row.tagline?.text(),
                         onSeeAll = { origin -> onOpenRequest(CollectionRequest(row.title.text(), null, null) { page -> deps.catalog.rowItems(row.source, page) }, origin) },
                     )
                     is PageRow.Because -> TitleRow(
                         deps, row.id, tr(Text.BecauseWatched, because?.title.orEmpty()), RowStyle.Landscape,
-                        loaded[BECAUSE].orEmpty(), up, { if (it) align(listIndex) }, ::focusFor, onOpen,
+                        loaded[BECAUSE].orEmpty(), up, { if (it) align(listIndex) }, ::focusFor, onOpen, large = upright,
                         onSeeAll = { origin ->
                             val all = loaded[BECAUSE].orEmpty()
                             onOpenRequest(CollectionRequest(tr(Text.BecauseWatched, because?.title.orEmpty()), null, null) { page -> if (page == 1) all else emptyList() }, origin)
@@ -324,6 +357,14 @@ fun HomeScreen(
                             onOpenRequest(CollectionRequest(com.sokoul.pc.data.L("${platform.label} catalog", "Catalogue ${platform.label}").text(), null, null) { page -> deps.catalog.available(platform, null, page) }, origin)
                         }
                     }
+                    is PageRow.Studios -> CardRow(
+                        com.sokoul.pc.data.L("Studios", "Studios").text(), com.sokoul.pc.data.Studio.entries, key = { it.name }, testTag = "row-studios", spacing = TileGap,
+                        onActive = { if (it) align(listIndex) }, upTarget = up,
+                    ) { i, studio ->
+                        StudioTile(studio, studioLogos[studio.companyId], "studio-${studio.name}", focusFor(i) ?: remember { FocusRequester() }) { origin ->
+                            onOpenRequest(CollectionRequest(studio.label, studioLogos[studio.companyId], null, studio) { page -> deps.catalog.studio(studio, page) }, origin)
+                        }
+                    }
                     is PageRow.Sagas -> CardRow(
                         tr(Text.RowSagas), sagas, key = { it.key }, testTag = "row-sagas", spacing = TileGap,
                         onActive = { if (it) align(listIndex) }, upTarget = up,
@@ -342,9 +383,10 @@ fun HomeScreen(
             // Rows still on their way keep their place with a loading shape (the next two only, so the page never fills with them).
             val pending = plan.filterIsInstance<PageRow.Titles>().filter { loaded[it.id] == null }.take(PENDING_SHOWN)
             itemsIndexed(pending, key = { _, row -> "skeleton-${row.id}" }) { _, row ->
-                com.sokoul.pc.ui.SkeletonRow(landscape = row.style == RowStyle.Landscape)
+                com.sokoul.pc.ui.SkeletonRow(landscape = row.style == RowStyle.Landscape, square = row.style == RowStyle.Square)
             }
         }
+    }
     }
 }
 
@@ -359,12 +401,9 @@ private const val SEE_ALL = "see-all"
 
 /** The last card of a long row: the same size as its neighbours, it opens the whole list. */
 @Composable
-private fun SeeAllCard(style: RowStyle, tag: String, requester: FocusRequester, onClick: (CardOrigin) -> Unit) {
-    val landscape = style == RowStyle.Landscape
-    FocusCard(
-        if (landscape) 414.dp else CardMetrics.PosterWidth, if (landscape) 232.dp else CardMetrics.PosterHeight,
-        onClick, tag = tag, requester = requester,
-    ) { focused ->
+private fun SeeAllCard(style: RowStyle, large: Boolean, tag: String, requester: FocusRequester, onClick: (CardOrigin) -> Unit) {
+    val (width, height) = style.cardSize(large)
+    FocusCard(width, height, onClick, tag = tag, requester = requester) { focused ->
         Box(Modifier.fillMaxSize().background(if (focused) Palette.OnBackground else Palette.PillFill), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 androidx.compose.material3.Icon(Icons.Filled.KeyboardArrowRight, null, Modifier.size(54.dp), tint = if (focused) Palette.OnFocus else Palette.OnBackground)
@@ -374,12 +413,19 @@ private fun SeeAllCard(style: RowStyle, tag: String, requester: FocusRequester, 
         }
     }
 }
+/** A large card is a showcase row's: about 2.7 tall posters or 1.8 wide images across a tablet held upright. */
+private fun RowStyle.cardSize(large: Boolean = false) = when (this) {
+    RowStyle.Landscape -> if (large) 600.dp to 338.dp else 414.dp to 232.dp
+    RowStyle.Square -> CardMetrics.PosterWidth to CardMetrics.PosterWidth
+    RowStyle.Poster, RowStyle.Top10 -> if (large) 400.dp to 600.dp else CardMetrics.PosterWidth to CardMetrics.PosterHeight
+}
+
 private const val PARALLEL_ROWS = 6
 private const val BECAUSE = "because"
 private val TileGap = 30.dp
 
 @Composable
-private fun TitleRow(
+internal fun TitleRow(
     deps: AppDeps,
     id: String,
     title: String,
@@ -390,19 +436,23 @@ private fun TitleRow(
     focusFor: (Int) -> FocusRequester?,
     onOpen: (List<TmdbItem>, Int, CardOrigin?) -> Unit,
     onSeeAll: ((CardOrigin?) -> Unit)? = null,
+    large: Boolean = false,
+    kicker: String? = null,
+    tagline: String? = null,
 ) {
     // A row shows a few titles to choose from, not a catalogue: the rest is one press away, behind "See All".
     val shown = items.take(if (style == RowStyle.Top10) TOP_COUNT else ROW_CAP)
     val more = style != RowStyle.Top10 && onSeeAll != null && items.size > shown.size
     val cells: List<TmdbItem?> = if (more) shown + null else shown
-    CardRow(title, cells, key = { it?.id ?: SEE_ALL }, testTag = "row-$id", onActive = onActive, upTarget = up) { index, cell ->
+    CardRow(title, cells, key = { it?.id ?: SEE_ALL }, testTag = "row-$id", onActive = onActive, upTarget = up, kicker = kicker, tagline = tagline) { index, cell ->
         val requester = focusFor(index) ?: remember { FocusRequester() }
         val item = cell ?: run {
-            SeeAllCard(style, "card-$id-see-all", requester) { onSeeAll?.invoke(it) }
+            SeeAllCard(style, large, "card-$id-see-all", requester) { onSeeAll?.invoke(it) }
             return@CardRow
         }
-        if (style == RowStyle.Landscape) {
-            FocusCard(414.dp, 232.dp, { onOpen(shown, index, it) }, tag = "card-$id-$index", requester = requester, onFocus = { if (it) deps.warmTrailer(item) }) {
+        if (style == RowStyle.Landscape || style == RowStyle.Square) {
+            val (width, height) = style.cardSize(large)
+            FocusCard(width, height, { onOpen(shown, index, it) }, tag = "card-$id-$index", requester = requester, onFocus = { if (it) deps.warmTrailer(item) }) {
                 SmartLandscape(deps.catalog, item)
             }
         } else {
@@ -417,6 +467,8 @@ private fun TitleRow(
                 tag = "card-$id-$index",
                 onFocus = { if (it) deps.warmTrailer(item) },
                 requester = requester,
+                width = style.cardSize(large).first,
+                height = style.cardSize(large).second,
             )
         }
     }
@@ -482,9 +534,10 @@ private fun Hero(
     // A trailer the viewer stopped does not come back on the same slide; the next slide may have its own.
     var stoppedFor by remember { mutableStateOf<Int?>(null) }
     var heroSound by remember { mutableStateOf(deps.prefs.heroSound) }
-    LaunchedEffect(hero.item.id, focused, active, stoppedFor) {
+    val inFront by com.sokoul.pc.ui.AppFocus.active.collectAsState()
+    LaunchedEffect(hero.item.id, focused, active, stoppedFor, inFront) {
         // TrailerController waits a few seconds of steady focus before it opens anything: crossing the hero starts nothing.
-        if (focused && active && stoppedFor != hero.item.id) trailer.prepare(heroInfo?.trailerKeys().orEmpty(), hero.item.title, trailerOwner) else trailer.release(trailerOwner)
+        if (focused && active && inFront && stoppedFor != hero.item.id) trailer.prepare(heroInfo?.trailerKeys().orEmpty(), hero.item.title, trailerOwner) else trailer.release(trailerOwner)
     }
     // Silent until the viewer asks for sound, as behind a title page. Whatever plays next finds the sound as it was.
     val silent = active && trailer.playing && !heroSound
@@ -501,9 +554,9 @@ private fun Hero(
     // Next slide when the trailer ends, or after a while when there is none.
     LaunchedEffect(trailer.finishedCount) { if (trailer.finishedCount > 0) index = (index + 1) % items.size }
     // A slide waits for its trailer as long as one is on its way.
-    LaunchedEffect(index, focused, active, trailer.playing, trailer.pending) {
+    LaunchedEffect(index, focused, active, inFront, trailer.playing, trailer.pending) {
         // In the real app only: a carousel with no end keeps a test waiting for the interface to be idle.
-        if (com.sokoul.pc.ui.FocusSource.trackRealMouse && focused && active && !trailer.playing && !trailer.pending) {
+        if (com.sokoul.pc.ui.FocusSource.trackRealMouse && focused && active && inFront && !trailer.playing && !trailer.pending) {
             delay(SLIDE_WITHOUT_TRAILER_MS)
             index = (index + 1) % items.size
         }
@@ -514,9 +567,10 @@ private fun Hero(
     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth().then(modifier).testTag("hero")) {
         // The text block, the logo and the buttons follow the hero's size: as drawn on a 1920 x 1080 screen, smaller
         // in a smaller window, never larger.
-        val heroScale = minOf(maxWidth.value / HERO_DESIGN_WIDTH, maxHeight.value / HERO_DESIGN_HEIGHT).coerceIn(HERO_MIN_SCALE, 1f)
-        val textWidth = maxWidth * HERO_TEXT_WIDTH / heroScale
-        val textBottom = maxHeight * HERO_TEXT_BOTTOM
+        val upright = com.sokoul.pc.ui.Form.tabletPortrait
+        val heroScale = if (upright) 1f else minOf(maxWidth.value / HERO_DESIGN_WIDTH, maxHeight.value / HERO_DESIGN_HEIGHT).coerceIn(HERO_MIN_SCALE, 1f)
+        val textWidth = if (upright) maxWidth * HERO_UPRIGHT_TEXT else maxWidth * HERO_TEXT_WIDTH / heroScale
+        val textBottom = if (upright) 64.dp else maxHeight * HERO_TEXT_BOTTOM
         val density = LocalDensity.current
         val rtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
         val engine = deps.player
@@ -529,11 +583,19 @@ private fun Hero(
             AnimatedVisibility(trailer.playing && engine != null && rememberHasFrames(engine), Modifier.fillMaxSize(), enter = fadeIn(), exit = fadeOut()) {
                 VideoFill(engine!!, Modifier.fillMaxSize())
             }
-            Box(Modifier.fillMaxSize().background(
-                if (rtl) Brush.horizontalGradient(0.38f to Color.Transparent, 1f to Color(0xD9000000))
-                else Brush.horizontalGradient(0f to Color(0xD9000000), 0.62f to Color.Transparent),
-            ))
-            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.5f to Color.Transparent, 0.82f to Palette.Background.copy(alpha = 0.72f), 0.96f to Palette.Background)))
+            if (upright) {
+                // The text sits over the lower half, the full width: the image fades into the page from its middle down.
+                Box(Modifier.fillMaxSize().background(Brush.verticalGradient(
+                    0f to Color(0x66000000), 0.16f to Color.Transparent, 0.4f to Color.Transparent,
+                    0.7f to Palette.Background.copy(alpha = 0.78f), 1f to Palette.Background,
+                )))
+            } else {
+                Box(Modifier.fillMaxSize().background(
+                    if (rtl) Brush.horizontalGradient(0.38f to Color.Transparent, 1f to Color(0xD9000000))
+                    else Brush.horizontalGradient(0f to Color(0xD9000000), 0.62f to Color.Transparent),
+                ))
+                Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.5f to Color.Transparent, 0.82f to Palette.Background.copy(alpha = 0.72f), 0.96f to Palette.Background)))
+            }
         }
         val deferAnimeExtras = kind == PageKind.Anime && !com.sokoul.pc.Platform.IS_TV
         val heroExtras by produceState(com.sokoul.pc.data.TitleExtras(), hero.item.kind(), hero.item.id, heroInfo, deferAnimeExtras) {
@@ -652,12 +714,12 @@ private fun Hero(
             }
         }
         }
-        Dots(items.size, index, Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp))
+        Dots(items.size, index, Modifier.align(Alignment.BottomCenter).padding(bottom = if (upright) 20.dp else 32.dp))
     }
 }
 
 @Composable
-fun TitleLogo(logo: String?, title: String, modifier: Modifier = Modifier) {
+fun TitleLogo(logo: String?, title: String, modifier: Modifier = Modifier, align: Alignment = Alignment.CenterStart) {
     // A logo that is missing or cannot be decoded falls back to the title in bold text, at the same place.
     val image by produceState(logo?.let(ImageLoader::cached), logo) { value = logo?.let { ImageLoader.load(it) } }
     var waited by remember(logo) { mutableStateOf(logo == null) }
@@ -673,9 +735,9 @@ fun TitleLogo(logo: String?, title: String, modifier: Modifier = Modifier) {
         Box(modifier.height(130.dp).width(430.dp)) {
             Image(
                 bitmap, null, Modifier.matchParentSize().blur(14.dp, androidx.compose.ui.draw.BlurredEdgeTreatment.Unbounded).graphicsLayer { alpha = 0.75f },
-                Alignment.CenterStart, ContentScale.Fit, colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(Color.Black),
+                align, ContentScale.Fit, colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(Color.Black),
             )
-            Image(bitmap, title, Modifier.matchParentSize(), Alignment.CenterStart, ContentScale.Fit)
+            Image(bitmap, title, Modifier.matchParentSize(), align, ContentScale.Fit)
         }
     } else if (!waited) {
         Spacer(modifier.height(130.dp))

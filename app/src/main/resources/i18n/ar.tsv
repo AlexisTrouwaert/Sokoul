@@ -45,14 +45,18 @@ Add channel to favorites	إضافة القناة إلى المفضلة
 Add channels	إضافة قنوات
 Add channels from any group. Your provider's groups stay as they are.	أضف قنوات من أي مجموعة. تبقى مجموعات المزوّد كما هي.
 Add channels from any provider group. Your provider categories remain unchanged.	أضف قنوات من أي مجموعة لدى المزوّد. تبقى فئاته دون تغيير.
+Add selection	إضافة القنوات المحدّدة
+Add to a collection	إضافة إلى مجموعة
 Add to collection	إضافة إلى مجموعة
 Add your IPTV account in Settings to see your channels.	أضف حساب IPTV في الإعدادات لرؤية قنواتك.
 Added to downloads. Open Recordings to follow progress.	أُضيف إلى التنزيلات. افتح التسجيلات لمتابعة التقدم.
+Added {1} channels	القنوات المضافة: {1}
 Adrenaline	أدرينالين
 After {1} min	بعد {1} د
 Airing today	يُعرض اليوم
 Alert on	التنبيه مفعّل
 All	الكل
+All sources	كل المصادر
 ALL\nCOLLECTIONS	كل\nالمجموعات
 All channels	كل القنوات
 All formats	كل الصيغ
@@ -140,6 +144,7 @@ CATALOG	الكتالوج
 Categories	الفئات
 Categories could not be refreshed. Stored titles remain available.	تعذّر تحديث الفئات. تبقى الأعمال المحفوظة متاحة.
 Channel	القناة
+Channel groups	مجموعات القنوات
 Channel preview	معاينة القنوات
 Channel up / down	القناة التالية / السابقة
 Channels	القنوات
@@ -169,8 +174,30 @@ Choose Channels and enter a name or number, or explore Programmes.	اختر ال
 Choose folder…	اختيار مجلد…
 Clear	مسح
 CLEAR	مسح
+Clear search	مسح البحث
+Clear selection	إلغاء تحديد الكل
 Clear the catalogue cache	مسح ذاكرة الكتالوج المؤقتة
+Edit collection	إدارة المجموعة
+Find a channel	البحث عن قناة
 Forget source failures	نسيان أخطاء المصادر
+No 4K version from these sources	لا توجد نسخة بدقة 4K في هذه المصادر
+No channels could be added.	تعذّرت إضافة القنوات.
+No channels in this group	لا توجد قنوات في هذه المجموعة
+No new channels to add.	لا توجد قنوات جديدة لإضافتها.
+No version from this source	لا توجد نسخة من هذا المصدر
+On air now	يُعرض الآن
+Programmes airing on your channels	البرامج المعروضة الآن على قنواتك
+Programmes you marked to watch later	برامج حدّدتها لمشاهدتها لاحقًا
+Provider groups	مجموعات المزوّد
+Real-Debrid search found no version for this title	لم يعثر بحث Real-Debrid على نسخة لهذا العنوان
+Real-Debrid search is temporarily unavailable	بحث Real-Debrid غير متاح مؤقتًا
+Record this programme	تسجيل هذا البرنامج
+Search groups	البحث عن مجموعات
+Select all	تحديد الكل
+Select channels	اختيار القنوات
+Servers	الخوادم
+Set up the Sokoul server in Settings > Content sources.	اضبط خادم سوكول من الإعدادات > مصادر المحتوى.
+TV actions	خيارات التلفزيون
 Your languages	لغاتك
 Search services	خدمات البحث
 If no language matches	إذا لم تتطابق أي لغة
@@ -750,6 +777,7 @@ Speed	السرعة
 Spin again	التدوير مجددًا
 Spinning…	جارٍ التدوير…
 Sports	الرياضة
+Sports channels	القنوات الرياضية
 Sports and games	رياضة وألعاب
 Stable	مستقر
 Start	ابدأ
@@ -797,7 +825,6 @@ The collection changed. Cancel and try again.	تغيّرت المجموعة. أ�
 The complete programme is scheduled, with a 2 minute lead-in and a 5 minute safety margin.	تمت جدولة البرنامج كاملًا بتقدم دقيقتين وهامش أمان 5 دقائق.
 The connection was interrupted.	انقطع الاتصال.
 The Early Bird	الطائر المبكر
-The experience	الخبرة
 The Explorer	المستكشف
 The Faces	الوجوه
 The Films	الأفلام
@@ -988,6 +1015,7 @@ Zoom out	تصغير
 {1} screens at a time	{1} شاشات في المرة
 {1} screens watching right now	{1} شاشات تشاهد الآن
 {1} seasons	{1} مواسم
+{1} selected	المحدّد: {1}
 {1} to read here	{1} للقراءة هنا
 {1} volumes	{1} مجلدات
 {1} · play/pause, next	{1} · تشغيل/إيقاف، التالي

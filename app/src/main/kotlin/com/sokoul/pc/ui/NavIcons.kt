@@ -1,6 +1,7 @@
 package com.sokoul.pc.ui
 
 import androidx.compose.material.icons.filled.AutoStories
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.SolidColor
@@ -57,6 +58,7 @@ object NavIcons {
 
     /** A screen with its antenna: unlike Series, this is live television. */
     val Manga by lazy { androidx.compose.material.icons.Icons.Filled.AutoStories }
+    val Sports by lazy { androidx.compose.material.icons.Icons.Filled.EmojiEvents }
 
     val Tv by lazy {
         icon("tv") {

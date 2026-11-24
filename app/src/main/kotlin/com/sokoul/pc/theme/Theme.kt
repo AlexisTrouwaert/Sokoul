@@ -12,7 +12,7 @@ import androidx.compose.ui.unit.sp
 
 /** Colors read from the reference captures (estimates, see docs/design/cartography.md). */
 object Palette {
-    val Background = Color(0xFF2C2C2E)
+    val Background = Color.Black
     val OnBackground = Color.White
     val Secondary = Color(0xFFA0A0A2)
     val FocusFill = Color(0xFFEBEBEB)
@@ -43,7 +43,8 @@ object AccentTheme {
 
 /** Sizes in reference pixels: one dp equals one pixel of a 1920x1080 capture (see ScaledRoot). */
 object Metrics {
-    val PageMargin = 80.dp
+    /** The page's left edge: narrower on a tablet held upright, where the screen is that much narrower. */
+    val PageMargin get() = if (com.sokoul.pc.ui.Form.tabletPortrait) 56.dp else 80.dp
     val ButtonHeight = 66.dp
     const val ButtonFocusScale = 1.12f
     val RowHeight = 65.dp
@@ -116,6 +117,20 @@ object Glass {
     val RowCurrent = Color(0x29FFFFFF)
     /** Behind modals only: the picture stays readable around the panel. */
     val Scrim = Color(0x8C000000)
+    /** Denser glass for lists opened over a panel (Figma color/surface/glass-dense). */
+    val Dense = Color(0xF5141416)
+    /** The silver hairline and light of the Settings redesign (Figma color/border/silver). */
+    val Silver = Color(0x73C9CCD3)
+}
+
+/** Tokens of the Settings redesign (openspec settings-redesign D9; Figma file "Sokoul — Réglages"). */
+object Nacre {
+    /** The graphite canvas behind Settings. */
+    val Canvas = Color(0xFF090909)
+    /** The lit focus: pearly white at the top, a touch warmer at the bottom. */
+    val Focus = Color(0xFFF8F5ED)
+    val FocusEnd = Color(0xFFE4E0D6)
+    val Ink = Color(0xFF141416)
 }
 
 /** Full pages (settings, tools): a quiet vertical light, brighter at the top, instead of a flat grey. */

@@ -136,6 +136,9 @@ dependencies {
     testImplementation(libs.junit)
     implementation(project(":core")) { exclude(group = "xmlpull") }
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))
+    // Installs the baseline profiles that Compose ships, also when the APK is installed with adb: without it the app ran
+    // interpreted (dexopt "verify") and the Chromecast HD dropped 41 % of frames while browsing (2026-11-22).
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.animation:animation")
@@ -143,6 +146,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation(libs.androidx.activity.compose)
     implementation(libs.okhttp)
+    implementation("com.google.zxing:core:3.5.3")
     // Streaming sites read by the app itself (Coflix…), as core already does.
     implementation(libs.jsoup)
     implementation(libs.kotlinx.serialization.json)

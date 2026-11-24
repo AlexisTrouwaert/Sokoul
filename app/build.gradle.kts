@@ -60,6 +60,7 @@ dependencies {
     implementation(compose.material3)
     implementation(compose.materialIconsExtended)
     implementation(libs.okhttp)
+    implementation("com.google.zxing:core:3.5.3")
     // Streaming sites read by the app itself (Coflix…), as core already does.
     implementation(libs.jsoup)
     implementation(libs.kotlinx.serialization.json)
@@ -159,6 +160,12 @@ tasks.register<JavaExec>("rdTrial") {
     classpath = dev.runtimeClasspath
     mainClass.set("com.sokoul.pc.dev.RdTrialKt")
     args((project.findProperty("rdArgs") as String? ?: "").split(" "))
+}
+
+tasks.register<JavaExec>("sourceAudit") {
+    classpath = dev.runtimeClasspath
+    mainClass.set("com.sokoul.pc.dev.SourceAuditKt")
+    args((project.findProperty("titles") as String? ?: "").split(" ", ",").filter { it.isNotBlank() })
 }
 
 tasks.register<JavaExec>("logoAudit") {

@@ -45,6 +45,8 @@ fun TvPanel(
     width: Dp = 720.dp,
     height: Dp = 820.dp,
     @Suppress("UNUSED_PARAMETER") footer: String? = null,
+    /** A button on the title's line, at the panel's end edge ("Refresh" in the versions panel). */
+    action: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val tv = com.sokoul.pc.Platform.IS_TV
@@ -68,7 +70,11 @@ fun TvPanel(
             .focusProperties { exit = { FocusRequester.Cancel } }.focusGroup()
             .glassSurface(RoundedCornerShape(Corners.Modal), Corners.Modal),
     ) {
-        PanelHeader(title, subtitle)
+        if (action == null) PanelHeader(title, subtitle)
+        else androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            androidx.compose.foundation.layout.Box(Modifier.weight(1f)) { PanelHeader(title, subtitle) }
+            androidx.compose.foundation.layout.Box(Modifier.padding(end = PanelMetrics.Inset + PanelMetrics.RowPad)) { action() }
+        }
         Column(
             Modifier.weight(1f, fill = false).fillMaxWidth().padding(start = PanelMetrics.Inset, end = PanelMetrics.Inset, bottom = PanelMetrics.Inset),
             verticalArrangement = Arrangement.spacedBy(4.dp),

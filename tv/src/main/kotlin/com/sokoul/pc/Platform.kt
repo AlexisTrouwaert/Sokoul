@@ -61,6 +61,11 @@ object Platform {
         if (android.os.Build.VERSION.SDK_INT >= 31) TvApp.context.startActivity(Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${TvApp.context.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
+    /** One step of a playback start, with its time since the press (StartClock): `adb logcat -s SokoulStart`. */
+    fun startDiagnostic(message: String) {
+        android.util.Log.i("SokoulStart", message)
+    }
+
     fun guideDiagnostic(message: String) {
         android.util.Log.w("SokoulEPG", message)
     }
@@ -73,15 +78,34 @@ object Platform {
         @Suppress("DEPRECATION")
         val types = display?.hdrCapabilities?.supportedHdrTypes?.toSet().orEmpty()
         val height = display?.supportedModes?.maxOfOrNull { maxOf(it.physicalHeight, it.physicalWidth * 9 / 16) } ?: 1080
-        val decoders = android.media.MediaCodecList(android.media.MediaCodecList.REGULAR_CODECS).codecInfos.filter { !it.isEncoder }.flatMap { it.supportedTypes.toList() }.toSet()
+        val infos = android.media.MediaCodecList(android.media.MediaCodecList.REGULAR_CODECS).codecInfos.filter { !it.isEncoder }
+        val decoders = infos.flatMap { it.supportedTypes.toList() }.toSet()
+        // A hardware decoder that takes 3840 x 2160 in HEVC (what 4K releases use). The software one only fails slowly.
+        val decodes4k = infos.any { info ->
+            val hardware = if (android.os.Build.VERSION.SDK_INT >= 29) info.isHardwareAccelerated else !info.name.startsWith("c2.android.") && !info.name.startsWith("OMX.google.")
+            hardware && info.supportedTypes.any { it.equals("video/hevc", true) } &&
+                runCatching { info.getCapabilitiesForType("video/hevc").videoCapabilities?.isSizeSupported(3840, 2160) == true }.getOrDefault(false)
+        }
         return com.sokoul.pc.playback.sources.DeviceCaps(
             hdr10 = android.view.Display.HdrCapabilities.HDR_TYPE_HDR10 in types,
             dolbyVision = android.view.Display.HdrCapabilities.HDR_TYPE_DOLBY_VISION in types && "video/dolby-vision" in decoders,
             maxHeight = height,
+            decodes4k = decodes4k,
         )
     }
-    /** A share of the app's heap: 180 MB of images made the TV app weigh 409 MB and collect its garbage while scrolling. */
-    val IMAGE_CACHE_BYTES: Long = (Runtime.getRuntime().maxMemory() * 0.12).toLong()
+    /**
+     * A share of the app's heap: 180 MB of images made the TV app weigh 409 MB and collect its garbage while scrolling.
+     * On a device with little memory (the Chromecast HD: 1.4 GB, swapping 445 MB, 2026-11-22) a fixed 12 MB, whatever
+     * the large heap allows: what the cache does not keep is decoded again from the disk cache in a few milliseconds.
+     */
+    val IMAGE_CACHE_BYTES: Long = run {
+        val byHeap = (Runtime.getRuntime().maxMemory() * 0.12).toLong()
+        val am = TvApp.context.getSystemService(android.app.ActivityManager::class.java)
+        val info = android.app.ActivityManager.MemoryInfo().also { am?.getMemoryInfo(it) }
+        if (am?.isLowRamDevice == true || info.totalMem in 1 until SMALL_DEVICE_BYTES) minOf(byHeap, SMALL_IMAGE_CACHE) else byHeap
+    }
+    private const val SMALL_DEVICE_BYTES = 2_500L * 1024 * 1024
+    private const val SMALL_IMAGE_CACHE = 12L * 1024 * 1024
 
     /** Never larger than the screen: a page of a manga or an original logo would otherwise take tens of megabytes. */
     fun decodeImage(bytes: ByteArray, maxWidth: Int = 0): ImageBitmap? {
@@ -99,7 +123,9 @@ object Platform {
             // A JPEG has no transparency: 16 bits halve its memory with no visible loss on a TV. Logos (PNG, WebP) keep it.
             if (bounds.outMimeType == "image/jpeg") inPreferredConfig = android.graphics.Bitmap.Config.RGB_565
         }
-        return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)?.asImageBitmap()
+        // Sent to the graphics chip now, off the interface thread: done at its first draw, a 1280-wide backdrop cost that
+        // frame 63 ms on the Google TV Streamer when a title page opened (2026-11-24).
+        return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)?.also { it.prepareToDraw() }?.asImageBitmap()
     }
 
     private const val MAX_IMAGE_SIDE = 1920

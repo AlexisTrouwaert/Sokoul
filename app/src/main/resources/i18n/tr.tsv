@@ -45,14 +45,18 @@ Add channel to favorites	Kanalı favorilere ekle
 Add channels	Kanal ekle
 Add channels from any group. Your provider's groups stay as they are.	Herhangi bir gruptan kanal ekle. Sağlayıcının grupları olduğu gibi kalır.
 Add channels from any provider group. Your provider categories remain unchanged.	Sağlayıcının herhangi bir grubundan kanal ekle. Kategorileri değişmez.
+Add selection	Seçimi ekle
+Add to a collection	Koleksiyona ekle
 Add to collection	Koleksiyona ekle
 Add your IPTV account in Settings to see your channels.	Kanallarını görmek için Ayarlar'dan IPTV hesabını ekle.
 Added to downloads. Open Recordings to follow progress.	İndirmelere eklendi. İlerlemeyi görmek için Kayıtlar'ı aç.
+Added {1} channels	{1} kanal eklendi
 Adrenaline	Adrenalin
 After {1} min	{1} dk sonra
 Airing today	Bugün yayında
 Alert on	Uyarı açık
 All	Tümü
+All sources	Tüm kaynaklar
 ALL\nCOLLECTIONS	TÜM\nKOLEKSİYONLAR
 All channels	Tüm kanallar
 All formats	Tüm biçimler
@@ -140,6 +144,7 @@ CATALOG	KATALOG
 Categories	Kategoriler
 Categories could not be refreshed. Stored titles remain available.	Kategoriler yenilenemedi. Kayıtlı içerikler kullanılabilir durumda.
 Channel	Kanal
+Channel groups	Kanal grupları
 Channel preview	Kanal önizlemesi
 Channel up / down	Sonraki / önceki kanal
 Channels	Kanallar
@@ -169,8 +174,30 @@ Choose Channels and enter a name or number, or explore Programmes.	Kanallar'ı s
 Choose folder…	Klasör seç…
 Clear	Temizle
 CLEAR	TEMİZLE
+Clear search	Aramayı temizle
+Clear selection	Seçimi temizle
 Clear the catalogue cache	Katalog önbelleğini temizle
+Edit collection	Koleksiyonu yönet
+Find a channel	Kanal ara
 Forget source failures	Kaynak hatalarını unut
+No 4K version from these sources	Bu kaynaklarda 4K sürüm yok
+No channels could be added.	Kanal eklenemedi.
+No channels in this group	Bu grupta kanal yok
+No new channels to add.	Eklenecek yeni kanal yok.
+No version from this source	Bu kaynakta sürüm yok
+On air now	Şu an yayında
+Programmes airing on your channels	Kanallarında yayınlanan programlar
+Programmes you marked to watch later	Sonra izlemek üzere işaretlediğin programlar
+Provider groups	Sağlayıcı grupları
+Real-Debrid search found no version for this title	Real-Debrid bu başlık için sürüm bulamadı
+Real-Debrid search is temporarily unavailable	Real-Debrid araması geçici olarak kullanılamıyor
+Record this programme	Bu programı kaydet
+Search groups	Grup ara
+Select all	Tümünü seç
+Select channels	Kanal seç
+Servers	Sunucular
+Set up the Sokoul server in Settings > Content sources.	Sokoul sunucusunu Ayarlar > İçerik kaynakları bölümünde yapılandır.
+TV actions	TV işlemleri
 Your languages	Dillerin
 Search services	Arama hizmetleri
 If no language matches	Hiçbir dil eşleşmezse
@@ -750,6 +777,7 @@ Speed	Hız
 Spin again	Yeniden çevir
 Spinning…	Dönüyor…
 Sports	Spor
+Sports channels	Spor kanalları
 Sports and games	Spor ve oyunlar
 Stable	Kararlı
 Start	Başla
@@ -797,7 +825,6 @@ The collection changed. Cancel and try again.	Koleksiyon değişti. İptal edip 
 The complete programme is scheduled, with a 2 minute lead-in and a 5 minute safety margin.	Programın tamamı 2 dakika önce başlayacak ve 5 dakika güvenlik payıyla planlandı.
 The connection was interrupted.	Bağlantı kesildi.
 The Early Bird	Erkenci Kuş
-The experience	Deneyim
 The Explorer	Kâşif
 The Faces	Yüzler
 The Films	Filmler
@@ -988,6 +1015,7 @@ Zoom out	Uzaklaştır
 {1} screens at a time	Aynı anda {1} ekran
 {1} screens watching right now	Şu anda {1} ekran izliyor
 {1} seasons	{1} sezon
+{1} selected	{1} seçili
 {1} to read here	Burada okunacak {1}
 {1} volumes	{1} cilt
 {1} · play/pause, next	{1} · oynat/duraklat, sonraki

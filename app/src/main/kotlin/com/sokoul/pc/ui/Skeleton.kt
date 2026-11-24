@@ -61,10 +61,14 @@ private fun Bar(width: Dp, height: Dp, pulse: State<Float>, modifier: Modifier =
 
 /** A row still loading: the heading bar, then cards of the size the row will have. */
 @Composable
-fun SkeletonRow(landscape: Boolean, modifier: Modifier = Modifier, cards: Int = 6) {
+fun SkeletonRow(landscape: Boolean, modifier: Modifier = Modifier, cards: Int = 6, square: Boolean = false) {
     val pulse = rememberPulse()
     val width = if (landscape) 414.dp else CardMetrics.PosterWidth
-    val height = if (landscape) 232.dp else CardMetrics.PosterHeight
+    val height = when {
+        landscape -> 232.dp
+        square -> CardMetrics.PosterWidth
+        else -> CardMetrics.PosterHeight
+    }
     Column(modifier.fillMaxWidth().testTag("skeleton-row")) {
         Box(Modifier.padding(start = Metrics.PageMargin)) { Bar(220.dp, 26.dp, pulse) }
         Row(
