@@ -63,10 +63,12 @@ class TvPersonalization(
         return clean
     }
 
-    @Synchronized fun create(name: String): String {
+    @Synchronized fun create(name: String, channels: List<Channel> = emptyList()): String {
         val clean = checkedName(name)
+        val members = newMembers(emptyList(), channels)
+        require(channels.isEmpty() || members.isNotEmpty()) { "No accessible channels" }
         val id = UUID.randomUUID().toString()
-        edit { it.copy(collections = it.collections + TvCollection(id, clean)) }
+        edit { it.copy(collections = it.collections + TvCollection(id, clean, members)) }
         return id
     }
 
@@ -80,16 +82,32 @@ class TvPersonalization(
         activeCollectionId = s.activeCollectionId?.takeUnless { it == id },
     ) }
 
-    @Synchronized fun add(id: String, channel: Channel) {
-        if (channel.playlistId != tv.playlist()?.id || !tv.organization.canAccess(channel)) return
+    fun add(id: String, channel: Channel) {
+        addAll(id, listOf(channel))
+    }
+
+    /** Several channels in one write: a whole group added at once, skipping those already there. */
+    @Synchronized fun addAll(id: String, channels: List<Channel>): Int {
+        val collection = state().collections.firstOrNull { it.id == id } ?: return 0
+        val fresh = newMembers(collection.members, channels)
+        if (fresh.isEmpty()) return 0
         edit { s -> s.copy(collections = s.collections.map { collection ->
-            if (collection.id != id || collection.members.any { member ->
-                member.channelId == channel.id || (member.nameKey == channel.nameKey && member.region == TvCatalog.region(channel.name))
-            }) collection else collection.copy(members = collection.members + TvCollectionMember(
-                UUID.randomUUID().toString(), channel.id, channel.nameKey, channel.epgKey,
-                TvCatalog.region(channel.name), channel.name,
-            ))
+            if (collection.id != id) collection else collection.copy(members = collection.members + fresh)
         }) }
+        return fresh.size
+    }
+
+    private fun newMembers(existing: List<TvCollectionMember>, channels: List<Channel>): List<TvCollectionMember> {
+        val playlist = tv.playlist()?.id ?: return emptyList()
+        val ids = existing.mapTo(HashSet()) { it.channelId }
+        val families = existing.mapTo(HashSet()) { it.nameKey to it.region }
+        return channels.mapNotNull { channel ->
+            if (channel.playlistId != playlist || channel.id in ids || !tv.organization.canAccess(channel)) return@mapNotNull null
+            val region = TvCatalog.region(channel.name)
+            if (!families.add(channel.nameKey to region)) return@mapNotNull null
+            ids.add(channel.id)
+            TvCollectionMember(UUID.randomUUID().toString(), channel.id, channel.nameKey, channel.epgKey, region, channel.name)
+        }
     }
 
     @Synchronized fun remove(id: String, memberId: String) = edit { s -> s.copy(collections = s.collections.map {

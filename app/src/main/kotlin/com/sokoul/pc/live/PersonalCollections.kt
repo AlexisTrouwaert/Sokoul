@@ -121,7 +121,7 @@ internal fun PersonalCollections(deps: AppDeps, onGuide: (String, Channel?, Prog
                 }
                 TvActionRow(L("Back to collection", "Retour à la collection").text()) { member = null }
             }
-            collection != null && com.sokoul.pc.Platform.IS_TV -> {
+            collection != null && !Form.tabletPortrait && !Form.isPortrait -> {
                 // Apple TV detail layout: actions down the left, the collection's channels on the right.
                 Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(32.dp)) {
                     Column(Modifier.width(560.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {

@@ -81,6 +81,7 @@ class TvCatalog(
         val now = System.currentTimeMillis()
         if (now - guideCheckedAt < 5 * 60_000L) return@withLock
         val provider = playlist() ?: return@withLock
+        if (!db.hasRoomForBackgroundSync()) return@withLock
         if (!guideSync.isGuideStale(provider) && schedules(channels).values.any { rows -> rows.any { it.start <= now && it.end > now } }) return@withLock
         Platform.guideDiagnostic("provider XMLTV refresh started type=${provider.type}")
         val count = guideSync.syncGuide(provider)

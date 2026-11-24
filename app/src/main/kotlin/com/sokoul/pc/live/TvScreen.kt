@@ -11,11 +11,13 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -35,6 +37,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.FiberManualRecord
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.foundation.border
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.semantics.contentDescription
@@ -114,10 +120,10 @@ private const val FOCUS_BACK_MS = 120L
 private const val CLOCK_TICK_MS = 15_000L
 private const val ZOOM_MS = 420
 private const val IDLE_MS = 15 * 60_000L
-private val DRAWER_WIDTH = 500.dp
-private val HERO_GUIDE = 372.dp
+private val HERO_GUIDE = FormulerGuideStyle.headerHeight
 private val HERO_GUIDE_TV = FormulerGuideStyle.headerHeight
 private val HERO_PANORAMA = 214.dp
+/** Groups offered as chips on a tablet held upright; the rest is one tap away in the group list. */
 private val FULL_HEIGHT = 1080.dp
 
 /**
@@ -135,6 +141,7 @@ fun TvScreen(
     onDownloadProvider: (com.sokoul.desktop.player.StreamRequest, String, String) -> Unit = { stream, key, title ->
         deps.notice = com.sokoul.pc.data.L("Open the TV workspace on the app window to manage downloads.", "Ouvrez l’espace TV dans l’application pour gérer les téléchargements.").text()
     },
+    onSports: (() -> Unit)? = null,
 ) {
     val tv = deps.tv
     val scope = rememberCoroutineScope()
@@ -142,19 +149,23 @@ fun TvScreen(
     var searchWasOpen by remember { mutableStateOf(false) }
     /** The control row under the banner: Up from the guide's first row lands here before the navigation bar. */
     val controlsFocus = remember { FocusRequester() }
+    val watchFocus = remember { FocusRequester() }
+    val television = Platform.IS_TV && !com.sokoul.pc.ui.Form.tablet && !com.sokoul.pc.ui.Form.isPhone
     val activeTab = com.sokoul.pc.ui.LocalActiveTab.current
-    var toNavBar by remember { mutableStateOf(false) }
     var addReturn by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     var revision by remember { mutableStateOf(0) }
-    val personalRevision = if (Platform.IS_TV) deps.personalTv.revision.collectAsState().value else 0L
-    val groups by produceState(emptyList<LiveLogic.Group>(), revision, personalRevision, deps.profiles.current.id) {
+    val personalRevision by deps.personalTv.revision.collectAsState()
+    val loadedGroups by produceState<List<LiveLogic.Group>?>(null, revision, personalRevision, deps.profiles.current.id) {
         // The first synchronization can still be running: the list fills in as soon as it is done.
         while (true) {
-            value = withContext(Dispatchers.IO) { if (Platform.IS_TV) deps.personalTv.groups() else tv.groups() }
-            if (value.size > 2 || withContext(Dispatchers.IO) { tv.playlist() } == null) break
-            delay(5_000)
+            val current = withContext(Dispatchers.IO) { deps.personalTv.groups() }
+            value = current
+            if (current.any { it.id != SpecialGroup.ALL && it.id != SpecialGroup.FAVORITES && it.id != TvCatalog.RECENT } ||
+                withContext(Dispatchers.IO) { tv.playlist() } == null) break
+            withContext(Dispatchers.IO) { delay(5_000) }
         }
     }
+    val groups = loadedGroups.orEmpty()
     var selected by rememberSaveable { mutableStateOf<String?>(null) }
     // Back where it was left: the page is a television, not a menu.
     var restoreChannel by rememberSaveable { mutableStateOf<String?>(null) }
@@ -169,13 +180,12 @@ fun TvScreen(
         }
     }
     val group = selected?.takeIf { id -> groups.any { it.id == id } }
-        ?: (if (!Platform.IS_TV) groups.firstOrNull { it.id == SpecialGroup.FAVORITES }?.id else null)
         ?: groups.firstOrNull { it.id != SpecialGroup.FAVORITES && it.id != TvCatalog.RECENT && it.id != SpecialGroup.ALL }?.id ?: groups.firstOrNull()?.id
     val collectionId = TvPersonalization.collectionId(group)
     val channelPage by produceState<Pair<String?, List<Channel>?>>(null to null, group,
         if (group == SpecialGroup.FAVORITES || group == TvCatalog.RECENT) revision else 0, if (collectionId != null) personalRevision else 0L) {
         val loaded = if (group == null) emptyList() else withContext(Dispatchers.IO) {
-            if (Platform.IS_TV && collectionId != null) deps.personalTv.channels(collectionId) else tv.channels(group)
+            if (collectionId != null) deps.personalTv.channels(collectionId) else tv.channels(group)
         }
         kotlinx.coroutines.currentCoroutineContext().ensureActive()
         value = group to loaded
@@ -231,9 +241,10 @@ fun TvScreen(
     }
     var workspace by rememberSaveable { mutableStateOf<String?>(null) }
     var collectionSearch by remember { mutableStateOf<String?>(null) }
+    var groupPicker by remember { mutableStateOf<GroupChannelRequest?>(null) }
     var contextOkHeld by remember { mutableStateOf(false) }
     var scheduling by remember { mutableStateOf<Pair<Channel, Program>?>(null) }
-    val workspaceOpen = workspace != null || scheduling != null
+    val workspaceOpen = workspace != null || scheduling != null || groupPicker != null
     // After the player: on the channel it ended on, even after zapping through others.
     var wasCovered by remember { mutableStateOf(false) }
     LaunchedEffect(active, workspaceOpen) {
@@ -262,9 +273,12 @@ fun TvScreen(
     val program = shown?.let { GuideLogic.programAt(schedules[it.id].orEmpty(), focus.anchor) }
 
     var level by remember { mutableStateOf(GuideLevel.Guide) }
+    /** Direct (the list of what is on, as on the mock-up) or Guide (the grid); Direct first. */
+    var view by rememberSaveable { mutableStateOf(TvView.Direct) }
+    /** The "More" menu: reminders, recording, My TV, TV settings. */
+    var moreOpen by remember { mutableStateOf(false) }
     var drawerOpen by remember { mutableStateOf(false) }
     var watchlistOpen by remember { mutableStateOf(false) }
-    val watchlistFocus = remember { FocusRequester() }
     val watchlist = deps.reminders.upcoming(now)
     var guideFocused by remember { mutableStateOf(false) }
     val heroHeight = remember { Animatable((if (Platform.IS_TV) HERO_GUIDE_TV else HERO_GUIDE).value) }
@@ -274,17 +288,23 @@ fun TvScreen(
         drawer.animateTo(if (drawerOpen) 1f else 0f,
             if (Platform.IS_TV) tween(FormulerGuideStyle.panelMs) else spring(dampingRatio = 0.86f, stiffness = Spring.StiffnessMediumLow))
     }
-    LaunchedEffect(level, active) {
+    val targetHero = when {
+        groups.isEmpty() -> HERO_GUIDE
+        television -> HERO_GUIDE_TV
+        view == TvView.Direct -> directHeaderHeight()
+        Platform.IS_TV -> HERO_GUIDE_TV
+        level == GuideLevel.Guide -> HERO_GUIDE
+        else -> HERO_PANORAMA
+    }
+    LaunchedEffect(active, targetHero) {
         if (active) {
             launch { guideShown.animateTo(1f, tween(ZOOM_MS)) }
-            val targetHero = if (Platform.IS_TV) HERO_GUIDE_TV else if (level == GuideLevel.Guide) HERO_GUIDE else HERO_PANORAMA
+            // Direct is immersive: the channel playing takes the top of the page; the Guide keeps the grid's room.
             heroHeight.animateTo(targetHero.value, tween(ZOOM_MS, easing = FastOutSlowInEasing))
         }
     }
-    LaunchedEffect(active, drawerOpen, workspaceOpen, if (Platform.IS_TV) searching else null, if (Platform.IS_TV) groupPending else false) {
-        // Up from the top of the group column goes to the navigation bar: do not pull it back into the guide.
-        if (toNavBar) { toNavBar = false; return@LaunchedEffect }
-        if (active && !drawerOpen && !workspaceOpen && (!Platform.IS_TV || (searching == null && !groupPending))) {
+    LaunchedEffect(active, drawerOpen, workspaceOpen, moreOpen, if (Platform.IS_TV) searching else null, if (Platform.IS_TV) groupPending else false) {
+        if (active && !drawerOpen && !workspaceOpen && !moreOpen && (!Platform.IS_TV || (searching == null && !groupPending))) {
             if (Platform.IS_TV) androidx.compose.runtime.withFrameNanos { }
             runCatching { firstRow.requestFocus() }
         }
@@ -293,9 +313,12 @@ fun TvScreen(
     // The muted preview waits a moment, so that going through a list never opens a stream per channel.
     val previews = deps.prefs.livePreview
     val asleep = deps.playback.previewAsleep
-    val browsingBlocked = Platform.IS_TV && (drawerOpen || workspaceOpen || searching != null || groupPending)
-    LaunchedEffect(shown?.id, if (Platform.IS_TV) focus.anchor else 0L, if (Platform.IS_TV) group else null, active, previews, asleep, browsingBlocked) {
+    val browsingBlocked = drawerOpen || workspaceOpen || moreOpen || searching != null || groupPending
+    val inFront by com.sokoul.pc.ui.AppFocus.active.collectAsState()
+    LaunchedEffect(shown?.id, if (Platform.IS_TV) focus.anchor else 0L, if (Platform.IS_TV) group else null, active, previews, asleep, browsingBlocked, inFront) {
         val channel = shown
+        // Behind another window the muted preview only costs a connection and the decoder.
+        if (!inFront) { deps.playback.stopPreview(); return@LaunchedEffect }
         if (channel == null || !active || !previews || asleep || browsingBlocked) return@LaunchedEffect
         if (Platform.IS_TV) {
             settledGuidePreview({ withContext(Dispatchers.IO) { tv.toLive(channel) } }, deps.playback::preview)
@@ -304,7 +327,7 @@ fun TvScreen(
             withContext(Dispatchers.IO) { tv.toLive(channel) }?.let(deps.playback::preview)
         }
         // Nobody touched anything for a long time: the account's only connection is not kept for an empty room.
-        delay(IDLE_MS)
+        withContext(Dispatchers.Default) { delay(IDLE_MS) }
         deps.playback.sleepPreview()
     }
     DisposableEffect(Unit) { onDispose { deps.playback.stopPreview() } }
@@ -364,18 +387,18 @@ fun TvScreen(
     // The guide takes the whole screen while the navigation bar is hidden, and makes room when it comes back.
     val barShown = com.sokoul.pc.shell.LocalNavBarVisible.current
     val topSpace by androidx.compose.animation.core.animateDpAsState(
-        if (!Platform.IS_TV) 0.dp else if (barShown) 120.dp else 32.dp, tween(220), label = "tv-top")
-    Box(Modifier.fillMaxSize().background(if (Platform.IS_TV) FormulerGuideStyle.background else Palette.Background).testTag("tv")) {
+        if (barShown && !com.sokoul.pc.ui.Form.isPortrait) 118.dp else 24.dp, tween(220), label = "tv-top")
+    BoxWithConstraints(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(FormulerGuideStyle.header, FormulerGuideStyle.background))).testTag("tv")) {
+        val portrait = com.sokoul.pc.ui.Form.tabletPortrait || com.sokoul.pc.ui.Form.isPortrait
+        val drawerWidth = if (portrait) (maxWidth - 48.dp).coerceAtLeast(0.dp) else minOf(TV_COLUMN_WIDTH, maxWidth)
+        val drawerTop = topSpace + 12.dp
+        val drawerDirection = if (androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl) -1f else 1f
         Column(
             Modifier.fillMaxSize()
                 .padding(top = topSpace)
                 // The covered guide must not regain keyboard/hover focus while a workspace owns input.
                 .focusProperties { canFocus = !workspaceOpen && !browsingBlocked }
-                .onPreviewKeyEvent { workspaceOpen || browsingBlocked }
-                .graphicsLayer {
-                translationX = if (Platform.IS_TV) 0f else drawer.value * DRAWER_WIDTH.toPx()
-                alpha = if (Platform.IS_TV) 1f else 1f - 0.55f * drawer.value
-            },
+                .onPreviewKeyEvent { browsingBlocked },
         ) {
             Box(
                 Modifier.fillMaxWidth().layout { measurable, constraints ->
@@ -384,68 +407,88 @@ fun TvScreen(
                     layout(placeable.width, h) { placeable.place(0, 0) }
                 },
             ) {
-                shown?.let { c ->
-                    if (Platform.IS_TV) TvEditorialHero(deps, c, program, now) else Hero(
-                        deps, c, program, c.id in favorites, now, level, active,
-                    )
+                val channel = shown
+                if (channel == null) {
+                    Column(Modifier.align(Alignment.CenterStart).padding(horizontal = Metrics.PageMargin),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Label(L("Live TV", "Télévision en direct").text(), Type.RowTitle.copy(fontSize = 64.sp))
+                        Label(if (loadedGroups == null || groupPending) L("Loading channels…", "Chargement des chaînes…").text()
+                            else if (groups.isEmpty()) tr(Text.LiveNoPlaylist) else tr(Text.LiveNoChannels),
+                            Type.Body, Palette.Secondary, maxLines = 2)
+                    }
+                } else if (view == TvView.Direct) {
+                    TvEditorialHero(deps, channel, program, now, watchFocus, immersive = !television) { watch(channel) }
+                } else if (Platform.IS_TV || level == GuideLevel.Guide) {
+                    TvEditorialHero(deps, channel, program, now, watchFocus) { watch(channel) }
+                } else {
+                    Hero(deps, channel, program, channel.id in favorites, now, level, active)
                 }
             }
-            Row(
-                Modifier.fillMaxWidth().height(if (Platform.IS_TV) 68.dp else 58.dp).padding(horizontal = Metrics.PageMargin)
-                    // Up from any control returns to this page's own tab, not the nearest tab above it.
-                    .then(if (Platform.IS_TV) Modifier.onPreviewKeyEvent { e ->
-                        if (e.type == KeyEventType.KeyDown && e.key == Key.DirectionUp && activeTab != null) {
-                            runCatching { activeTab.requestFocus() }; true
-                        } else false
-                    } else Modifier),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            // Without a provider there is nothing to sort or jump through: the row would only say "0 channels".
+            if (groups.isNotEmpty()) TvControlRow(
+                groupName = groups.firstOrNull { it.id == group }?.let { if (Platform.IS_TV) columnGroupName(it) else TvCatalog.label(groupName(it)) } ?: L("Groups", "Groupes").text(),
+                count = channels?.size,
+                view = view,
+                groupRequester = when {
+                    channels.isNullOrEmpty() -> firstRow
+                    television -> null
+                    else -> controlsFocus
+                },
+                viewRequester = controlsFocus.takeIf { television && !channels.isNullOrEmpty() },
+                modifier = Modifier
+                    // Up visits the watch action before returning to the navigation bar.
+                    .onPreviewKeyEvent { e ->
+                        if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                        when {
+                            e.key == Key.DirectionDown && television && !channels.isNullOrEmpty() -> {
+                                runCatching { firstRow.requestFocus() }; true
+                            }
+                            e.key == Key.DirectionUp && activeTab != null -> {
+                                val target = if (shown != null && (Platform.IS_TV || level == GuideLevel.Guide)) watchFocus else activeTab
+                                runCatching { target.requestFocus() }; true
+                            }
+                            else -> false
+                        }
+                    },
+                onGroups = { watchlistOpen = false; drawerOpen = !drawerOpen },
+                onView = { v ->
+                    view = v
+                    if (v == TvView.Direct) focus.anchor = System.currentTimeMillis()
+                    if (television && !channels.isNullOrEmpty()) scope.launch {
+                        androidx.compose.runtime.withFrameNanos { }
+                        runCatching { firstRow.requestFocus() }
+                    }
+                },
+                onNow = { focus.anchor = System.currentTimeMillis() },
+                onTonight = { focus.anchor = GuideLogic.jumpTarget(shown?.let { schedules[it.id] }.orEmpty(), GuideLogic.tonight(System.currentTimeMillis())) },
+                onTomorrow = { focus.anchor = GuideLogic.jumpTarget(shown?.let { schedules[it.id] }.orEmpty(), GuideLogic.tomorrowEvening(System.currentTimeMillis())) },
             ) {
-                GroupChip(groups.firstOrNull { it.id == group }, channels?.size, Modifier.width(245.dp),
-                    requester = if (Platform.IS_TV) controlsFocus else null) {
-                    watchlistOpen = false; drawerOpen = !drawerOpen
-                }
-                if (!Platform.IS_TV) {
-                    PillButton("${tr(Text.LiveWatchlist)} · ${watchlist.size}", { watchlistOpen = true; drawerOpen = true },
-                        Modifier.testTag("tv-watchlist-open"), requester = watchlistFocus)
-                    Spacer(Modifier.weight(1f))
-                }
-                JumpPill(tr(Text.LiveNowJump), "tv-jump-now") { focus.anchor = System.currentTimeMillis() }
-                JumpPill(tr(Text.LiveTonight), "tv-jump-tonight") { focus.anchor = GuideLogic.jumpTarget(shown?.let { schedules[it.id] }.orEmpty(), GuideLogic.tonight(System.currentTimeMillis())) }
-                JumpPill(tr(Text.LiveTomorrow), "tv-jump-tomorrow") { focus.anchor = GuideLogic.jumpTarget(shown?.let { schedules[it.id] }.orEmpty(), GuideLogic.tomorrowEvening(System.currentTimeMillis())) }
-                if (!Platform.IS_TV) JumpPill(tr(Text.LiveSearch), "tv-search-open") { searching = "" }
-                PillButton(L("Sports", "Sport").text(), { focusManager.clearFocus(force = true); workspace = "sports" }, Modifier.testTag("tv-sports-open"))
-                if (Platform.IS_TV) {
-                    Spacer(Modifier.weight(1f))
-                    KeyHint("OK", L("Watch", "Regarder").text())
-                    KeyHint(L("Hold OK", "OK long").text(), L("Actions", "Actions").text())
-                    KeyHint("◀", L("Groups", "Groupes").text())
-                    IconPill(Icons.Filled.Search, L("Search", "Rechercher").text(), "tv-search-open") { searching = "" }
-                    IconPill(Icons.Filled.Settings, L("TV settings", "Réglages TV").text(), "tv-settings-open") {
-                        focusManager.clearFocus(force = true); workspace = "settings"
-                    }
-                }
-                if (!Platform.IS_TV) {
-                    if (shown != null && program != null && program.end > now) {
-                        PillButton(L("Record programme", "Enregistrer l’émission").text(), { scheduling = shown to program }, Modifier.testTag("tv-record-programme"))
-                    }
-                    PillButton(L("My TV", "Mon espace TV").text(), { workspace = "home" }, Modifier.testTag("tv-workspace-open"))
-                }
+                IconPill(Icons.Filled.Search, L("Search", "Rechercher").text(), "tv-search-open") { searching = "" }
+                com.sokoul.pc.ui.PanelChip(L("More", "Plus").text(), Modifier.testTag("tv-more"), icon = Icons.Filled.MoreHoriz) { moreOpen = true }
             }
             Box(Modifier.weight(1f).fillMaxWidth().graphicsLayer { alpha = guideShown.value }) {
                 val list = channels
                 when {
-                    groups.isEmpty() -> Label(tr(Text.LiveNoPlaylist), Type.Meta, Palette.Secondary, Modifier.padding(start = Metrics.PageMargin, top = 60.dp))
+                    groups.isEmpty() -> Unit
                     list != null && list.isEmpty() -> {
                         Column(Modifier.padding(start = Metrics.PageMargin, top = 60.dp).width(1000.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             Label(if (group == SpecialGroup.FAVORITES) L("Your favorite channels belong here", "Vos chaînes favorites vous attendent ici").text() else tr(Text.LiveNoChannels), Type.Meta, Palette.Secondary)
                             if (Platform.IS_TV) {
                                 Label(L("Hold OK on a channel to add it to favorites or a collection.", "Maintenez OK sur une chaîne pour l’ajouter aux favoris ou à une collection.").text(), Type.Body, Palette.Secondary)
-                                TvActionRow(L("Choose another group", "Choisir un autre groupe").text(), requester = firstRow) { watchlistOpen = false; drawerOpen = true }
+                                TvActionRow(L("Choose another group", "Choisir un autre groupe").text()) { watchlistOpen = false; drawerOpen = true }
                                 TvActionRow(L("TV settings", "Réglages TV").text()) { focusManager.clearFocus(force = true); workspace = "settings" }
                             }
                         }
                     }
+                    list != null && view == TvView.Direct -> TvDirectList(
+                        tv, list, focus.row, favorites, now, firstRow, controlsFocus,
+                        onSchedules = { schedules.putAll(it) },
+                        onFocusRow = { focus.row = it; guideFocused = true },
+                        onWatch = { c -> watch(c) },
+                        onFavorite = ::favorite,
+                        onOpenDrawer = { watchlistOpen = false; drawerOpen = true },
+                        onOpenActions = { workspace = "guide-actions" },
+                    )
                     list != null -> GuideGrid(
                         tv, list, focus, favorites, level, now, firstRow,
                         schedule = { schedules[it].orEmpty() },
@@ -466,7 +509,7 @@ fun TvScreen(
                         onFavorite = ::favorite,
                         onFocusChanged = { guideFocused = it },
                         loadingEnabled = !browsingBlocked,
-                        upTarget = if (Platform.IS_TV) controlsFocus else null,
+                        upTarget = controlsFocus,
                     )
                 }
                 // A short group leaves most of the screen empty: say why, and where the rest is.
@@ -482,39 +525,51 @@ fun TvScreen(
                 }
             }
         }
-        if (Platform.IS_TV && drawerOpen) {
-            Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures(onTap = {}) })
+        if (drawerOpen) {
+            Box(Modifier.fillMaxSize().padding(top = topSpace).background(FormulerGuideStyle.scrim.copy(alpha = .54f))
+                .pointerInput(Unit) { detectTapGestures(onTap = { drawerOpen = false }) })
         }
-        if (Platform.IS_TV && (drawer.value > 0f || drawerOpen) && !watchlistOpen) {
+        if (moreOpen) {
+            Box(
+                Modifier.fillMaxSize().background(com.sokoul.pc.theme.Glass.Scrim)
+                    .pointerInput(Unit) { detectTapGestures(onTap = { moreOpen = false }) }
+                    .onPreviewKeyEvent { e -> if (e.type == KeyEventType.KeyDown && e.key == Key.Escape) { moreOpen = false; true } else false },
+            ) {
+                TvPanel(L("TV actions", "Actions TV").text(),
+                    modifier = Modifier.align(Alignment.TopEnd).padding(top = drawerTop, start = 20.dp, end = 20.dp).testTag("tv-more-menu"),
+                    width = 690.dp, action = { com.sokoul.pc.ui.PanelChip(L("Close", "Fermer").text()) { moreOpen = false } }) {
+                    TvActionRow(L("On air now", "À l’antenne").text(), L("Programmes airing on your channels", "Programmes diffusés sur vos chaînes").text(), Modifier.testTag("tv-discover")) {
+                        moreOpen = false; workspace = "discover"
+                    }
+                    TvActionRow(L("Reminders", "Rappels").text(), L("Programmes you marked to watch later", "Émissions que vous avez marquées pour plus tard").text(), Modifier.testTag("tv-watchlist-open"),
+                        trailing = watchlist.size.takeIf { it > 0 }?.toString()) { moreOpen = false; watchlistOpen = true; drawerOpen = true }
+                    if (shown != null && program != null && program.end > now) {
+                        TvActionRow(L("Record this programme", "Enregistrer l’émission").text(), program.title, Modifier.testTag("tv-record-programme")) { moreOpen = false; scheduling = shown to program }
+                    }
+                    TvActionRow(L("Recordings", "Enregistrements").text(), L("Scheduled, active and saved programmes", "Programmes planifiés, en cours et enregistrés").text(), Modifier.testTag("tv-recordings")) { moreOpen = false; focusManager.clearFocus(force = true); workspace = "recordings" }
+                    TvActionRow(L("TV settings", "Réglages TV").text(), L("Zapping, guide order, preview and your provider", "Zapping, ordre du guide, aperçu et fournisseur").text(), Modifier.testTag("tv-settings-open")) {
+                        moreOpen = false; focusManager.clearFocus(force = true); workspace = "settings"
+                    }
+                }
+            }
+        }
+        if ((drawer.value > 0f || drawerOpen) && !watchlistOpen && !workspaceOpen) {
             TvGroupColumn(
-                groups, group, watchlist.size,
-                Modifier.fillMaxHeight().width(TV_COLUMN_WIDTH).graphicsLayer { translationX = (drawer.value - 1f) * TV_COLUMN_WIDTH.toPx() },
+                groups, group,
+                Modifier.padding(start = if (portrait) 24.dp else 16.dp, top = drawerTop, bottom = 20.dp)
+                    .width(drawerWidth).fillMaxHeight().graphicsLayer { translationX = (drawer.value - 1f) * drawerWidth.toPx() * drawerDirection },
                 onApply = { selected = it; drawerOpen = false },
-                onReminders = { watchlistOpen = true },
-                onDiscover = { drawerOpen = false; focusManager.clearFocus(force = true); workspace = "discover" },
-                onRecordings = { drawerOpen = false; focusManager.clearFocus(force = true); workspace = "recordings" },
+                onGroupActions = { id -> drawerOpen = false; focusManager.clearFocus(force = true); groupPicker = GroupChannelRequest(group = id) },
                 onNewCollection = { drawerOpen = false; focusManager.clearFocus(force = true); workspace = "collection-new" },
                 onManageCollection = { id -> drawerOpen = false; focusManager.clearFocus(force = true); workspace = "collection:$id" },
-                onExitUp = {
-                    toNavBar = true
-                    drawerOpen = false
-                    scope.launch { androidx.compose.runtime.withFrameNanos { }; runCatching { activeTab?.requestFocus() } }
-                },
-                onClose = { drawerOpen = false },
-            )
-        } else if ((drawer.value > 0f || drawerOpen) && !watchlistOpen) {
-            GroupDrawer(
-                groups, group,
-                Modifier.fillMaxHeight().width(DRAWER_WIDTH).graphicsLayer { translationX = (drawer.value - 1f) * DRAWER_WIDTH.toPx() },
-                onBrowse = { selected = it },
                 onClose = { drawerOpen = false },
             )
         }
         if ((drawer.value > 0f || drawerOpen) && watchlistOpen) {
             WatchlistDrawer(
                 reminders = watchlist,
-                modifier = Modifier.width(if (Platform.IS_TV) TV_COLUMN_WIDTH else DRAWER_WIDTH).graphicsLayer {
-                    translationX = (drawer.value - 1f) * (if (Platform.IS_TV) TV_COLUMN_WIDTH else DRAWER_WIDTH).toPx()
+                modifier = Modifier.padding(start = 16.dp, top = drawerTop, bottom = 20.dp).width(drawerWidth).graphicsLayer {
+                    translationX = (drawer.value - 1f) * drawerWidth.toPx() * drawerDirection
                 },
                 onWatch = { reminder ->
                     scope.launch {
@@ -562,23 +617,23 @@ fun TvScreen(
             androidx.compose.foundation.layout.Box(
                 // Dense guide text behind a panel competes with it: keep the guide as a faint context only.
                 Modifier.fillMaxSize().background(FormulerGuideStyle.scrim)
-                    .focusProperties { canFocus = collectionSearch == null }
+                    .focusProperties { canFocus = collectionSearch == null && groupPicker == null }
                     .pointerInput(Unit) { detectTapGestures(onTap = {}) }
                     .onPreviewKeyEvent { event ->
                         if (contextOkHeld && event.key in listOf(Key.Enter, Key.NumPadEnter)) {
                             if (event.type == KeyEventType.KeyUp) contextOkHeld = false
                             true
-                        } else collectionSearch != null
+                        } else collectionSearch != null || groupPicker != null
                     }
                     .onKeyEvent { event ->
                         if (event.type == KeyEventType.KeyDown && event.key == Key.Escape) {
                             when {
                                 route == "schedule" -> scheduling = null
-                                route in setOf("home", "guide-actions", "guide-details", "settings", "collection-new", "discover", "sports") ||
-                                    route.startsWith("collection:") || (Platform.IS_TV && route == "recordings") -> workspace = null
+                                route in setOf("home", "guide-actions", "guide-details", "settings", "collection-new", "discover", "recordings") ||
+                                    route.startsWith("collection:") -> workspace = null
                                 route == "collection-picker" -> workspace = "guide-actions"
                                 // On TV the provider's controls live behind the gear: Back returns there.
-                                Platform.IS_TV && route in setOf("organize", "account") -> workspace = "settings"
+                                route in setOf("organize", "account", "movies", "series") -> workspace = "settings"
                                 else -> workspace = "home"
                             }
                             true
@@ -587,7 +642,6 @@ fun TvScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 when (route) {
-                    "sports" -> SportsScreen(deps, onPlay = onPlayProvider, onClose = { workspace = null })
                     "schedule" -> scheduling?.let { (channel, selectedProgram) ->
                         TvRecordSchedulePanel(deps, channel, selectedProgram, Modifier, onClose = { scheduling = null }, onScheduled = { revision++; scheduling = null })
                     }
@@ -602,29 +656,29 @@ fun TvScreen(
                             onRecord = { p -> scheduling = channel to p; workspace = null },
                             onReminder = { p -> deps.reminders.toggle(Reminder(channel.id, TvCatalog.shortLabel(channel.name), p.title, p.start)); revision++ },
                             onFavorite = { favorite(channel) },
-                            onCollection = if (Platform.IS_TV) ({ workspace = "collection-picker" }) else null,
+                            onCollection = { workspace = "collection-picker" },
                             onWatchlist = { workspace = null; watchlistOpen = true; drawerOpen = true },
-                            onMyTv = { workspace = "home" },
+                            onMyTv = { workspace = "settings" },
                             onClose = { workspace = null },
                         )
                     }
                     "movies" -> ProviderLibraryPanel(deps, com.sokoul.desktop.data.ProviderKind.Movies,
-                        onPlay = onPlayProvider, onDownload = onDownloadProvider, onClose = { workspace = "home" })
+                        onPlay = onPlayProvider, onDownload = onDownloadProvider, onClose = { workspace = "settings" })
                     "series" -> ProviderLibraryPanel(deps, com.sokoul.desktop.data.ProviderKind.Series,
-                        onPlay = onPlayProvider, onDownload = onDownloadProvider, onClose = { workspace = "home" })
-                    "account" -> ProviderAccountPanel(deps, onChanged = { revision++ }, onClose = { workspace = if (Platform.IS_TV) "settings" else "home" })
-                    "organize" -> TvOrganizationPanel(deps, onChanged = { revision++ }, onClose = { workspace = if (Platform.IS_TV) "settings" else "home" })
-                    "recordings" -> TvRecordingsPanel(deps, onPlayProvider, onClose = { workspace = if (Platform.IS_TV) null else "home" })
+                        onPlay = onPlayProvider, onDownload = onDownloadProvider, onClose = { workspace = "settings" })
+                    "account" -> ProviderAccountPanel(deps, onChanged = { revision++ }, onClose = { workspace = "settings" })
+                    "organize" -> TvOrganizationPanel(deps, onChanged = { revision++ }, onClose = { workspace = "settings" })
+                    "recordings" -> TvRecordingsPanel(deps, onPlayProvider, onClose = { workspace = null })
                     "settings" -> TvSettingsPanel(deps, onOpen = { focusManager.clearFocus(force = true); workspace = it }, onClose = { workspace = null })
                     "collection-picker" -> shown?.let { TvCollectionPicker(deps, it) { workspace = "guide-actions" } }
                     // On TV the old "My TV" window is gone: its parts live in the group column, the gear and here.
                     "home" -> if (Platform.IS_TV) TvSettingsPanel(deps, onOpen = { focusManager.clearFocus(force = true); workspace = it }, onClose = { workspace = null })
                         else TvWorkspacePanel(Modifier, onSelect = { workspace = it }, onClose = { workspace = null })
-                    "discover" -> TvDiscoveryPanel(deps) { targetGroup, channel, targetProgram ->
+                    "discover" -> TvDiscoveryPanel(deps, onClose = { workspace = null }) { targetGroup, channel, targetProgram ->
                         selected = targetGroup; restoreChannel = channel?.id; restoreProgramStart = targetProgram?.start
                         workspace = null
                     }
-                    else -> if (Platform.IS_TV && (route == "collection-new" || route.startsWith("collection:"))) {
+                    else -> if (route == "collection-new" || route.startsWith("collection:")) {
                         val id = route.removePrefix("collection:").takeIf { route.startsWith("collection:") }
                         val collectionName by produceState<String?>(null, id, personalRevision) {
                             value = id?.let { wanted -> withContext(Dispatchers.IO) { deps.personalTv.state().collections.firstOrNull { it.id == wanted }?.name } }
@@ -634,6 +688,7 @@ fun TvScreen(
                             width = (if (id == null) com.sokoul.pc.ui.TvPanelSize.Standard else com.sokoul.pc.ui.TvPanelSize.Wide).width,
                             height = (if (id == null) com.sokoul.pc.ui.TvPanelSize.Standard else com.sokoul.pc.ui.TvPanelSize.Wide).height,
                             modifier = Modifier.testTag("tv-collection-panel"),
+                            action = { com.sokoul.pc.ui.PanelChip(L("Close", "Fermer").text()) { workspace = null } },
                             footer = L("OK to choose · Back to guide", "OK pour choisir · Retour au guide").text()) {
                             PersonalCollections(deps,
                                 onGuide = { targetGroup, channel, targetProgram ->
@@ -642,14 +697,32 @@ fun TvScreen(
                                 },
                                 onWatch = { workspace = null; watch(it) },
                                 onAddChannels = {
-                                    // The panel keeps focus inside itself (exit = Cancel): release it for the search keyboard.
                                     focusManager.clearFocus(force = true)
-                                    collectionSearch = it
+                                    groupPicker = GroupChannelRequest(destination = it)
                                 },
                                 addReturn = addReturn, initial = id, startNew = id == null, onExit = { workspace = null })
                         }
                     } else TvWorkspacePanel(Modifier, onSelect = { workspace = it }, onClose = { workspace = "home" })
                 }
+            }
+        }
+        groupPicker?.let { request ->
+            Box(Modifier.fillMaxSize().background(FormulerGuideStyle.scrim).padding(top = topSpace, start = 18.dp, end = 18.dp, bottom = 18.dp)
+                .pointerInput(Unit) { detectTapGestures(onTap = {}) }, contentAlignment = Alignment.Center) {
+                GroupChannelPicker(deps, groups, request,
+                    onClose = { groupPicker = null; if (request.destination == null) drawerOpen = true else addReturn++ },
+                    onSearch = request.destination?.let { id -> { groupPicker = null; collectionSearch = id } },
+                    onSaved = { id, count ->
+                        groupPicker = null
+                        deps.notice = L("Added $count channels", "$count chaîne(s) ajoutée(s)").text()
+                        if (request.destination == null) selected = TvPersonalization.group(id) else addReturn++
+                    },
+                    onFavorited = { count ->
+                        groupPicker = null
+                        deps.notice = L("$count channels added to favourites", "$count chaîne(s) ajoutée(s) aux favoris").text()
+                        revision++
+                        selected = com.sokoul.desktop.data.SpecialGroup.FAVORITES
+                    })
             }
         }
         // Focus was released to open the search: My TV takes it back on the button that opened it.
@@ -779,7 +852,7 @@ private fun GuideContextPanel(
         TvActionRow((if (Platform.IS_TV) L("My reminders", "Mes rappels") else L("Watchlist", "À suivre")).text(),
             modifier = Modifier.testTag("tv-watchlist-open"), onClick = onWatchlist)
         // On TV everything personal is in the group column and settings behind the gear: no extra window here.
-        if (!Platform.IS_TV) TvActionRow(L("My TV", "Mon espace TV").text(), modifier = Modifier.testTag("tv-workspace-open"), onClick = onMyTv)
+        if (!Platform.IS_TV) TvActionRow(L("TV settings", "Réglages TV").text(), modifier = Modifier.testTag("tv-workspace-open"), onClick = onMyTv)
         // The Back key already does this on TV; the footer says so.
         if (!Platform.IS_TV) TvActionRow(L("Back to guide", "Retour au guide").text(), onClick = onClose)
         }
@@ -880,24 +953,42 @@ private fun Hero(deps: AppDeps, c: Channel, program: Program?, favorite: Boolean
 
 /** The playing preview stays independent of the programme currently being explored. */
 @Composable
-private fun TvEditorialHero(deps: AppDeps, channel: Channel, program: Program?, now: Long) {
+private fun TvEditorialHero(deps: AppDeps, channel: Channel, program: Program?, now: Long, watchFocus: FocusRequester, immersive: Boolean = false, onWatch: () -> Unit) {
     val previewKey = deps.playback.previewKey
     val previewChannel by produceState<Channel?>(null, previewKey) {
         value = previewKey?.let { withContext(Dispatchers.IO) { deps.tv.channelById(it) } }
     }
     val player = deps.player
     val frames = rememberHasFrames(player)
+    val picture = rememberProgramImage(program)
+    val previewContent: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit = {
+        if (player != null && previewKey != null && frames) {
+            VideoFill(player, Modifier.fillMaxSize().testTag("tv-preview"), fit = ContentScale.Crop)
+        } else if (picture != null) {
+            Art(picture, Modifier.fillMaxSize().testTag("tv-hero-picture"), scale = ContentScale.Crop, placeholder = Color.Transparent)
+        } else {
+            Box(Modifier.fillMaxSize().background(Color(0xFF15171C)), contentAlignment = Alignment.Center) {
+                val source = previewChannel ?: channel
+                ChannelLogo(source.name, source.logo, Modifier.size(260.dp, 140.dp), guideId = source.epgKey)
+            }
+        }
+    }
+    if (immersive) {
+        ImmersiveLiveHeader(channel, program, now, watchFocus, onWatch, previewContent)
+        return
+    }
     FormulerGuideHeader(channel, program, now,
-        previewName = previewChannel?.takeIf { it.id != channel.id }?.let { TvCatalog.shortLabel(it.name) }) {
+        previewName = previewChannel?.takeIf { it.id != channel.id }?.let { TvCatalog.shortLabel(it.name) },
+        modifier = Modifier.testTag("tv-hero"), watchFocus = watchFocus, onWatch = onWatch) {
         if (player != null && previewKey != null && frames) {
             VideoFill(player, Modifier.fillMaxSize().testTag("tv-preview"), fit = ContentScale.Fit)
+        } else if (picture != null) {
+            Art(picture, Modifier.fillMaxSize().testTag("tv-hero-picture"), scale = ContentScale.Crop, placeholder = Color.Transparent)
         } else {
             Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center) {
                 val source = previewChannel ?: channel
                 ChannelLogo(source.name, source.logo, Modifier.size(116.dp, 64.dp), guideId = source.epgKey)
-                Spacer(Modifier.height(16.dp))
-                Label(L("Live preview", "Aperçu en direct").text(), Type.Body.copy(fontSize = 18.sp), FormulerGuideStyle.secondary)
             }
         }
     }
@@ -945,7 +1036,8 @@ private fun GroupChip(group: LiveLogic.Group?, count: Int?, modifier: Modifier, 
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Label((if (Platform.IS_TV) group?.let(::columnGroupName) else group?.let(::groupName)?.let(TvCatalog::label)).orEmpty(),
+        Label((if (Platform.IS_TV) group?.let(::columnGroupName) else group?.let(::groupName)?.let(TvCatalog::label))
+            ?: L("Groups", "Groupes").text(),
             Type.Body.copy(fontWeight = FontWeight.SemiBold, fontSize = if (Platform.IS_TV) 29.sp else Type.Body.fontSize), text, Modifier.weight(1f, fill = false), maxLines = 1)
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, Modifier.size(24.dp), tint = text)
     }

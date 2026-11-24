@@ -72,9 +72,9 @@ fun WatchlistDrawer(
     val inset = if (tv) 24.dp else 12.dp
     Column(
         modifier.fillMaxHeight()
-            .background(FormulerGuideStyle.sheet)
+            .background(FormulerGuideStyle.sheet, androidx.compose.foundation.shape.RoundedCornerShape(24.dp))
             .padding(start = if (tv) Metrics.PageMargin - inset else Metrics.PageMargin, end = if (tv) 32.dp else 24.dp,
-                top = if (tv) 64.dp else 120.dp, bottom = 40.dp)
+                top = 24.dp, bottom = 40.dp)
             .then(if (tv && reminders.isEmpty()) Modifier.focusRequester(emptyFocus).focusable() else Modifier)
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
@@ -86,8 +86,11 @@ fun WatchlistDrawer(
             .testTag("tv-watchlist-drawer"),
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
-        Label(if (tv) com.sokoul.pc.data.L("Reminders", "Rappels").text() else tr(Text.LiveWatchlist),
-            if (tv) Type.RowTitle.copy(fontSize = 48.sp) else Type.RowTitle, modifier = Modifier.padding(start = inset).testTag("tv-watchlist-title"), maxLines = 1)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Label(com.sokoul.pc.data.L("Reminders", "Rappels").text(), Type.RowTitle.copy(fontSize = 39.sp),
+                modifier = Modifier.weight(1f).padding(start = inset).testTag("tv-watchlist-title"), maxLines = 1)
+            com.sokoul.pc.ui.PanelChip(com.sokoul.pc.data.L("Close", "Fermer").text(), onClick = onClose)
+        }
         if (reminders.isEmpty()) {
             Label(if (tv) com.sokoul.pc.data.L("No reminder yet. In the guide, choose a programme to come and press OK.",
                     "Aucun rappel pour l'instant. Dans le guide, choisissez une émission à venir et appuyez sur OK.").text() else tr(Text.LiveWatchlistEmpty),

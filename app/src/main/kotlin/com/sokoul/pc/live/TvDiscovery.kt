@@ -1,6 +1,8 @@
 package com.sokoul.pc.live
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.*
@@ -15,6 +17,7 @@ import com.sokoul.desktop.data.SpecialGroup
 import com.sokoul.pc.AppDeps
 import com.sokoul.pc.data.L
 import com.sokoul.pc.ui.TvActionRow
+import com.sokoul.pc.ui.PanelChip
 import com.sokoul.pc.ui.TvPanel
 import com.sokoul.pc.ui.TvPanelNotice
 import com.sokoul.pc.ui.TvPanelSize
@@ -35,7 +38,7 @@ private const val DISCOVER_PAGE = 20
  * tonight, later, on favorites and for reminders. Only the guide data actually stored is shown; OK opens it in the guide.
  */
 @Composable
-internal fun TvDiscoveryPanel(deps: AppDeps, onGuide: (String, Channel?, Program?) -> Unit) {
+internal fun TvDiscoveryPanel(deps: AppDeps, onClose: () -> Unit, onGuide: (String, Channel?, Program?) -> Unit) {
     var tab by rememberSaveable { mutableStateOf("now") }
     var page by remember { mutableIntStateOf(0) }
     var loading by remember { mutableStateOf(true) }
@@ -74,14 +77,13 @@ internal fun TvDiscoveryPanel(deps: AppDeps, onGuide: (String, Channel?, Program
             }
         } } finally { loading = false }
     }
-    TvPanel(L("What's on", "En ce moment").text(), L("From your guide, in your channels' order", "D'après votre guide, dans l'ordre de vos chaînes").text(),
+    TvPanel(L("On air now", "À l’antenne").text(), L("From your guide, in your channels' order", "D'après votre guide, dans l'ordre de vos chaînes").text(),
         width = TvPanelSize.Wide.width, height = TvPanelSize.Wide.height, modifier = Modifier.testTag("tv-discovery"),
-        footer = L("OK opens in the guide · Back to guide", "OK ouvre dans le guide · Retour au guide").text()) {
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        action = { com.sokoul.pc.ui.PanelChip(L("Back", "Retour").text(), onClick = onClose) }) {
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf("now" to L("On now", "En cours"), "tonight" to L("Tonight", "Ce soir"), "upcoming" to L("Later", "À venir"),
                 "favorites" to L("Favorites", "Favoris"), "reminders" to L("Reminders", "Rappels")).forEach { (id, label) ->
-                // The selected tab also carries its check mark: give it the room, or its label wraps.
-                TvActionRow(label.text(), selected = id == tab, modifier = Modifier.weight(if (id == tab) 1.5f else 1f).testTag("tv-discovery-$id"),
+                PanelChip(label.text(), selected = id == tab, modifier = Modifier.testTag("tv-discovery-$id"),
                     requester = if (id == "now") first else remember { FocusRequester() }) { tab = id; page = 0 }
             }
         }

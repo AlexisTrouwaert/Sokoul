@@ -54,7 +54,7 @@ internal fun FormulerGuideFixture(scenario: String) {
         Row(Modifier.height(120.dp).fillMaxWidth().padding(horizontal = 80.dp), verticalAlignment = Alignment.CenterVertically) {
             Label(L("Sokoul   ·   TV Guide", "Sokoul   ·   Guide TV").text(), Type.Nav, FormulerGuideStyle.ink)
         }
-        FormulerGuideHeader(channels[0], GuideLogic.programAt(schedules[channels[0].id].orEmpty(), now), now, null) {
+        FormulerGuideHeader(channels[0], GuideLogic.programAt(schedules[channels[0].id].orEmpty(), now), now, null, onWatch = {}) {
             if (scenario == "preview") {
                 // A labelled stand-in frame tests the available-video layout, not real decoding.
                 Box(Modifier.fillMaxSize().background(Brush.linearGradient(listOf(Color(0xFF304A53), Color(0xFF20292E)))), contentAlignment = Alignment.Center) {
