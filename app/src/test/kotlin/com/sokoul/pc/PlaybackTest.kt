@@ -985,7 +985,8 @@ class PlaybackTest {
     fun a_probe_tells_the_cause() {
         assertEquals(PlayFailure.DeadLink, failureOf(Probe(404, null), film = true))
         assertEquals(PlayFailure.Refused(403), failureOf(Probe(403, null), film = true))
-        assertEquals(PlayFailure.DebridLimit, failureOf(Probe(509, null), film = true))
+        assertEquals(PlayFailure.ServerBusy, failureOf(Probe(509, null), film = true))
+        assertFalse("one busy server leaves the other versions of the origin", PlayFailure.ServerBusy.blocksOrigin)
         assertEquals(PlayFailure.FakeFile, failureOf(Probe(206, 1_000_000), film = true))
         assertNull(failureOf(Probe(206, 1_000_000), film = false))
         assertNull(failureOf(Probe(206, 8_000_000_000), film = true))
@@ -1244,7 +1245,9 @@ class PlaybackTest {
     @Test
     fun real_debrid_codes_become_causes() {
         assertEquals(PlayFailure.KeyRefused, DebridTransfers.failureOf(RdException(401, "x")))
-        assertEquals(PlayFailure.DebridLimit, DebridTransfers.failureOf(RdException(403, "x", 21)))
+        assertEquals(PlayFailure.DebridDownloadsFull, DebridTransfers.failureOf(RdException(403, "x", 21)))
+        assertEquals(PlayFailure.DebridLimit, DebridTransfers.failureOf(RdException(403, "x", 36)))
+        assertEquals("asked to slow down is not a quota", PlayFailure.DebridBusy, DebridTransfers.failureOf(RdException(429, "x", 34)))
         // 35, "infringing_file" (HTTP 451): blocked by a rights holder, for good; remembered a month, not a day.
         assertEquals(PlayFailure.Blocked, DebridTransfers.failureOf(RdException(451, "x", 35)))
         assertEquals(PlayFailure.DeadLink, DebridTransfers.failureOf(RdException(403, "x", 28)))
