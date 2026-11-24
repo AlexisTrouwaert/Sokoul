@@ -41,6 +41,54 @@ class DesktopSyncTest {
     }
 
     @Test
+    fun `an oversized write ahead log is reclaimed without losing committed data`() {
+        val file = temp.newFile("storage.db")
+        val bytes = 34 * 1024 * 1024
+        DesktopDb(file).use { db ->
+            java.sql.DriverManager.getConnection("jdbc:sqlite:${file.absolutePath}").use { writer ->
+                writer.createStatement().use { statement ->
+                    statement.execute("PRAGMA wal_autocheckpoint=0")
+                    statement.execute("CREATE TABLE storage_probe (payload BLOB NOT NULL)")
+                    statement.executeUpdate("INSERT INTO storage_probe VALUES (zeroblob($bytes))")
+                    val wal = java.io.File(file.absolutePath + "-wal")
+                    assertTrue(wal.length() > bytes)
+
+                    db.checkpointStorage()
+
+                    assertEquals(0L, wal.length())
+                    statement.executeQuery("SELECT length(payload) FROM storage_probe").use {
+                        assertTrue(it.next())
+                        assertEquals(bytes, it.getInt(1))
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `an interrupted large Xtream refresh preserves the published channel list`() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("""[{"category_id":"fr","category_name":"France"}]"""))
+            val partial = (1..1_005).joinToString(prefix = "[", postfix = ",{") { index ->
+                """{"stream_id":$index,"name":"Channel $index","category_id":"fr"}"""
+            }
+            server.enqueue(MockResponse().setBody(partial))
+            DesktopDb(temp.newFile("interrupted-refresh.db")).use { db ->
+                val id = db.upsertPlaylist(Playlist(0, "Test", PlaylistType.XTREAM, server.url("/").toString().trimEnd('/'), "user", "pass", null, null))
+                val channel = Channel(id, "saved", 1, "Existing channel", null, "fr", null, "saved", null, null, null, 0)
+                db.replaceLive(id, listOf(Category(id, "fr", "France", 0)), listOf(channel))
+
+                val sync = DesktopSync(db)
+                sync.sync(db.playlists().single())
+
+                assertEquals(listOf(channel), db.channels(id, "fr"))
+                assertEquals(2, server.requestCount)
+                assertTrue(sync.state.value.error != null)
+            }
+        }
+    }
+
+    @Test
     fun `configured xmltv source populates the active channel schedule`() = runBlocking {
         MockWebServer().use { server ->
             val now = System.currentTimeMillis()

@@ -11,6 +11,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
 import com.sokoul.desktop.data.AccentColor
 import com.sokoul.desktop.data.DesktopDb
 import com.sokoul.desktop.data.DesktopPrefs
@@ -89,6 +91,14 @@ class SettingsTest {
         waitForIdle()
     }
 
+    /** A choice opens its list; the option at [index] is pressed and the list closes (settings-redesign D4). */
+    @OptIn(ExperimentalTestApi::class)
+    private fun ComposeUiTest.choose(tag: String, index: Int) {
+        click(tag)
+        onNodeWithTag("$tag-option-$index").performClick()
+        waitForIdle()
+    }
+
     @OptIn(ExperimentalTestApi::class)
     @Test
     fun playbackShowsTheWantedLanguagesAndOpensTheirEditor() = runComposeUiTest {
@@ -154,11 +164,11 @@ class SettingsTest {
     @Test
     fun subtitlesAreOffAutomaticOrOneLanguage() = runComposeUiTest {
         page()
-        pane("subtitles")
+        pane("languages")
         assertEquals("auto", prefs.audioIntent.subtitles)
-        click("pref-subtitles")
+        choose("pref-subtitles", 2 + com.sokoul.pc.library.AUDIO_LANGUAGE_CHOICES.indexOf("fr"))
         assertEquals("fr", prefs.audioIntent.subtitles)
-        click("pref-subtitles")
+        choose("pref-subtitles", 2 + com.sokoul.pc.library.AUDIO_LANGUAGE_CHOICES.indexOf("en"))
         assertEquals("en", prefs.audioIntent.subtitles)
     }
 
@@ -166,6 +176,7 @@ class SettingsTest {
     @Test
     fun accountsShowEveryServiceAndTheWayToChangeThem() = runComposeUiTest {
         page()
+        pane("sources")
         onNodeWithTag("service-TMDB").assertExists()
         onNodeWithTag("service-OMDb").assertExists()
         onNodeWithTag("settings-credentials").assertExists()
@@ -176,7 +187,7 @@ class SettingsTest {
     @Test
     fun accentIsPickedFromSwatchesAndKept() = runComposeUiTest {
         page()
-        pane("appearance")
+        pane("display")
         click("accent-red")
         assertEquals(AccentColor.RED, prefs.accent)
         assertEquals(AccentColor.RED.argb.toInt(), AccentTheme.color.toArgb())
@@ -188,13 +199,26 @@ class SettingsTest {
 
     @OptIn(ExperimentalTestApi::class)
     @Test
+    fun aChoiceListOpensOnTheSavedValueAndBackLeavesItUnchanged() = runComposeUiTest {
+        page()
+        pane("languages")
+        click("pref-sub-size")
+        onNodeWithTag("pref-sub-size-list").assertExists()
+        onNodeWithTag("pref-sub-size-option-${SubtitleSize.LARGE.ordinal}").performKeyInput { pressKey(androidx.compose.ui.input.key.Key.Escape) }
+        waitForIdle()
+        onNodeWithTag("pref-sub-size-list").assertDoesNotExist()
+        assertEquals(SubtitleSize.NORMAL, prefs.subtitleSize)
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test
     fun subtitleStyleIsChosenAndReset() = runComposeUiTest {
         page()
-        pane("subtitles")
-        click("pref-sub-size")
-        click("pref-sub-color")
-        click("pref-sub-background")
-        click("pref-sub-font")
+        pane("languages")
+        choose("pref-sub-size", SubtitleSize.LARGE.ordinal)
+        choose("pref-sub-color", SubtitleColor.YELLOW.ordinal)
+        choose("pref-sub-background", SubtitleBackground.BOX.ordinal)
+        choose("pref-sub-font", SubtitleFont.ATKINSON.ordinal)
         assertEquals(SubtitleSize.LARGE, prefs.subtitleSize)
         assertEquals(SubtitleColor.YELLOW, prefs.subtitleColor)
         assertEquals(SubtitleBackground.BOX, prefs.subtitleBackground)
@@ -211,7 +235,7 @@ class SettingsTest {
     @Test
     fun menuEntriesCanBeHiddenButNotAll() = runComposeUiTest {
         page()
-        pane("menu")
+        pane("display")
         click("pref-menu-library")
         click("pref-menu-movies")
         assertEquals(setOf("library", "movies"), prefs.railHidden)
@@ -227,7 +251,7 @@ class SettingsTest {
     @Test
     fun maintenanceActionsAskTwiceBeforeDoingAnything() = runComposeUiTest {
         page()
-        pane("about")
+        pane("tools")
         // The test clock would run the four seconds the confirmation waits for while a click settles: it is held still.
         mainClock.autoAdvance = false
         fun press(tag: String) {

@@ -125,6 +125,25 @@ class ControlTest {
         assertEquals("Commentary", english { trackLabel("Commentary") })
     }
 
+    @Test
+    fun the_player_badge_says_the_track_plainly() {
+        // The file's words ("Surround 5.1 - [English]") become the language and the channels.
+        assertEquals("English 5.1", english { com.sokoul.pc.playback.ui.audioBadgeText("Surround 5.1 - [English]") })
+        assertEquals("French 2.0", english { com.sokoul.pc.playback.ui.audioBadgeText("Track 1 - Stéréo - [French]") })
+        assertEquals("7.1", english { com.sokoul.pc.playback.ui.audioBadgeText("Track 2 - TrueHD 7.1") })
+        assertEquals(null, english { com.sokoul.pc.playback.ui.audioBadgeText("Track 3") })
+    }
+
+    @Test
+    fun the_episode_line_names_the_episode_once() {
+        val picked = com.sokoul.pc.playback.session.PlayRequest("tv", 1, 1, 2, "Show", "S1E2 · Adrift", null)
+        val fromPage = picked.copy(kicker = "Adrift")
+        val line = com.sokoul.pc.playback.ui.episodeLine(picked)!!
+        assertTrue(line, line.startsWith("S1 · ") && line.endsWith(" · Adrift") && line.count { it == '·' } == 2)
+        assertEquals(line, com.sokoul.pc.playback.ui.episodeLine(fromPage))
+        assertEquals(null, com.sokoul.pc.playback.ui.episodeLine(picked.copy(kind = "movie", season = null, episode = null)))
+    }
+
     private fun <T> english(block: () -> T): T {
         val before = java.util.Locale.getDefault()
         java.util.Locale.setDefault(java.util.Locale.ENGLISH)

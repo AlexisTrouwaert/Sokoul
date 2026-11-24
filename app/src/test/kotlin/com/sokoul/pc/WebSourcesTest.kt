@@ -10,6 +10,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WebSourcesTest {
+    @Test fun `French subtitles do not make the original Japanese audio a dub`() {
+        assertEquals(AudioLanguage.VOSTFR, WebParse.languageOf("VO sous-titrée FR"))
+        assertEquals(AudioLanguage.VOSTFR, WebParse.languageOf("Japanese + French subtitles"))
+        assertEquals(AudioLanguage.VF, WebParse.languageOf("VF3"))
+        assertEquals(AudioLanguage.MULTI, WebParse.languageOf("VF + VO"))
+    }
+
     @Test fun `local extraction requires an explicit grant and a supported selected embed`() {
         fun links(status: String) = WebParse.links("Coflix", Json.parseToJsonElement("""{"extractionStatus":"$status","current_episode":{"player_links":[{"decoded_url":"https://ansembed.net/embed-one.html","language":"vf"},{"decoded_url":"https://unknown.example/e/2"}]}}"""), 1, allowLocal = true)
         assertTrue(links("vip_required").isEmpty())

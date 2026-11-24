@@ -36,6 +36,39 @@ class ProfilesTest {
         Resume(Resume.key("movie", id, null, null), "movie", id, null, null, "Film $id", null, null, position, 6_000_000, at, false)
 
     @Test
+    fun aProfileCodeIsCheckedKeptAsADigestAndSurvivesARestart() {
+        val profiles = Profiles(db)
+        val kid = profiles.add("Lou", kids = true)
+        val parent = profiles.add("Sam", kids = false)
+        profiles.setPin(parent, "4821")
+        val locked = profiles.all.first { it.id == parent.id }
+        assertTrue(locked.locked)
+        // Only the digest is kept: the code itself is not in the profile.
+        assertFalse(locked.pinHash!!.contains("4821"))
+        assertTrue(profiles.pinMatches(locked, "4821"))
+        assertFalse(profiles.pinMatches(locked, "1234"))
+        // A profile without a code opens with anything.
+        assertTrue(profiles.pinMatches(profiles.all.first { it.id == kid.id }, "0000"))
+        // The same code on another profile does not give the same digest.
+        profiles.setPin(kid, "4821")
+        assertTrue(profiles.all.first { it.id == kid.id }.pinHash != locked.pinHash)
+        // Read again from the database, as at the next start.
+        val again = Profiles(db)
+        assertTrue(again.pinMatches(again.all.first { it.id == parent.id }, "4821"))
+        assertFalse(again.pinMatches(again.all.first { it.id == parent.id }, "4822"))
+        again.setPin(again.all.first { it.id == parent.id }, null)
+        assertFalse(again.all.first { it.id == parent.id }.locked)
+    }
+
+    @Test
+    fun aLockedCurrentProfileIsAskedForAtStart() {
+        val profiles = Profiles(db)
+        assertFalse(profiles.asksAtStart)
+        profiles.setPin(profiles.current, "1111")
+        assertTrue(Profiles(db).asksAtStart)
+    }
+
+    @Test
     fun resumePointsBelongToTheirProfile() {
         // Written before any profile existed: it stays the first profile's.
         db.saveResume(watched(1, 1))

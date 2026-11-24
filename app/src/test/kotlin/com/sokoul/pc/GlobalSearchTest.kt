@@ -13,6 +13,34 @@ import java.nio.file.Files
 
 class GlobalSearchTest {
     @Test
+    fun title_pages_publish_once_per_search_and_keep_the_first_page_if_later_pages_fail() = runBlocking<Unit> {
+        val firstPublished = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val complete = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var searches = 0
+        val search = SearchAggregator<String, String, String, String>(
+            searchTitles = { error("A separate title search must not run") },
+            searchLive = { emptyList() },
+            searchAnime = { emptyList() },
+            searchManga = { emptyList() },
+        )
+        val job = launch {
+            val result = search.searchEach("The Office", searchTitlesProgressively = { _, publish ->
+                searches++
+                publish(listOf("The Office"))
+                complete.await()
+                error("Later page failed")
+            }) { if (it.titles.items == listOf("The Office")) firstPublished.complete(Unit) }
+            assertEquals(listOf("The Office"), result.titles.items)
+            assertTrue(result.titles.failed)
+        }
+        withTimeout(5_000) { firstPublished.await() }
+        assertTrue(job.isActive)
+        complete.complete(Unit)
+        job.join()
+        assertEquals(1, searches)
+    }
+
+    @Test
     fun live_position_reads_legacy_and_programme_anchored_settings() {
         val db = com.sokoul.desktop.data.DesktopDb(Files.createTempDirectory("sokoul-live-position").resolve("test.db").toFile())
         try {
@@ -25,6 +53,21 @@ class GlobalSearchTest {
         } finally {
             db.close()
         }
+    }
+
+    @Test
+    fun an_anime_tab_only_queries_the_anime_catalogue() = runBlocking<Unit> {
+        val search = SearchAggregator<String, String, String, String>(
+            searchTitles = { error("The title catalogue is outside the active tab") },
+            searchLive = { error("Live TV is outside the active tab") },
+            searchAnime = { listOf("Dandadan") },
+            searchManga = { error("Manga is outside the active tab") },
+        )
+        val results = search.searchEach("dan", scope = com.sokoul.pc.search.SearchScope.Anime) {}
+        assertEquals(listOf("Dandadan"), results.anime.items)
+        assertFalse(results.titles.available)
+        assertFalse(results.live.available)
+        assertFalse(results.manga.available)
     }
 
     @Test

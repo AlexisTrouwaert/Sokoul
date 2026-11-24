@@ -76,6 +76,35 @@ class ProviderCatalogTest {
         }
     }
 
+    @Test fun `live channels and guide stay readable while an import holds the database monitor`() {
+        DesktopDb(temp.newFile("live-reader.db")).use { db ->
+            val pid = db.upsertPlaylist(Playlist(0, "Test", PlaylistType.M3U, "https://example.test/list", null, null, null, null))
+            val channel = Channel(pid, "one", 1, "One", null, "news", "one", "one", null, null, null, 0)
+            db.replaceLive(pid, listOf(Category(pid, "news", "News", 0)), listOf(channel))
+            db.replacePrograms(pid, sequenceOf(Program("one", 100L, 200L, "Bulletin", null)), 0)
+            val entered = CountDownLatch(1)
+            val release = CountDownLatch(1)
+            val writer = Thread {
+                synchronized(db) {
+                    entered.countDown()
+                    release.await(5, TimeUnit.SECONDS)
+                }
+            }.apply { start() }
+            try {
+                assertTrue(entered.await(2, TimeUnit.SECONDS))
+                assertEquals(pid, db.playlists().single().id)
+                assertEquals("news", db.categories(pid).single().id)
+                assertEquals(channel, db.channels(pid, "news").single())
+                assertEquals(channel, db.channelsByIds(pid, listOf("one")).single())
+                assertEquals("Bulletin", db.programs(pid, listOf("one"), 0, 300).single().title)
+                assertTrue("The live reader should finish before the writer is released", writer.isAlive)
+            } finally {
+                release.countDown()
+                writer.join(2_000)
+            }
+        }
+    }
+
     @Test fun `account snapshot retains only safe metadata and is reused during cache window`() = runBlocking {
         MockWebServer().use { server ->
             server.enqueue(MockResponse().setBody("""{"user_info":{"auth":1,"status":"Active","username":"private-user","password":"private-pass","max_connections":"1","active_cons":"0","exp_date":"1900000000","allowed_output_formats":["ts","m3u8"]},"server_info":{"timezone":"UTC"}}"""))

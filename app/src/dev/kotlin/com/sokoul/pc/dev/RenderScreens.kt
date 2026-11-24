@@ -3,6 +3,7 @@ package com.sokoul.pc.dev
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.background
@@ -80,6 +81,37 @@ fun main(args: Array<String>) {
                     save("guide-$scenario-$language-${width}x$height", s, time)
                     s.close()
                 }
+            }
+        }
+        kotlin.system.exitProcess(0)
+    }
+    if (args.getOrNull(1) == "groups") {
+        // The channel-group sidebar alone, with groups like the owner's provider (2026-11-24).
+        com.sokoul.pc.i18n.Strings.applyLanguage("fr")
+        val sample = listOf(
+            com.sokoul.desktop.data.LiveLogic.Group(com.sokoul.desktop.data.SpecialGroup.ALL, "Toutes", false),
+            com.sokoul.desktop.data.LiveLogic.Group(com.sokoul.desktop.data.SpecialGroup.FAVORITES, "Favoris", false),
+            com.sokoul.desktop.data.LiveLogic.Group(com.sokoul.pc.live.TvCatalog.RECENT, "Récentes", false),
+            com.sokoul.desktop.data.LiveLogic.Group(com.sokoul.pc.live.TvPersonalization.group("c1"), "Mon foot", false),
+        ) + listOf("FRANCE GENERALE", "FRANCE SPORT", "Bein Sports", "Bein Sports FHD / 4k", "Bein Sports Premium", "Dstv Generale", "Dstv Sport",
+            "Dstv Cinema", "Africa Canal +", "Yemen", "Christian", "Senegal", "Cameroon", "Ghana").mapIndexed { i, n ->
+            com.sokoul.desktop.data.LiveLogic.Group("g$i", n, false)
+        }
+        listOf(1280 to 720, 1920 to 1080).forEach { (width, height) ->
+            listOf("g4", com.sokoul.desktop.data.SpecialGroup.ALL).forEach { chosen ->
+                val s = ImageComposeScene(width, height, Density(1f)) {
+                    ScaledRoot {
+                        androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black)) {
+                            com.sokoul.pc.live.TvGroupColumn(sample, chosen,
+                                androidx.compose.ui.Modifier.padding(start = 16.dp, top = 24.dp, bottom = 20.dp).width(com.sokoul.pc.live.TV_COLUMN_WIDTH).fillMaxHeight(),
+                                onApply = {}, onGroupActions = {}, onNewCollection = {}, onManageCollection = {}, onClose = {})
+                        }
+                    }
+                }
+                var time = 0L
+                repeat(8) { s.render(time); time += 100_000_000L; Thread.sleep(15) }
+                save("groups-$chosen-${width}x$height", s, time)
+                s.close()
             }
         }
         kotlin.system.exitProcess(0)
@@ -186,29 +218,22 @@ fun main(args: Array<String>) {
             anime = com.sokoul.pc.search.SearchSourceResults<com.sokoul.pc.data.anime.AniTitle>(false),
             manga = com.sokoul.pc.search.SearchSourceResults<com.sokoul.pc.data.anime.AniTitle>(false),
         )
-        val file = File.createTempFile("render-search", ".db")
-        ProviderConfig.builtIn = { emptyMap() }
-        DesktopDb(file).use { db ->
-            val deps = fakeDeps(db)
-            listOf("en", "fr").forEach { language ->
-                com.sokoul.pc.i18n.Strings.applyLanguage(language)
-                listOf(1920 to 1080, 1280 to 720).forEach { (width, height) ->
-                    val s = ImageComposeScene(width, height, Density(1f)) {
-                        ScaledRoot {
-                            androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().background(com.sokoul.pc.theme.Palette.Background).padding(64.dp)) {
-                                com.sokoul.pc.search.SearchContent(deps, results, com.sokoul.pc.search.SearchTab.All, { _, _, _ -> }, {}, { _, _ -> })
-                            }
+        listOf("en", "fr").forEach { language ->
+            com.sokoul.pc.i18n.Strings.applyLanguage(language)
+            listOf(1920 to 1080, 1280 to 720).forEach { (width, height) ->
+                val s = ImageComposeScene(width, height, Density(1f)) {
+                    ScaledRoot {
+                        androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().background(com.sokoul.pc.theme.Palette.Background).padding(64.dp)) {
+                            com.sokoul.pc.search.SearchContent(results, com.sokoul.pc.search.SearchTab.All, { _, _, _ -> }, {}, { _, _ -> })
                         }
                     }
-                    var time = 0L
-                    repeat(4) { s.render(time); time += 150_000_000L }
-                    save("search-$language-${width}x$height", s, time)
-                    s.close()
                 }
+                var time = 0L
+                repeat(4) { s.render(time); time += 150_000_000L }
+                save("search-$language-${width}x$height", s, time)
+                s.close()
             }
         }
-        file.delete()
-        ProviderConfig.builtIn = realKeys
         return
     }
 

@@ -23,6 +23,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -31,6 +32,7 @@ import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -39,8 +41,14 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /** Several Real-Debrid versions tried at once: the first link wins, nothing is left behind on the account. */
 class RaceTest {
+    // Source attempts can suspend concurrently while session state stays on one dispatcher.
+    private val testJobs = SupervisorJob()
+    private val sessionScope = CoroutineScope(testJobs + Dispatchers.Default.limitedParallelism(1))
     private val request = PlayRequest("movie", 1, null, null, "Title", null, null)
     private val budgets = PlaybackBudgets(firstChoiceMs = 200, settleMs = 50, searchMs = 300, firstImageMs = 400, stallMs = 300, tickMs = 20)
+
+    @After
+    fun cancelPlaybackJobs() = runBlocking { testJobs.cancelAndJoin() }
 
     private fun waitUntil(what: String, check: () -> Boolean) = runBlocking {
         val end = System.currentTimeMillis() + 5_000
@@ -51,7 +59,7 @@ class RaceTest {
     }
 
     private fun session(engine: FakeEngine, size: Int, vararg versions: PlayVersion) = PlaybackSession(
-        engine, finder(*versions), CoroutineScope(SupervisorJob() + Dispatchers.Default),
+        engine, finder(*versions), sessionScope,
         prefs = { PlaybackPrefs() }, frenchSystem = { true }, budgets = budgets, raceSize = { size },
     )
 

@@ -44,6 +44,14 @@ class AnimeSamaDirectTest {
         assertNull(AnimeSamaSite.availableLanguages("<html></html>"))
     }
 
+    @Test fun aFrenchOnlySeasonKeepsItsLanguageWhenTheCatalogueLinksStraightToTheDub() {
+        val panels = AnimeSamaSite.seasonPanels("""panneauAnime("Saison 1", "saison1/vf3");""", "https://anime-sama.to/catalogue/example/")
+        assertEquals(1, panels.single().number)
+        assertEquals("https://anime-sama.to/catalogue/example/saison1", panels.single().url)
+        assertEquals("vf3", panels.single().language)
+        assertTrue("vf3" in AnimeSamaSite.seasonLanguages(null, panels.single().language))
+    }
+
     @Test fun referencesKeepEpisodePositionsSkipBlanksAndPutRemovedVideosLast() {
         val episodes = AnimeSamaSite.episodePlayers(fixture("season-vf.html"), page)
         assertEquals(3, episodes.size)
@@ -64,6 +72,11 @@ class AnimeSamaDirectTest {
         )
     }
 
+    @Test fun blankEmbedTemplatesDoNotAnnounceDubbedEpisodes() {
+        val blank = """var eps1 = ['https://vidmoly.org/embed-.html', 'https://video.sibnet.ru/shell.php?videoid='];"""
+        assertTrue(AnimeSamaSite.episodePlayers(blank, page).isEmpty())
+    }
+
     @Test fun referencesOutsideCataloguePagesAreRejected() {
         assertNull(AnimeSamaSite.reference("https://evil.test/api/lien.php?l=1&p=/catalogue/x/saison1/vf/"))
         assertNull(AnimeSamaSite.reference("https://anime-sama.to/api/lien.php?l=1&p=https://evil.test/"))
@@ -81,18 +94,40 @@ class AnimeSamaDirectTest {
     }
 
     /** A small Anime-Sama: one work, one season in VOSTFR and VF, players given directly. */
-    private fun site(): MockWebServer = MockWebServer().apply {
+    private fun site(extra: Map<String, String> = emptyMap()): MockWebServer = MockWebServer().apply {
         dispatcher = object : Dispatcher() {
-            override fun dispatch(request: RecordedRequest): MockResponse = when (request.path) {
-                "/template-php/defaut/fetch.php" -> MockResponse().setBody(
-                    """<a class="asn-search-result" href="/catalogue/frieren/"><h3>Frieren</h3><p class="asn-search-result-subtitle">Sousou no Frieren</p></a>""")
-                "/catalogue/frieren/" -> MockResponse().setBody("""<script>panneauAnime("Saison 1", "saison1/vostfr");</script>""")
-                "/catalogue/frieren/saison1/vostfr/" -> MockResponse().setBody("""<script>var languesDispo = ["vostfr","vf"]; var eps1 = ["https://vidmoly.to/embed-a.html"];</script>""")
-                "/catalogue/frieren/saison1/vf/" -> MockResponse().setBody("""<script>var eps1 = ["https://video.sibnet.ru/shell.php?videoid=7"];</script>""")
-                else -> MockResponse().setResponseCode(404)
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                request.path?.let(extra::get)?.let { return MockResponse().setBody(it) }
+                return when (request.path) {
+                    "/template-php/defaut/fetch.php" -> MockResponse().setBody(
+                        """<a class="asn-search-result" href="/catalogue/frieren/"><h3>Frieren</h3><p class="asn-search-result-subtitle">Sousou no Frieren</p></a>""")
+                    "/catalogue/frieren/" -> MockResponse().setBody("""<script>panneauAnime("Saison 1", "saison1/vostfr");</script>""")
+                    "/catalogue/frieren/saison1/vostfr/" -> MockResponse().setBody("""<script>var languesDispo = ["vostfr","vf"]; var eps1 = ["https://vidmoly.to/embed-a.html"];</script>""")
+                    "/catalogue/frieren/saison1/vf/" -> MockResponse().setBody("""<script>var eps1 = ["https://video.sibnet.ru/shell.php?videoid=7"];</script>""")
+                    else -> MockResponse().setResponseCode(404)
+                }
             }
         }
         start()
+    }
+
+    @Test fun aNumberedFrenchEditionCanPublishMoreEpisodesFromALegacyScript() = runBlocking {
+        val site = site(mapOf(
+            "/catalogue/frieren/saison1/vostfr/" to """<script>var languesDispo = ["vostfr","vf3"]; var eps1 = ["https://vidmoly.to/embed-sub.html"];</script>""",
+            "/catalogue/frieren/saison1/vf3/" to """<script src="episodes.js"></script>""",
+            "/catalogue/frieren/saison1/vf3/episodes.js" to """var eps1 = ["https://video.sibnet.ru/shell.php?videoid=7", "https://video.sibnet.ru/shell.php?videoid=8"];""",
+        ))
+        try {
+            val http = OkHttpClient()
+            val source = AnimeSamaSource(http, { null }, { null }, StreamProbe(http), NativeEmbedResolver(http),
+                AnimeSamaDirect(http, site.url("/").toString().trimEnd('/')))
+            val result = source.find(PlayRequest("tv", 209867, 1, 2, "Frieren", null, null), listOf("Frieren"), 2)
+            assertEquals(AudioLanguage.VF, result.versions.single().language)
+            assertEquals(listOf("FR"), result.versions.single().announcedAudio)
+            assertEquals(5, site.requestCount)
+        } finally {
+            site.shutdown()
+        }
     }
 
     @Test fun withTheServerOffTheSiteIsReadAndItsPlayersGoToTheLocalExtractor() = runBlocking {

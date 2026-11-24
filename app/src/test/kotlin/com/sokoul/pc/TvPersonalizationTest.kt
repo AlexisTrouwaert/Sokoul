@@ -47,6 +47,38 @@ class TvPersonalizationTest {
         }
     }
 
+    @Test fun `adding a group saves eligible channel families once and preserves their order`() {
+        DesktopDb(temp.newFile("batch.db")).use { db ->
+            val pid = source(db)
+            val other = source(db, "other")
+            db.putSetting(Settings.ACTIVE_PLAYLIST, pid.toString())
+            val first = channel(pid, "1", group = "a")
+            val sport = channel(pid, "2", "FR| Sport HD", "sport", "sport.fr", "b")
+            val culture = channel(pid, "3", "FR| Culture HD", "culture", "culture.fr", "b")
+            val variant = sport.copy(id = "4", name = "FR| Sport FHD")
+            val restricted = channel(pid, "5", "FR| Locked", "locked", null, "a")
+            fill(db, pid, first, sport, culture, variant, restricted)
+            var kids = false
+            val tv = TvCatalog(db).apply { kidsProfile = { kids } }
+            val repo = TvPersonalization(db, tv, { "" }, { kids })
+            val id = repo.create("Mine", listOf(first))
+            assertTrue(tv.organization.setPin("1234"))
+            assertTrue(tv.organization.setGroupLocked("a", true))
+            kids = true
+            val revision = repo.revision.value
+            val selection = listOf(first, sport, variant, culture, restricted, culture.copy(playlistId = other, id = "foreign"))
+            assertEquals(2, repo.addAll(id, selection))
+            assertEquals(revision + 1, repo.revision.value)
+            assertEquals(listOf("1", "2", "3"), repo.state().collections.single().members.map { it.channelId })
+            assertEquals(0, repo.addAll(id, selection))
+            assertEquals(revision + 1, repo.revision.value)
+
+            val newId = repo.create("Sports et culture", selection)
+            assertEquals(revision + 2, repo.revision.value)
+            assertEquals(listOf("2", "3"), repo.state().collections.single { it.id == newId }.members.map { it.channelId })
+        }
+    }
+
     @Test fun `refresh resolves renamed ids and safe families but retains missing and ambiguous members`() {
         DesktopDb(temp.newFile("refresh.db")).use { db ->
             val pid = source(db)

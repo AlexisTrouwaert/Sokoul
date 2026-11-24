@@ -1,6 +1,8 @@
 package com.sokoul.pc
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.key.Key
@@ -13,13 +15,53 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.dp
+import com.sokoul.pc.shell.LocalReportHomeHeroAtTop
+import com.sokoul.pc.shell.NavEntry
+import com.sokoul.pc.shell.NavShell
+import com.sokoul.pc.shell.SECTION_HOME
 import com.sokoul.pc.ui.CardRow
 import com.sokoul.pc.ui.FocusCard
+import com.sokoul.pc.ui.NavIcons
 import org.junit.Test
 
 /** Remote focus on home rows (openspec tv-home-redesign, home-focus-navigation). */
 @OptIn(ExperimentalTestApi::class)
 class HomeFocusTest {
+    @Test
+    fun home_bar_follows_the_hero_and_can_be_reached_with_the_remote() = runComposeUiTest {
+        val heroFocus = FocusRequester()
+        val heroAtTop = mutableStateOf(true)
+        setContent {
+            NavShell(
+                entries = listOf(NavEntry(SECTION_HOME, "Home", NavIcons.Home)),
+                active = SECTION_HOME,
+                onSelect = {},
+                defaultFocus = heroFocus,
+            ) {
+                val report = LocalReportHomeHeroAtTop.current
+                val atTop = heroAtTop.value
+                SideEffect { report(atTop) }
+                FocusCard(100.dp, 150.dp, {}, tag = "hero-test", requester = heroFocus) {}
+            }
+        }
+        // Owner, 2026-11-24: at the top the bar's icons are there; down in the page it leaves; back at the top it returns,
+        // and Up from the hero reaches it.
+        val tab = onNodeWithTag("menu-open")
+        tab.assertExists()
+        runOnIdle { heroAtTop.value = false }
+        waitForIdle()
+        tab.assertDoesNotExist()
+        runOnIdle { heroAtTop.value = true }
+        waitForIdle()
+        tab.assertExists()
+        onNodeWithTag("hero-test").performKeyInput { pressKey(Key.DirectionUp) }
+        tab.assertIsFocused()
+        tab.performKeyInput { pressKey(Key.DirectionDown) }
+        onNodeWithTag("hero-test").assertIsFocused()
+        // Still at the top: the icons stay.
+        tab.assertExists()
+    }
+
     @Test
     fun coming_back_into_a_row_lands_on_the_card_left_there() = runComposeUiTest {
         val first = FocusRequester()

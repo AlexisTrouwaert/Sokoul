@@ -401,7 +401,8 @@ class StartupTest {
         onNodeWithTag("later").performClick()
         waitForIdle()
         onNodeWithTag("main-empty").assertExists()
-        onNodeWithTag("menu-home").assertExists()
+        // Apple TV bar: the menu on the left, the pages behind it.
+        onNodeWithTag("menu-open").assertExists()
         assertEquals(SetupState.Deferred, StartupRoute.state(db))
     }
 
@@ -421,6 +422,11 @@ class StartupTest {
     fun navigation_bar_shows_the_base_icons() = runComposeUiTest {
         StartupRoute.set(db, SetupState.Deferred)
         setContent { SokoulPcApp(deps(), skipSplash = true) }
+        onNodeWithTag("menu-open").assertExists()
+        onNodeWithTag("menu-search").assertExists()
+        onNodeWithTag("menu-open").performClick()
+        waitForIdle()
         onNodeWithTag("menu-settings").assertExists()
+        onNodeWithTag("menu-profile").assertExists()
     }
 }
