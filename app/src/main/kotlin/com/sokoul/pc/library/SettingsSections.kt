@@ -26,6 +26,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -213,7 +214,27 @@ internal fun ToolsPane(profile: com.sokoul.pc.data.Profile?, hooks: SettingsHook
     if (profile?.kids != true) hooks.onDebridTools?.let { open ->
         RowGroup { SettingsRow(L("Unlock a download link", "Débrider un lien de téléchargement").text(), null, true, remember { FocusRequester() }, open, "settings-debrid-tools") }
     }
+    StartLogSection()
     AboutPane(hooks)
+}
+
+/**
+ * The last starts, newest first: the title, how it ended (image time and version, or the failure), and on a press every
+ * step, to see why a film fell to the web or IPTV (StartLog). Nothing in it is a key or a link.
+ */
+@Composable
+private fun StartLogSection() {
+    val entries = remember { com.sokoul.pc.playback.session.StartLog.recent().take(8) }
+    var open by remember { mutableStateOf<Int?>(null) }
+    RowGroup(L("Last starts", "Derniers lancements").text()) {
+        if (entries.isEmpty()) InfoRow(L("Nothing started yet", "Rien n'a encore été lancé").text(), "", tag = "settings-start-log-empty")
+        entries.forEachIndexed { i, e ->
+            SettingsRow("${e.at} · ${e.title}", e.outcome(), true, remember { FocusRequester() }, { open = if (open == i) null else i }, "settings-start-log-$i")
+            if (open == i) androidx.compose.foundation.layout.Column(Modifier.padding(start = 30.dp, end = 30.dp, bottom = 12.dp).testTag("settings-start-log-steps")) {
+                e.steps.forEach { line -> Label(line, Type.Body.copy(fontSize = 20.sp), Palette.Secondary, maxLines = 2) }
+            }
+        }
+    }
 }
 
 /** Accent colour of the progress bars as swatches to pick from; white keeps Sokoul's own look. */
