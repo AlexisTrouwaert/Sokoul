@@ -945,6 +945,23 @@ class PlaybackTest {
     }
 
     @Test
+    fun after_a_busy_server_only_versions_in_the_account_are_tried() {
+        val ranked = listOf(
+            v("cached", AudioLanguage.VF, VideoQuality.UHD_4K, Readiness.Likely),
+            v("unknown", AudioLanguage.VF, VideoQuality.UHD_4K),
+            v("held", AudioLanguage.VF, VideoQuality.FHD_1080, Readiness.Ready),
+            v("iptv", AudioLanguage.MULTI, null, Readiness.Ready, origin = VersionOrigin.Iptv),
+        )
+        val debrid = setOf(VersionOrigin.Debrid)
+        assertEquals("cached", StartPolicy.next(ranked, StartMode.ReadyFirst, emptySet(), emptySet(), emptySet())?.version?.key)
+        assertEquals("held", StartPolicy.next(ranked, StartMode.ReadyFirst, emptySet(), emptySet(), emptySet(), readyOnly = debrid)?.version?.key)
+        assertTrue("no race adds torrents", StartPolicy.race(ranked, StartMode.ReadyFirst, emptySet(), emptySet(), emptySet(), emptySet(), 3, readyOnly = debrid).isEmpty())
+        // Nothing in the account: another origin plays, and no Real-Debrid download starts.
+        assertEquals("iptv", StartPolicy.next(ranked, StartMode.ReadyFirst, setOf("held"), emptySet(), emptySet(), readyOnly = debrid)?.version?.key)
+        assertNull(StartPolicy.next(ranked, StartMode.WaitBest, setOf("held", "iptv"), emptySet(), emptySet(), readyOnly = debrid))
+    }
+
+    @Test
     fun a_ready_version_is_never_skipped_by_the_limit_of_tries() {
         val tried = (1..12).map { "t$it" }.toSet()
         val ranked = listOf(v("unknown", AudioLanguage.VF, VideoQuality.FHD_1080), v("iptv", AudioLanguage.MULTI, null, Readiness.Ready, origin = VersionOrigin.Iptv))
